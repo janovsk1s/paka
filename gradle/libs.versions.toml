@@ -1,6 +1,6 @@
 [versions]
 agp = "8.10.1"
-kotlin = "2.0.21"
+kotlin = "2.2.21"
 coreKtx = "1.13.1"
 lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.9.3"
@@ -8,7 +8,7 @@ composeBom = "2024.09.03"
 navigationCompose = "2.8.3"
 camera = "1.4.0"
 zxing = "3.5.3"
-zxingCpp = "2.3.0"
+zxingCpp = "3.0.2"
 okapi = "0.5.1"
 junit = "4.13.2"
 

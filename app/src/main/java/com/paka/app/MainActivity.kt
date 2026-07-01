@@ -526,17 +526,43 @@ private const val ITEMS_PER_PAGE = 5
 private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
     val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
     if (pages.isEmpty()) return
+    HardCutPager(pageCount = pages.size) { currentPage ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp),
+        ) {
+            pages[currentPage].forEach { item ->
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    content(item)
+                }
+            }
+            repeat(ITEMS_PER_PAGE - pages[currentPage].size) {
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HardCutPager(
+    pageCount: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable (Int) -> Unit,
+) {
+    if (pageCount <= 0) return
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     var page by remember { mutableIntStateOf(0) }
-    val currentPage = page.coerceIn(0, pages.lastIndex)
+    val currentPage = page.coerceIn(0, pageCount - 1)
 
-    LaunchedEffect(pages.size) {
-        if (page > pages.lastIndex) page = pages.lastIndex
+    LaunchedEffect(pageCount) {
+        if (page >= pageCount) page = pageCount - 1
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().pointerInput(pages.size, currentPage) {
+        modifier = modifier.fillMaxSize().pointerInput(pageCount, currentPage) {
             val threshold = 24.dp.toPx()
             var dragDistance = 0f
             var feedbackSent = false
@@ -555,7 +581,7 @@ private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
                 },
                 onDragEnd = {
                     val destination = when {
-                        dragDistance <= -threshold -> (currentPage + 1).coerceAtMost(pages.lastIndex)
+                        dragDistance <= -threshold -> (currentPage + 1).coerceAtMost(pageCount - 1)
                         dragDistance >= threshold -> (currentPage - 1).coerceAtLeast(0)
                         else -> currentPage
                     }
@@ -565,25 +591,11 @@ private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
             )
         },
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp),
-        ) {
-            pages[currentPage].forEach { item ->
-                Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    content(item)
-                }
-            }
-            repeat(ITEMS_PER_PAGE - pages[currentPage].size) {
-                Spacer(Modifier.weight(1f))
-            }
-        }
-        if (pages.size > 1) {
+        content(currentPage)
+        if (pageCount > 1) {
             PageIndicator(
                 page = currentPage,
-                pageCount = pages.size,
+                pageCount = pageCount,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -906,36 +918,41 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onBack: () -> Un
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("details", persistAndBack)
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            Column {
-                FieldLabel("name")
-                Spacer(Modifier.height(4.dp))
-                Text(card.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        HardCutPager(pageCount = 2, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
+            Column(
+                modifier = Modifier.fillMaxSize().padding(top = 12.dp, end = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                if (page == 0) {
+                    Column {
+                        FieldLabel("name")
+                        Spacer(Modifier.height(4.dp))
+                        Text(card.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
+                    EditField("stack", stack, { stack = it }, "none")
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        LabelValue("format", card.format.label(), Modifier.weight(1f))
+                        LabelValue("added", formatDate(card.createdAt), Modifier.weight(1f))
+                    }
+                } else {
+                    Column {
+                        FieldLabel("code")
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            card.data,
+                            color = Grey,
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 8,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
+                    EditField("notes", notes, { notes = it }, "add a note", singleLine = false)
+                }
             }
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
-            EditField("stack", stack, { stack = it }, "none")
-            Row(modifier = Modifier.fillMaxWidth()) {
-                LabelValue("format", card.format.label(), Modifier.weight(1f))
-                LabelValue("added", formatDate(card.createdAt), Modifier.weight(1f))
-            }
-            Column {
-                FieldLabel("code")
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    card.data,
-                    color = Grey,
-                    fontSize = 13.sp,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 6,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
-            EditField("notes", notes, { notes = it }, "add a note", singleLine = false)
         }
         Text(
             text = "save",
