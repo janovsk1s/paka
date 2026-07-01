@@ -69,7 +69,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -188,6 +187,7 @@ fun PakaApp() {
     var manualCode by remember { mutableStateOf(false) }
     var showDev by remember { mutableStateOf(false) }
     var textSize by remember { mutableStateOf(Prefs.textSize(context)) }
+    var vibrationEnabled by remember { mutableStateOf(Prefs.vibration(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
     val codesVisible = mode == Mode.CODES &&
@@ -312,6 +312,11 @@ fun PakaApp() {
     if (showSettings) {
         SettingsScreen(
             onReorder = { showSettings = false; manageMode = mode },
+            vibrationEnabled = vibrationEnabled,
+            onVibration = { enabled ->
+                vibrationEnabled = enabled
+                Prefs.setVibration(context, enabled)
+            },
             onDev = { showDev = true },
             onBack = { showSettings = false },
         )
@@ -502,6 +507,8 @@ private const val ITEMS_PER_PAGE = 5
 private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
     val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
     if (pages.isEmpty()) return
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     var page by remember { mutableIntStateOf(0) }
     val currentPage = page.coerceIn(0, pages.lastIndex)
 
@@ -520,11 +527,13 @@ private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
                     dragDistance += amount
                 },
                 onDragEnd = {
-                    page = when {
+                    val destination = when {
                         dragDistance <= -threshold -> (currentPage + 1).coerceAtMost(pages.lastIndex)
                         dragDistance >= threshold -> (currentPage - 1).coerceAtLeast(0)
                         else -> currentPage
                     }
+                    if (destination != currentPage) performPakaHaptic(context, haptics)
+                    page = destination
                 },
                 onDragCancel = { dragDistance = 0f },
             )
@@ -622,14 +631,35 @@ private fun formatCode(code: String): String = when (code.length) {
 }
 
 @Composable
-private fun SettingsScreen(onReorder: () -> Unit, onDev: () -> Unit, onBack: () -> Unit) {
+private fun SettingsScreen(
+    onReorder: () -> Unit,
+    vibrationEnabled: Boolean,
+    onVibration: (Boolean) -> Unit,
+    onDev: () -> Unit,
+    onBack: () -> Unit,
+) {
     BackHandler { onBack() }
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     var aboutTaps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("settings", onBack)
         ScrollList(topPadding = 44.dp, spacing = 36.dp) {
             Text("reorder", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.fillMaxWidth().then(tapModifier(onReorder)))
+            Row(
+                modifier = Modifier.fillMaxWidth().then(
+                    tapModifier {
+                        val enabled = !vibrationEnabled
+                        onVibration(enabled)
+                        if (enabled) performPakaHaptic(context, haptics)
+                    },
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("vibration", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
+                Text(if (vibrationEnabled) "on" else "off", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+            }
             Text(
                 "about",
                 color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal,
@@ -686,18 +716,27 @@ private fun ManageScreen(
     }
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("reorder", onBack)
-        ScrollList(topPadding = 36.dp, spacing = 30.dp) {
-            for (row in rows) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(row.name, color = White, fontSize = 26.sp, fontWeight = FontWeight.Light, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Canvas(Modifier.size(44.dp).then(tapModifier({ onRename(row.id) }, "Rename ${row.name}"))) { drawPencil(Grey) }
-                    Spacer(Modifier.size(4.dp))
-                    Canvas(Modifier.size(44.dp).then(tapModifier({ onUp(row.id) }, "Move ${row.name} up"))) { drawChevron(up = true) }
-                    Spacer(Modifier.size(4.dp))
-                    Canvas(Modifier.size(44.dp).then(tapModifier({ onDown(row.id) }, "Move ${row.name} down"))) { drawChevron(up = false) }
-                    Spacer(Modifier.size(4.dp))
-                    Canvas(Modifier.size(44.dp).then(tapModifier({ pendingDelete = row }, "Delete ${row.name}"))) { drawX() }
+        SimpleTopBar("manage", onBack)
+        ScrollList(topPadding = 20.dp, spacing = 20.dp) {
+            rows.forEachIndexed { index, row ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(row.name, color = White, fontSize = 24.sp, fontWeight = FontWeight.Light, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Canvas(Modifier.size(40.dp).then(tapModifier({ onRename(row.id) }, "Rename ${row.name}"))) { drawPencil(Grey) }
+                        Spacer(Modifier.width(8.dp))
+                        val upModifier = if (index > 0) tapModifier({ onUp(row.id) }, "Move ${row.name} up") else Modifier
+                        Canvas(Modifier.size(40.dp).then(upModifier)) { drawChevron(up = true, color = if (index > 0) White else Grey) }
+                        Spacer(Modifier.width(8.dp))
+                        val downModifier = if (index < rows.lastIndex) tapModifier({ onDown(row.id) }, "Move ${row.name} down") else Modifier
+                        Canvas(Modifier.size(40.dp).then(downModifier)) { drawChevron(up = false, color = if (index < rows.lastIndex) White else Grey) }
+                        Spacer(Modifier.width(8.dp))
+                        Canvas(Modifier.size(40.dp).then(tapModifier({ pendingDelete = row }, "Delete ${row.name}"))) { drawX() }
+                    }
                 }
             }
         }
@@ -912,10 +951,10 @@ private fun BarcodePanel(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 8.dp)
             .background(White)
             .then(tapLongModifier(onClick = onClick, onLongClick = onLongClick, label = card.name))
-            .padding(16.dp),
+            .padding(8.dp),
         contentAlignment = Alignment.Center,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -951,7 +990,6 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
         return
     }
     KeepScreenBright()
-    val haptics = LocalHapticFeedback.current
     var index by remember(name) { mutableIntStateOf(0) }
     val i = index % cards.size
     val card = cards[i]
@@ -964,7 +1002,6 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
                     card = card,
                     onClick = {
                         index = (index + 1) % cards.size
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     },
                     onLongClick = { onLongCurrent(card) },
                 )
@@ -1104,15 +1141,15 @@ private fun DrawScope.drawPencil(color: Color) {
     drawLine(color, Offset(s * 0.28f, s * 0.72f), Offset(s * 0.38f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Square)
 }
 
-private fun DrawScope.drawChevron(up: Boolean) {
+private fun DrawScope.drawChevron(up: Boolean, color: Color = White) {
     val s = size.minDimension
     val w = s * 0.09f
     if (up) {
-        drawLine(White, Offset(s * 0.3f, s * 0.6f), Offset(s * 0.5f, s * 0.4f), strokeWidth = w, cap = StrokeCap.Square)
-        drawLine(White, Offset(s * 0.5f, s * 0.4f), Offset(s * 0.7f, s * 0.6f), strokeWidth = w, cap = StrokeCap.Square)
+        drawLine(color, Offset(s * 0.3f, s * 0.6f), Offset(s * 0.5f, s * 0.4f), strokeWidth = w, cap = StrokeCap.Square)
+        drawLine(color, Offset(s * 0.5f, s * 0.4f), Offset(s * 0.7f, s * 0.6f), strokeWidth = w, cap = StrokeCap.Square)
     } else {
-        drawLine(White, Offset(s * 0.3f, s * 0.4f), Offset(s * 0.5f, s * 0.6f), strokeWidth = w, cap = StrokeCap.Square)
-        drawLine(White, Offset(s * 0.5f, s * 0.6f), Offset(s * 0.7f, s * 0.4f), strokeWidth = w, cap = StrokeCap.Square)
+        drawLine(color, Offset(s * 0.3f, s * 0.4f), Offset(s * 0.5f, s * 0.6f), strokeWidth = w, cap = StrokeCap.Square)
+        drawLine(color, Offset(s * 0.5f, s * 0.6f), Offset(s * 0.7f, s * 0.4f), strokeWidth = w, cap = StrokeCap.Square)
     }
 }
 

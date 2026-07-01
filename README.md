@@ -22,6 +22,8 @@ export format is planned before a public release.
 Tap `+` to scan. Long-press `+` for intentional manual entry. Long-press a card
 to edit its stack and notes. These restrained secondary gestures are deliberate.
 Lists show five entries at a time and snap vertically between full pages.
+Vibration feedback can be enabled or disabled in settings. The scanner uses a
+higher-resolution analysis stream and offers tap-to-focus plus a camera light.
 
 ## Building
 

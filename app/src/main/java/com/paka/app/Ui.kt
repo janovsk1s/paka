@@ -1,6 +1,7 @@
 package com.paka.app
 
 import android.annotation.SuppressLint
+import android.content.Context
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -13,6 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -23,6 +28,14 @@ internal val Black = Color(0xFF000000)
 internal val White = Color(0xFFFFFFFF)
 internal val Grey = Color(0xFF888888)
 
+internal fun performPakaHaptic(
+    context: Context,
+    haptics: HapticFeedback,
+    type: HapticFeedbackType = HapticFeedbackType.TextHandleMove,
+) {
+    if (Prefs.vibration(context)) haptics.performHapticFeedback(type)
+}
+
 /** Clickable with no Material ripple, to keep the austere look. */
 @Composable
 @SuppressLint("ModifierFactoryExtensionFunction")
@@ -32,11 +45,20 @@ internal fun tapModifier(onClick: () -> Unit): Modifier = tapModifier(onClick, n
 @SuppressLint("ModifierFactoryExtensionFunction")
 internal fun tapModifier(onClick: () -> Unit, label: String? = null): Modifier {
     val interaction = remember { MutableInteractionSource() }
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val semantics = if (label == null) Modifier else Modifier.semantics {
         contentDescription = label
         role = Role.Button
     }
-    return semantics.clickable(interactionSource = interaction, indication = null, onClick = onClick)
+    return semantics.clickable(
+        interactionSource = interaction,
+        indication = null,
+        onClick = {
+            performPakaHaptic(context, haptics)
+            onClick()
+        },
+    )
 }
 
 /** Tap + long-press, no ripple. */
@@ -45,6 +67,8 @@ internal fun tapModifier(onClick: () -> Unit, label: String? = null): Modifier {
 @SuppressLint("ModifierFactoryExtensionFunction")
 internal fun tapLongModifier(onClick: () -> Unit, onLongClick: () -> Unit, label: String? = null): Modifier {
     val interaction = remember { MutableInteractionSource() }
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val semantics = if (label == null) Modifier else Modifier.semantics {
         contentDescription = label
         role = Role.Button
@@ -52,8 +76,14 @@ internal fun tapLongModifier(onClick: () -> Unit, onLongClick: () -> Unit, label
     return semantics.combinedClickable(
         interactionSource = interaction,
         indication = null,
-        onClick = onClick,
-        onLongClick = onLongClick,
+        onClick = {
+            performPakaHaptic(context, haptics)
+            onClick()
+        },
+        onLongClick = {
+            performPakaHaptic(context, haptics, HapticFeedbackType.LongPress)
+            onLongClick()
+        },
     )
 }
 
