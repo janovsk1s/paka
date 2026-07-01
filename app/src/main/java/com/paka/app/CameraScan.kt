@@ -51,14 +51,29 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var hasFlash by remember { mutableStateOf(false) }
     var torchEnabled by remember { mutableStateOf(false) }
-    val reader = remember {
-        BarcodeReader(
-            BarcodeReader.Options(
-                formats = emptySet(),
-                tryHarder = true,
-                tryRotate = true,
-                tryInvert = true,
-                tryDownscale = true,
+    val readers = remember {
+        listOf(
+            BarcodeReader(
+                BarcodeReader.Options(
+                    formats = emptySet(),
+                    tryHarder = true,
+                    tryRotate = true,
+                    tryInvert = true,
+                    tryDownscale = false,
+                    binarizer = BarcodeReader.Binarizer.LOCAL_AVERAGE,
+                    maxNumberOfSymbols = 1,
+                ),
+            ),
+            BarcodeReader(
+                BarcodeReader.Options(
+                    formats = emptySet(),
+                    tryHarder = true,
+                    tryRotate = true,
+                    tryInvert = true,
+                    tryDownscale = false,
+                    binarizer = BarcodeReader.Binarizer.GLOBAL_HISTOGRAM,
+                    maxNumberOfSymbols = 1,
+                ),
             ),
         )
     }
@@ -119,7 +134,9 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
                                     imageAnalysis.setAnalyzer(executor) { image ->
                                         try {
                                             if (!handled.get()) {
-                                                val result = reader.read(image).firstOrNull { it.text != null || it.bytes != null }
+                                                val result = readers.firstNotNullOfOrNull { reader ->
+                                                    reader.read(image).firstOrNull { it.text != null || it.bytes != null }
+                                                }
                                                 val format = result?.let { mapFormat(it.format) }
                                                 if (result != null && format != null && handled.compareAndSet(false, true)) {
                                                     val bytes = result.bytes

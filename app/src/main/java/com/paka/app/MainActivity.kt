@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -89,10 +90,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.cos
+import kotlin.math.abs
 import kotlin.math.sin
 
 private enum class Mode { CARDS, CODES }
@@ -471,7 +475,7 @@ private fun EmptyHint(text: String) {
 /** A vertically scrolling column with a proportional scrollbar shown only on overflow. */
 @Composable
 private fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Composable ColumnScope.() -> Unit) {
-    val state = rememberScrollState()
+    val state = rememberHapticScrollState()
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(state).padding(top = topPadding, end = 14.dp, bottom = 8.dp),
@@ -480,6 +484,21 @@ private fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Co
         )
         VerticalScrollbar(state, Modifier.align(Alignment.TopEnd))
     }
+}
+
+@Composable
+private fun rememberHapticScrollState(): ScrollState {
+    val state = rememberScrollState()
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val stepPx = with(LocalDensity.current) { 48.dp.roundToPx().coerceAtLeast(1) }
+    LaunchedEffect(state, stepPx) {
+        snapshotFlow { state.value / stepPx }
+            .distinctUntilChanged()
+            .drop(1)
+            .collect { performPakaHaptic(context, haptics) }
+    }
+    return state
 }
 
 /** Thin white track + thicker white segment, square ends, sized to the visible portion. */
@@ -520,11 +539,19 @@ private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
         modifier = Modifier.fillMaxSize().pointerInput(pages.size, currentPage) {
             val threshold = 24.dp.toPx()
             var dragDistance = 0f
+            var feedbackSent = false
             detectVerticalDragGestures(
-                onDragStart = { dragDistance = 0f },
+                onDragStart = {
+                    dragDistance = 0f
+                    feedbackSent = false
+                },
                 onVerticalDrag = { change, amount ->
                     change.consume()
                     dragDistance += amount
+                    if (!feedbackSent && abs(dragDistance) >= threshold) {
+                        performPakaHaptic(context, haptics)
+                        feedbackSent = true
+                    }
                 },
                 onDragEnd = {
                     val destination = when {
@@ -532,7 +559,6 @@ private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
                         dragDistance >= threshold -> (currentPage - 1).coerceAtLeast(0)
                         else -> currentPage
                     }
-                    if (destination != currentPage) performPakaHaptic(context, haptics)
                     page = destination
                 },
                 onDragCancel = { dragDistance = 0f },
@@ -770,7 +796,7 @@ private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("card", onBack)
         Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 20.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             EditField("name", name, { name = it }, "e.g. Billa")
@@ -816,7 +842,7 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("code", onBack)
         Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 20.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             EditField("name", issuer, { issuer = it }, "e.g. GitHub")
@@ -881,20 +907,42 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onBack: () -> Un
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("details", persistAndBack)
         Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 12.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Text(card.name, color = White, fontSize = 34.sp, fontWeight = FontWeight.Normal)
+            Column {
+                FieldLabel("name")
+                Spacer(Modifier.height(4.dp))
+                Text(card.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
             EditField("stack", stack, { stack = it }, "none")
-            LabelValue("format", card.format.name)
-            LabelValue("added", formatDate(card.createdAt))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                LabelValue("format", card.format.label(), Modifier.weight(1f))
+                LabelValue("added", formatDate(card.createdAt), Modifier.weight(1f))
+            }
             Column {
                 FieldLabel("code")
                 Spacer(Modifier.height(4.dp))
-                Text(card.data, color = Grey, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+                Text(
+                    card.data,
+                    color = Grey,
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
             EditField("notes", notes, { notes = it }, "add a note", singleLine = false)
         }
+        Text(
+            text = "save",
+            color = White,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier(persistAndBack)),
+        )
     }
 }
 
@@ -904,8 +952,8 @@ private fun FieldLabel(text: String) {
 }
 
 @Composable
-private fun LabelValue(label: String, value: String) {
-    Column {
+private fun LabelValue(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
         FieldLabel(label)
         Spacer(Modifier.height(4.dp))
         Text(value, color = White, fontSize = 20.sp, fontWeight = FontWeight.Light)

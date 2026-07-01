@@ -31,7 +31,7 @@ internal val Grey = Color(0xFF888888)
 internal fun performPakaHaptic(
     context: Context,
     haptics: HapticFeedback,
-    type: HapticFeedbackType = HapticFeedbackType.TextHandleMove,
+    type: HapticFeedbackType = HapticFeedbackType.LongPress,
 ) {
     if (Prefs.vibration(context)) haptics.performHapticFeedback(type)
 }
