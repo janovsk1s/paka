@@ -7,6 +7,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
+import android.os.PersistableBundle
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -47,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,9 +58,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -69,6 +74,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -76,6 +83,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -91,6 +101,7 @@ private data class StackEntry(val name: String, val cards: List<Card>) : Entry
 
 private data class ManageRow(val id: String, val name: String)
 private data class RenameTarget(val id: String, val current: String, val isCard: Boolean)
+private data class BarcodeRender(val bitmap: android.graphics.Bitmap?)
 
 private val MANUAL_FORMATS = listOf(
     PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.PDF417, PakaFormat.DATA_MATRIX,
@@ -149,8 +160,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PakaApp() {
     val context = LocalContext.current
-    var cards by remember { mutableStateOf(CardStore.load(context)) }
-    var codes by remember { mutableStateOf(SecureStore.loadAccounts(context)) }
+    val cardLoad = remember { CardStore.load(context) }
+    val codeLoad = remember { SecureStore.loadAccounts(context) }
+    var cards by remember { mutableStateOf(cardLoad.value) }
+    var codes by remember { mutableStateOf(codeLoad.value) }
+    var cardsWritable by remember { mutableStateOf(cardLoad.writable) }
+    var codesWritable by remember { mutableStateOf(codeLoad.writable) }
     var mode by remember { mutableStateOf(Mode.CARDS) }
     var showSettings by remember { mutableStateOf(false) }
     var manageMode by remember { mutableStateOf<Mode?>(null) }
@@ -166,17 +181,56 @@ fun PakaApp() {
     var showDev by remember { mutableStateOf(false) }
     var textSize by remember { mutableStateOf(Prefs.textSize(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
+    LaunchedEffect(Unit) {
+        cardLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        codeLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
 
-    fun saveCards(list: List<Card>) { cards = list; CardStore.save(context, list) }
-    fun saveCodes(list: List<OtpAccount>) { codes = list; SecureStore.saveAccounts(context, list) }
+    fun saveCards(list: List<Card>): Boolean {
+        if (!cardsWritable) {
+            Toast.makeText(context, "Cards are read-only until storage is recovered", Toast.LENGTH_LONG).show()
+            return false
+        }
+        return CardStore.save(context, list).fold(
+            onSuccess = { cards = list; true },
+            onFailure = {
+                cardsWritable = false
+                Toast.makeText(context, "Cards could not be saved", Toast.LENGTH_LONG).show()
+                false
+            },
+        )
+    }
 
-    val updateCard: (Card) -> Unit = { u -> saveCards(cards.map { if (it.id == u.id) u else it }) }
-    val addCode: (OtpAccount) -> Unit = { a -> saveCodes(codes + a); mode = Mode.CODES }
+    fun saveCodes(list: List<OtpAccount>): Boolean {
+        if (!codesWritable) {
+            Toast.makeText(context, "2FA accounts are read-only until storage is recovered", Toast.LENGTH_LONG).show()
+            return false
+        }
+        return SecureStore.saveAccounts(context, list).fold(
+            onSuccess = { codes = list; true },
+            onFailure = {
+                codesWritable = false
+                Toast.makeText(context, "2FA accounts could not be saved", Toast.LENGTH_LONG).show()
+                false
+            },
+        )
+    }
+
+    val updateCard: (Card) -> Boolean = { u -> saveCards(cards.map { if (it.id == u.id) u else it }) }
+    fun addCode(account: OtpAccount): Boolean {
+        if (!saveCodes(codes + account)) return false
+        mode = Mode.CODES
+        return true
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted -> if (granted) scanning = true }
+    ) { granted ->
+        if (granted) scanning = true
+        else Toast.makeText(context, "Camera permission is needed to scan codes", Toast.LENGTH_LONG).show()
+    }
     val startScan = {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             scanning = true
@@ -184,6 +238,8 @@ fun PakaApp() {
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
+
+    ProtectSensitiveContent(mode == Mode.CODES || manualCode || (scanning && scanMode == ScanMode.CODE))
 
     // ---- routing (topmost overlay wins) ----
 
@@ -193,9 +249,9 @@ fun PakaApp() {
             title = "rename",
             initial = rename.current,
             onSave = { newName ->
-                if (rename.isCard) saveCards(cards.map { if (it.id == rename.id) it.copy(name = newName) else it })
+                val saved = if (rename.isCard) saveCards(cards.map { if (it.id == rename.id) it.copy(name = newName) else it })
                 else saveCodes(codes.map { if (it.id == rename.id) it.copy(issuer = newName) else it })
-                renameTarget = null
+                if (saved) renameTarget = null
             },
             onBack = { renameTarget = null },
         )
@@ -245,14 +301,19 @@ fun PakaApp() {
 
     if (manualCard) {
         ManualCardScreen(
-            onSave = { card -> saveCards(cards + card); manualCard = false; selectedCard = card },
+            onSave = { card ->
+                if (saveCards(cards + card)) {
+                    manualCard = false
+                    selectedCard = card
+                }
+            },
             onBack = { manualCard = false },
         )
         return
     }
 
     if (manualCode) {
-        ManualCodeScreen(onSave = { addCode(it); manualCode = false }, onBack = { manualCode = false })
+        ManualCodeScreen(onSave = { if (addCode(it)) manualCode = false }, onBack = { manualCode = false })
         return
     }
 
@@ -263,9 +324,10 @@ fun PakaApp() {
             initial = "",
             onSave = { name ->
                 val card = Card(name = name, data = pending.data, format = pending.format)
-                saveCards(cards + card)
-                pendingScan = null
-                selectedCard = card
+                if (saveCards(cards + card)) {
+                    pendingScan = null
+                    selectedCard = card
+                }
             },
             onBack = { pendingScan = null },
         )
@@ -336,9 +398,22 @@ fun PakaApp() {
                         nowMs = nowMs,
                         textSize = textSize,
                         onCopy = { code ->
+                            if (code.any { it == '-' }) return@CodesList
                             val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clip.setPrimaryClip(ClipData.newPlainText("code", code))
+                            val data = ClipData.newPlainText("2FA code", code)
+                            data.description.extras = PersistableBundle().apply {
+                                putBoolean("android.content.extra.IS_SENSITIVE", true)
+                            }
+                            clip.setPrimaryClip(data)
                             Toast.makeText(context, "copied", Toast.LENGTH_SHORT).show()
+                            scope.launch {
+                                delay(30_000)
+                                val current = clip.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
+                                if (current == code) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clip.clearPrimaryClip()
+                                    else clip.setPrimaryClip(ClipData.newPlainText("", ""))
+                                }
+                            }
                         },
                     )
             }
@@ -456,7 +531,6 @@ private fun SettingsScreen(onReorder: () -> Unit, onDev: () -> Unit, onBack: () 
         SimpleTopBar("settings", onBack)
         ScrollList(topPadding = 44.dp, spacing = 36.dp) {
             Text("reorder", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.fillMaxWidth().then(tapModifier(onReorder)))
-            Text("theme", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.fillMaxWidth())
             Text(
                 "about",
                 color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal,
@@ -501,6 +575,16 @@ private fun ManageScreen(
     onDelete: (String) -> Unit,
     onBack: () -> Unit,
 ) {
+    var pendingDelete by remember { mutableStateOf<ManageRow?>(null) }
+    val deleting = pendingDelete
+    if (deleting != null) {
+        ConfirmDeleteScreen(
+            name = deleting.name,
+            onConfirm = { onDelete(deleting.id); pendingDelete = null },
+            onBack = { pendingDelete = null },
+        )
+        return
+    }
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("reorder", onBack)
@@ -508,16 +592,31 @@ private fun ManageScreen(
             for (row in rows) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(row.name, color = White, fontSize = 26.sp, fontWeight = FontWeight.Light, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Canvas(Modifier.size(26.dp).then(tapModifier { onRename(row.id) })) { drawPencil(Grey) }
-                    Spacer(Modifier.size(18.dp))
-                    Canvas(Modifier.size(26.dp).then(tapModifier { onUp(row.id) })) { drawChevron(up = true) }
-                    Spacer(Modifier.size(18.dp))
-                    Canvas(Modifier.size(26.dp).then(tapModifier { onDown(row.id) })) { drawChevron(up = false) }
-                    Spacer(Modifier.size(18.dp))
-                    Canvas(Modifier.size(26.dp).then(tapModifier { onDelete(row.id) })) { drawX() }
+                    Canvas(Modifier.size(44.dp).then(tapModifier({ onRename(row.id) }, "Rename ${row.name}"))) { drawPencil(Grey) }
+                    Spacer(Modifier.size(4.dp))
+                    Canvas(Modifier.size(44.dp).then(tapModifier({ onUp(row.id) }, "Move ${row.name} up"))) { drawChevron(up = true) }
+                    Spacer(Modifier.size(4.dp))
+                    Canvas(Modifier.size(44.dp).then(tapModifier({ onDown(row.id) }, "Move ${row.name} down"))) { drawChevron(up = false) }
+                    Spacer(Modifier.size(4.dp))
+                    Canvas(Modifier.size(44.dp).then(tapModifier({ pendingDelete = row }, "Delete ${row.name}"))) { drawX() }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () -> Unit) {
+    BackHandler { onBack() }
+    Column(
+        modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("delete $name?", color = White, fontSize = 34.sp, fontWeight = FontWeight.Normal)
+        Spacer(Modifier.height(44.dp))
+        Text("delete", color = White, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier(onConfirm)))
+        Spacer(Modifier.height(28.dp))
+        Text("cancel", color = Grey, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier(onBack)))
     }
 }
 
@@ -526,7 +625,8 @@ private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var data by remember { mutableStateOf("") }
     var format by remember { mutableStateOf(PakaFormat.QR) }
-    val canSave = name.isNotBlank() && data.isNotBlank()
+    val validationError = data.takeIf { it.isNotBlank() }?.let { Barcodes.validationError(format, it.trim()) }
+    val canSave = name.isNotBlank() && data.isNotBlank() && validationError == null
     BackHandler { onBack() }
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
@@ -549,6 +649,7 @@ private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
                     )
                 }
             }
+            validationError?.let { Text(it, color = Grey, fontSize = 14.sp) }
         }
         Text(
             text = "save",
@@ -565,7 +666,13 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
     var issuer by remember { mutableStateOf("") }
     var account by remember { mutableStateOf("") }
     var secret by remember { mutableStateOf("") }
-    val canSave = issuer.isNotBlank() && secret.isNotBlank()
+    val draft = OtpAccount(
+        issuer = issuer.trim(),
+        account = account.trim(),
+        secret = secret.replace(" ", "").trim(),
+    )
+    val validationError = if (issuer.isBlank() || secret.isBlank()) null else Totp.validationError(draft)
+    val canSave = issuer.isNotBlank() && secret.isNotBlank() && validationError == null
     BackHandler { onBack() }
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
@@ -576,14 +683,15 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
         ) {
             EditField("name", issuer, { issuer = it }, "e.g. GitHub")
             EditField("account", account, { account = it }, "optional")
-            EditField("secret", secret, { secret = it }, "base32 key")
+            EditField("secret", secret, { secret = it }, "base32 key", visualTransformation = PasswordVisualTransformation())
+            validationError?.let { Text(it, color = Grey, fontSize = 14.sp) }
         }
         Text(
             text = "save",
             color = if (canSave) White else Grey,
             fontSize = 18.sp,
             fontWeight = FontWeight.Light,
-            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier { if (canSave) onSave(OtpAccount(issuer = issuer.trim(), account = account.trim(), secret = secret.replace(" ", "").trim())) }),
+            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier { if (canSave) onSave(draft) }),
         )
     }
 }
@@ -614,16 +722,21 @@ private fun TextEntryScreen(title: String, initial: String, onSave: (String) -> 
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(White))
             }
         }
+        Text(
+            text = "save",
+            color = if (text.isBlank()) Grey else White,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier { if (text.isNotBlank()) onSave(text.trim()) }),
+        )
     }
 }
 
 @Composable
-private fun CardDetail(card: Card, onUpdate: (Card) -> Unit, onBack: () -> Unit) {
+private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onBack: () -> Unit) {
     var notes by remember(card.id) { mutableStateOf(card.notes) }
     var stack by remember(card.id) { mutableStateOf(card.stack ?: "") }
     val persistAndBack = {
-        onUpdate(card.copy(notes = notes.trim(), stack = stack.trim().ifBlank { null }))
-        onBack()
+        if (onUpdate(card.copy(notes = notes.trim(), stack = stack.trim().ifBlank { null }))) onBack()
     }
     BackHandler { persistAndBack() }
 
@@ -642,7 +755,7 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Unit, onBack: () -> Unit)
                 Spacer(Modifier.height(4.dp))
                 Text(card.data, color = Grey, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
             }
-            EditField("notes", notes, { notes = it }, "add a note")
+            EditField("notes", notes, { notes = it }, "add a note", singleLine = false)
         }
     }
 }
@@ -662,7 +775,14 @@ private fun LabelValue(label: String, value: String) {
 }
 
 @Composable
-private fun EditField(label: String, value: String, onChange: (String) -> Unit, placeholder: String) {
+private fun EditField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    singleLine: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+) {
     Column {
         FieldLabel(label)
         Spacer(Modifier.height(6.dp))
@@ -671,10 +791,11 @@ private fun EditField(label: String, value: String, onChange: (String) -> Unit, 
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
-                singleLine = true,
+                singleLine = singleLine,
+                visualTransformation = visualTransformation,
                 textStyle = TextStyle(color = White, fontSize = 20.sp, fontWeight = FontWeight.Light),
                 cursorBrush = SolidColor(White),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().then(if (singleLine) Modifier else Modifier.height(120.dp)),
             )
         }
         Spacer(Modifier.height(6.dp))
@@ -698,7 +819,8 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(name, onBack) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val bitmap = remember(card.id) { Barcodes.generate(card.format, card.data) }
+                val render = rememberBarcodeRender(card)
+                val bitmap = render?.bitmap
                 Box(
                     modifier = Modifier.fillMaxWidth().background(White).padding(14.dp).then(
                         tapLongModifier(
@@ -709,7 +831,10 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
                     contentAlignment = Alignment.Center,
                 ) {
                     if (bitmap != null) {
-                        Image(bitmap = bitmap.asImageBitmap(), contentDescription = card.name, modifier = Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
+                        val painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap(), filterQuality = FilterQuality.None) }
+                        Image(painter = painter, contentDescription = card.name, modifier = Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
+                    } else if (render == null) {
+                        Text("Rendering…", color = Grey, fontSize = 16.sp)
                     } else {
                         Text("Couldn't render this code", color = Grey, fontSize = 16.sp)
                     }
@@ -727,19 +852,33 @@ private fun CardScreen(card: Card, onLong: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val bitmap = remember(card.id) { Barcodes.generate(card.format, card.data) }
+            val render = rememberBarcodeRender(card)
+            val bitmap = render?.bitmap
             if (bitmap != null) {
+                val painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap(), filterQuality = FilterQuality.None) }
                 Box(
                     modifier = Modifier.fillMaxWidth().background(White).padding(14.dp).then(tapLongModifier(onClick = {}, onLongClick = onLong)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Image(bitmap = bitmap.asImageBitmap(), contentDescription = card.name, modifier = Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
+                    Image(painter = painter, contentDescription = card.name, modifier = Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
                 }
+            } else if (render == null) {
+                Text("Rendering…", color = Grey, fontSize = 20.sp, fontWeight = FontWeight.Light)
             } else {
                 Text("Couldn't render this code", color = Grey, fontSize = 20.sp, fontWeight = FontWeight.Light, modifier = Modifier.padding(horizontal = 28.dp))
             }
         }
     }
+}
+
+@Composable
+private fun rememberBarcodeRender(card: Card): BarcodeRender? {
+    var render by remember(card.id, card.data, card.format) { mutableStateOf<BarcodeRender?>(null) }
+    LaunchedEffect(card.id, card.data, card.format) {
+        val bitmap = withContext(Dispatchers.Default) { Barcodes.generate(card.format, card.data) }
+        render = BarcodeRender(bitmap)
+    }
+    return render
 }
 
 @Composable
@@ -761,15 +900,28 @@ private fun KeepScreenBright() {
 }
 
 @Composable
+private fun ProtectSensitiveContent(enabled: Boolean) {
+    val context = LocalContext.current
+    DisposableEffect(enabled) {
+        val window = (context as? Activity)?.window
+        if (enabled) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose {
+            if (enabled) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+}
+
+@Composable
 private fun BottomBar(mode: Mode, onSettings: () -> Unit, onAdd: () -> Unit, onAddLong: () -> Unit, onToggleMode: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(modifier = Modifier.size(40.dp).then(tapModifier(onSettings))) { drawGear() }
-        Canvas(modifier = Modifier.size(40.dp).then(tapLongModifier(onClick = onAdd, onLongClick = onAddLong))) { drawPlus() }
-        Canvas(modifier = Modifier.size(40.dp).then(tapLongModifier(onClick = onToggleMode, onLongClick = onToggleMode))) {
+        Canvas(modifier = Modifier.size(48.dp).then(tapModifier(onSettings, "Settings"))) { drawGear() }
+        Canvas(modifier = Modifier.size(48.dp).then(tapLongModifier(onClick = onAdd, onLongClick = onAddLong, label = "Add"))) { drawPlus() }
+        Canvas(modifier = Modifier.size(48.dp).then(tapLongModifier(onClick = onToggleMode, onLongClick = onToggleMode, label = if (mode == Mode.CARDS) "2FA codes" else "Cards"))) {
             if (mode == Mode.CARDS) drawBarcodeGlyph() else drawAsterisk()
         }
     }

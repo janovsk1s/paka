@@ -3,6 +3,7 @@ package com.paka.app
 import android.net.Uri
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import java.util.Locale
 import java.util.UUID
 
 /** A time-based one-time-password account (RFC 6238). */
@@ -20,16 +21,29 @@ data class OtpAccount(
 fun OtpAccount.title(): String = if (account.isBlank()) issuer else "$issuer · $account"
 
 object Totp {
+    private val SUPPORTED_ALGORITHMS = setOf("SHA1", "SHA256", "SHA512")
+
+    fun validationError(account: OtpAccount): String? {
+        if (account.issuer.isBlank()) return "Name is required"
+        if (account.digits !in setOf(6, 8)) return "Codes must use 6 or 8 digits"
+        if (account.period !in 1..300) return "Period must be between 1 and 300 seconds"
+        if (account.algorithm.uppercase(Locale.ROOT) !in SUPPORTED_ALGORITHMS) return "Unsupported algorithm"
+        return runCatching {
+            require(base32Decode(account.secret).isNotEmpty())
+            null
+        }.getOrElse { "Secret is not valid Base32" }
+    }
 
     /** Current TOTP code, or a row of dashes if the secret is unusable. */
     fun code(account: OtpAccount, timeMillis: Long): String {
+        val digits = account.digits.takeIf { it == 6 || it == 8 } ?: 6
         return try {
+            require(validationError(account) == null)
             val key = base32Decode(account.secret)
-            if (key.isEmpty()) return "-".repeat(account.digits)
             val counter = (timeMillis / 1000L) / account.period
-            hotp(key, counter, account.digits, account.algorithm)
-        } catch (e: Exception) {
-            "-".repeat(account.digits)
+            hotp(key, counter, digits, account.algorithm)
+        } catch (_: Exception) {
+            "-".repeat(digits)
         }
     }
 
@@ -40,10 +54,11 @@ object Totp {
     }
 
     private fun hotp(key: ByteArray, counter: Long, digits: Int, algorithm: String): String {
-        val algo = when (algorithm.uppercase()) {
+        val algo = when (algorithm.uppercase(Locale.ROOT)) {
             "SHA256" -> "HmacSHA256"
             "SHA512" -> "HmacSHA512"
-            else -> "HmacSHA1"
+            "SHA1" -> "HmacSHA1"
+            else -> error("Unsupported TOTP algorithm")
         }
         val mac = Mac.getInstance(algo)
         mac.init(SecretKeySpec(key, algo))
@@ -60,19 +75,23 @@ object Totp {
             ((hash[offset + 2].toInt() and 0xff) shl 8) or
             (hash[offset + 3].toInt() and 0xff)
         var pow = 1
-        repeat(digits.coerceIn(1, 9)) { pow *= 10 }
+        repeat(digits) { pow *= 10 }
         return (binary % pow).toString().padStart(digits, '0')
     }
 
     private fun base32Decode(input: String): ByteArray {
         val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-        val clean = input.trim().replace(" ", "").replace("-", "").uppercase().trimEnd('=')
+        val normalized = input.trim().replace(" ", "").replace("-", "").uppercase(Locale.ROOT)
+        require(normalized.isNotEmpty()) { "Empty Base32 value" }
+        require(normalized.matches(Regex("[A-Z2-7]+=*"))) { "Invalid Base32 character" }
+        require('=' !in normalized.dropLastWhile { it == '=' }) { "Invalid Base32 padding" }
+        val clean = normalized.trimEnd('=')
         var buffer = 0
         var bits = 0
         val out = ArrayList<Byte>(clean.length)
         for (ch in clean) {
             val v = alphabet.indexOf(ch)
-            if (v < 0) continue
+            require(v >= 0) { "Invalid Base32 character" }
             buffer = (buffer shl 5) or v
             bits += 5
             if (bits >= 8) {
@@ -80,14 +99,18 @@ object Totp {
                 out.add(((buffer shr bits) and 0xff).toByte())
             }
         }
+        if (bits > 0) {
+            val paddingMask = (1 shl bits) - 1
+            require(buffer and paddingMask == 0) { "Invalid Base32 trailing bits" }
+        }
         return out.toByteArray()
     }
 
     /** Parse an otpauth://totp/... URI (e.g. from a setup QR) into an account. */
     fun parseOtpauth(raw: String): OtpAccount? {
-        if (!raw.startsWith("otpauth://totp", ignoreCase = true)) return null
         return try {
             val uri = Uri.parse(raw)
+            if (!uri.scheme.equals("otpauth", ignoreCase = true) || !uri.host.equals("totp", ignoreCase = true)) return null
             val secret = uri.getQueryParameter("secret")?.replace(" ", "").orEmpty()
             if (secret.isBlank()) return null
             val label = Uri.decode(uri.path?.trimStart('/').orEmpty())
@@ -101,15 +124,16 @@ object Totp {
                 issuer = issuerParam ?: label.trim()
                 account = if (issuerParam != null) label.trim() else ""
             }
-            OtpAccount(
+            val accountResult = OtpAccount(
                 issuer = issuer.ifBlank { "Unknown" },
                 account = account,
                 secret = secret,
                 digits = uri.getQueryParameter("digits")?.toIntOrNull() ?: 6,
                 period = uri.getQueryParameter("period")?.toIntOrNull() ?: 30,
-                algorithm = uri.getQueryParameter("algorithm")?.uppercase() ?: "SHA1",
+                algorithm = uri.getQueryParameter("algorithm")?.uppercase(Locale.ROOT) ?: "SHA1",
             )
-        } catch (e: Exception) {
+            accountResult.takeIf { validationError(it) == null }
+        } catch (_: Exception) {
             null
         }
     }

@@ -47,8 +47,37 @@ private fun PakaFormat.zxing(): BarcodeFormat? = when (this) {
 }
 
 object Barcodes {
+    fun validationError(format: PakaFormat, data: String): String? {
+        if (data.isBlank()) return "Code content is required"
+        return when (format) {
+            PakaFormat.EAN13 -> digitLengthError(data, 12, 13, "EAN-13")
+            PakaFormat.EAN8 -> digitLengthError(data, 7, 8, "EAN-8")
+            PakaFormat.UPCA -> digitLengthError(data, 11, 12, "UPC-A")
+            PakaFormat.UPCE -> digitLengthError(data, 7, 8, "UPC-E")
+            PakaFormat.ITF -> when {
+                !data.all(Char::isDigit) -> "ITF accepts digits only"
+                data.length % 2 != 0 -> "ITF requires an even number of digits"
+                else -> null
+            }
+            PakaFormat.CODE39 -> if (data.uppercase() != data || data.any { it !in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%" }) {
+                "Code 39 contains unsupported characters"
+            } else null
+            PakaFormat.CODABAR -> if (data.length < 2 || data.first().uppercaseChar() !in "ABCD" || data.last().uppercaseChar() !in "ABCD") {
+                "Codabar must start and end with A, B, C, or D"
+            } else null
+            else -> null
+        }
+    }
+
+    private fun digitLengthError(data: String, short: Int, full: Int, label: String): String? = when {
+        !data.all(Char::isDigit) -> "$label accepts digits only"
+        data.length != short && data.length != full -> "$label requires $short or $full digits"
+        else -> null
+    }
+
     /** Render [data] as [format] into a crisp black-on-white bitmap, or null on failure. */
-    fun generate(format: PakaFormat, data: String, scale: Int = 8): Bitmap? {
+    fun generate(format: PakaFormat, data: String, scale: Int = 3): Bitmap? {
+        if (validationError(format, data) != null) return null
         return if (format == PakaFormat.DATABAR_EXPANDED) {
             generateDataBar(data)
         } else {
@@ -58,13 +87,15 @@ object Barcodes {
 
     private fun generateZxing(format: BarcodeFormat, data: String, is2D: Boolean, scale: Int): Bitmap? {
         return try {
-            val baseW = if (is2D) 96 else 320
-            val baseH = if (is2D) 96 else 96
+            val baseW = 320
+            val baseH = if (is2D) 320 else 96
             val hints = HashMap<EncodeHintType, Any>()
             hints[EncodeHintType.MARGIN] = if (is2D) 2 else 8
             // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
-            if (format == BarcodeFormat.AZTEC || format == BarcodeFormat.PDF_417) {
-                hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
+            when (format) {
+                BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
+                BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
+                else -> Unit
             }
             val matrix = MultiFormatWriter().encode(data, format, baseW * scale, baseH * scale, hints)
             val w = matrix.width
@@ -83,15 +114,15 @@ object Barcodes {
      * Data arrives as HRI "(01)…(21)…" and is converted to Okapi's "[01]…[21]…" form.
      * Two columns lays a typical jö payload out in two rows, matching the printed card.
      */
-    // Scanners can return GS1 data as "(01)…(21)…(10)…" plus a trailing symbology
-    // suffix / separator. Keep only valid (AI)digits segments and re-emit them in
-    // OkapiBarcode's "[AI]…" form, dropping any junk that would break AI parsing.
+    // Parenthesized HRI may contain alphanumeric variable-length values (for
+    // example batch AI 10 and serial AI 21). Preserve those values verbatim.
     private fun gs1ToBrackets(raw: String): String {
         val sb = StringBuilder()
-        Regex("""\((\d{2,4})\)(\d+)""").findAll(raw).forEach {
-            sb.append('[').append(it.groupValues[1]).append(']').append(it.groupValues[2])
+        Regex("""\((\d{2,4})\)(.*?)(?=\(\d{2,4}\)|$)""", RegexOption.DOT_MATCHES_ALL).findAll(raw).forEach {
+            val value = it.groupValues[2].trimEnd('\u001D')
+            sb.append('[').append(it.groupValues[1]).append(']').append(value)
         }
-        return if (sb.isNotEmpty()) sb.toString() else raw.replace('(', '[').replace(')', ']')
+        return if (sb.isNotEmpty()) sb.toString() else raw
     }
 
     private fun generateDataBar(data: String, modulePx: Int = 5, marginPx: Int = 12): Bitmap? {

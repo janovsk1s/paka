@@ -10,8 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,12 +27,15 @@ import androidx.lifecycle.LifecycleOwner
 import zxingcpp.BarcodeReader
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 data class ScanResult(val data: String, val format: PakaFormat)
 
 @Composable
 fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
-    val lifecycleOwner = LocalContext.current as LifecycleOwner
+    val context = LocalContext.current
+    val lifecycleOwner = context as? LifecycleOwner
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val reader = remember {
         BarcodeReader(
             BarcodeReader.Options(
@@ -40,54 +48,92 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
         )
     }
     val handled = remember { AtomicBoolean(false) }
+    val disposed = remember { AtomicBoolean(false) }
+    val executor = remember {
+        Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "paka-barcode-scan") }
+    }
+    val providerRef = remember { AtomicReference<ProcessCameraProvider?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            disposed.set(true)
+            ContextCompat.getMainExecutor(context).execute { providerRef.getAndSet(null)?.unbindAll() }
+            executor.shutdownNow()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Black)) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                val previewView = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
-                val executor = Executors.newSingleThreadExecutor()
-                val future = ProcessCameraProvider.getInstance(ctx)
-                future.addListener({
-                    val provider = future.get()
-                    val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
-                    val analysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                        .also { ia ->
-                            ia.setAnalyzer(executor) { image ->
-                                try {
-                                    if (!handled.get()) {
-                                        val result = reader.read(image).firstOrNull { it.text != null || it.bytes != null }
-                                        val format = result?.let { mapFormat(it.format) }
-                                        if (result != null && format != null && handled.compareAndSet(false, true)) {
-                                            val bytes = result.bytes
-                                            val data = when {
-                                                result.format == BarcodeReader.Format.AZTEC && bytes != null ->
-                                                    String(bytes, Charsets.ISO_8859_1)
-                                                result.text != null -> result.text!!
-                                                bytes != null -> String(bytes, Charsets.ISO_8859_1)
-                                                else -> ""
+        if (lifecycleOwner != null) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    val previewView = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
+                    val future = ProcessCameraProvider.getInstance(ctx)
+                    future.addListener({
+                        try {
+                            val provider = future.get()
+                            providerRef.set(provider)
+                            if (disposed.get()) {
+                                provider.unbindAll()
+                                return@addListener
+                            }
+                            val preview = Preview.Builder().build().also {
+                                it.setSurfaceProvider(previewView.surfaceProvider)
+                            }
+                            val analysis = ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .build()
+                                .also { imageAnalysis ->
+                                    imageAnalysis.setAnalyzer(executor) { image ->
+                                        try {
+                                            if (!handled.get()) {
+                                                val result = reader.read(image).firstOrNull { it.text != null || it.bytes != null }
+                                                val format = result?.let { mapFormat(it.format) }
+                                                if (result != null && format != null && handled.compareAndSet(false, true)) {
+                                                    val bytes = result.bytes
+                                                    val data = when {
+                                                        result.format == BarcodeReader.Format.AZTEC && bytes != null ->
+                                                            String(bytes, Charsets.ISO_8859_1)
+                                                        result.text != null -> result.text!!
+                                                        bytes != null -> String(bytes, Charsets.ISO_8859_1)
+                                                        else -> ""
+                                                    }
+                                                    previewView.post { onScanned(ScanResult(data, format)) }
+                                                }
                                             }
-                                            previewView.post { onScanned(ScanResult(data, format)) }
+                                        } catch (_: Exception) {
+                                            // A single malformed frame should not stop scanning.
+                                        } finally {
+                                            image.close()
                                         }
                                     }
-                                } catch (e: Exception) {
-                                    // ignore a bad frame
-                                } finally {
-                                    image.close()
                                 }
-                            }
+                            provider.unbindAll()
+                            provider.bindToLifecycle(
+                                lifecycleOwner,
+                                CameraSelector.DEFAULT_BACK_CAMERA,
+                                preview,
+                                analysis,
+                            )
+                        } catch (_: Exception) {
+                            errorMessage = "Camera could not be started"
                         }
-                    provider.unbindAll()
-                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                }, ContextCompat.getMainExecutor(ctx))
-                previewView
-            },
-        )
+                    }, ContextCompat.getMainExecutor(ctx))
+                    previewView
+                },
+            )
+        }
+
+        if (lifecycleOwner == null || errorMessage != null) {
+            Text(
+                text = errorMessage ?: "Camera is unavailable",
+                color = White,
+                modifier = Modifier.align(Alignment.Center).padding(28.dp),
+            )
+        }
 
         BackArrow(
-            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(20.dp),
+            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(8.dp),
             onBack = onBack,
         )
     }

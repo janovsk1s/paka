@@ -6,21 +6,24 @@ plugins {
 
 android {
     namespace = "com.paka.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.paka.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 13
-        versionName = "0.9.2"
+        targetSdk = 36
+        versionCode = 14
+        versionName = "0.10.0"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            // Debug-signed so the release APK is installable via sideload.
-            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
@@ -33,6 +36,10 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = true
     }
 }
 
@@ -49,14 +56,16 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
 
     // Barcode generation — Apache-2.0 ZXing, no Google Play Services.
-    implementation("com.google.zxing:core:3.5.3")
+    implementation(libs.zxing.core)
     // GS1 DataBar generation — OkapiBarcode, pure Java (Zint port), no native, no Google.
-    implementation("uk.org.okapibarcode:okapibarcode:0.5.1")
+    implementation(libs.okapibarcode)
 
     // Scanning — zxing-cpp (no Google Play Services) + CameraX.
-    implementation("io.github.zxing-cpp:android:2.3.0")
-    implementation("androidx.camera:camera-core:1.4.0")
-    implementation("androidx.camera:camera-camera2:1.4.0")
-    implementation("androidx.camera:camera-lifecycle:1.4.0")
-    implementation("androidx.camera:camera-view:1.4.0")
+    implementation(libs.zxing.cpp)
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+
+    testImplementation(libs.junit)
 }

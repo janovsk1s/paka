@@ -15,13 +15,16 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * Encrypted on-device storage for 2FA accounts. Secrets are encrypted with an
  * AES-256-GCM key held in the Android Keystore (hardware-backed where available)
- * and never leave the device. File layout: [12-byte IV][GCM ciphertext].
+ * and never leave the device. Versioned file layout: [magic][12-byte IV][GCM ciphertext].
  */
-object SecureStore {
+internal object SecureStore {
     private const val KEY_ALIAS = "paka_otp_key"
     private const val FILE = "otp.enc"
     private const val KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"
+    private const val SCHEMA = 1
+    private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'A'.code.toByte(), 1)
+    private val AAD = "paka-otp-v1".toByteArray(Charsets.UTF_8)
 
     private fun secretKey(): SecretKey {
         val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
@@ -40,32 +43,49 @@ object SecureStore {
         return generator.generateKey()
     }
 
-    fun loadAccounts(context: Context): List<OtpAccount> {
+    fun loadAccounts(context: Context): LoadOutcome<List<OtpAccount>> {
         val file = File(context.filesDir, FILE)
-        if (!file.exists()) return emptyList()
-        return try {
-            val blob = file.readBytes()
-            val iv = blob.copyOfRange(0, 12)
-            val cipherText = blob.copyOfRange(12, blob.size)
-            val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
-            parse(String(cipher.doFinal(cipherText), Charsets.UTF_8))
-        } catch (e: Exception) {
-            emptyList()
+        if (!file.exists()) return LoadOutcome(emptyList())
+
+        runCatching { return LoadOutcome(decrypt(AtomicStore.readBytes(file))) }
+
+        val backup = AtomicStore.backupFile(file)
+        if (backup.exists()) {
+            runCatching {
+                return LoadOutcome(
+                    value = decrypt(AtomicStore.readBytes(backup)),
+                    warning = "2FA accounts were recovered from the previous backup.",
+                )
+            }
         }
+        return LoadOutcome(
+            value = emptyList(),
+            warning = "2FA accounts could not be decrypted. The encrypted file was preserved.",
+            writable = false,
+        )
     }
 
-    fun saveAccounts(context: Context, accounts: List<OtpAccount>) {
-        try {
+    private fun decrypt(blob: ByteArray): List<OtpAccount> {
+        require(blob.size > 28) { "Encrypted store is truncated" }
+        val versioned = blob.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)
+        val ivOffset = if (versioned) MAGIC.size else 0
+        val iv = blob.copyOfRange(ivOffset, ivOffset + 12)
+        val cipherText = blob.copyOfRange(ivOffset + 12, blob.size)
+        val cipher = Cipher.getInstance(TRANSFORM)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
+        if (versioned) cipher.updateAAD(AAD)
+        return parse(String(cipher.doFinal(cipherText), Charsets.UTF_8))
+    }
+
+    fun saveAccounts(context: Context, accounts: List<OtpAccount>): Result<Unit> =
+        runCatching {
             val cipher = Cipher.getInstance(TRANSFORM)
             cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+            cipher.updateAAD(AAD)
             val iv = cipher.iv // 12 bytes for GCM
             val cipherText = cipher.doFinal(serialize(accounts).toByteArray(Charsets.UTF_8))
-            File(context.filesDir, FILE).writeBytes(iv + cipherText)
-        } catch (e: Exception) {
-            // best effort; secrets are only ever kept on-device
+            AtomicStore.write(File(context.filesDir, FILE), MAGIC + iv + cipherText).getOrThrow()
         }
-    }
 
     private fun serialize(accounts: List<OtpAccount>): String {
         val arr = JSONArray()
@@ -82,11 +102,18 @@ object SecureStore {
                     .put("createdAt", a.createdAt),
             )
         }
-        return arr.toString()
+        return JSONObject().put("schema", SCHEMA).put("accounts", arr).toString()
     }
 
     private fun parse(json: String): List<OtpAccount> {
-        val arr = JSONArray(json)
+        val root = json.trim()
+        val arr = if (root.startsWith("[")) {
+            JSONArray(root) // v0 compatibility
+        } else {
+            val envelope = JSONObject(root)
+            require(envelope.getInt("schema") == SCHEMA) { "Unsupported OTP-store version" }
+            envelope.getJSONArray("accounts")
+        }
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             OtpAccount(
