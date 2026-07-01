@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -655,10 +656,25 @@ private fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float, 
     PagedList(accounts) { account ->
         val code = Totp.code(account, nowMs)
         val remaining = Totp.secondsRemaining(account, nowMs)
-        Column(modifier = Modifier.fillMaxWidth().then(tapModifier { onCopy(code) })) {
-            Text(account.title(), color = Grey, fontSize = 12.sp, fontWeight = FontWeight.Light, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        // Keep the large code on the same vertical centerline as a pass name.
+        // The secondary account label is overlaid above it so it cannot push
+        // the primary content down when switching modes.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .then(tapModifier { onCopy(code) }),
+        ) {
+            Text(
+                account.title(),
+                color = Grey,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Light,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.TopStart).offset(y = (-14).dp),
+            )
+            Row(modifier = Modifier.fillMaxWidth().align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
                 Text(formatCode(code), color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp, modifier = Modifier.weight(1f))
                 Text("$remaining", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
             }
