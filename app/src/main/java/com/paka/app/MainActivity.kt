@@ -610,15 +610,16 @@ private fun HardCutPager(
 @Composable
 private fun PageIndicator(page: Int, pageCount: Int, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.offset(x = 18.dp).fillMaxHeight().width(6.dp)) {
-        val margin = 6.dp.toPx()
-        val trackLength = (size.height - margin * 2).coerceAtLeast(1f)
+        val topMargin = 20.dp.toPx()
+        val bottomMargin = 6.dp.toPx()
+        val trackLength = (size.height - topMargin - bottomMargin).coerceAtLeast(1f)
         val thumbLength = (trackLength / pageCount).coerceAtLeast(24.dp.toPx()).coerceAtMost(trackLength)
         val availableTravel = trackLength - thumbLength
-        val thumbY = margin + if (pageCount <= 1) 0f else availableTravel * page / (pageCount - 1)
+        val thumbY = topMargin + if (pageCount <= 1) 0f else availableTravel * page / (pageCount - 1)
         val centerX = size.width / 2f
         drawRect(
             White.copy(alpha = 0.3f),
-            topLeft = Offset(centerX - 0.5.dp.toPx(), margin),
+            topLeft = Offset(centerX - 0.5.dp.toPx(), topMargin),
             size = Size(1.dp.toPx(), trackLength),
         )
         drawRect(
