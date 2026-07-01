@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.os.PersistableBundle
@@ -73,6 +74,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -94,6 +96,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -103,6 +106,7 @@ import kotlin.math.sin
 
 private enum class Mode { CARDS, CODES }
 private enum class ScanMode { CARD, CODE }
+private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
 
 private sealed interface Entry
 private data class SingleEntry(val card: Card) : Entry
@@ -173,6 +177,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PakaApp() {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
     val cardLoad = remember { CardStore.load(context) }
     val codeLoad = remember { SecureStore.loadAccounts(context) }
     var cards by remember { mutableStateOf(cardLoad.value) }
@@ -181,6 +187,7 @@ fun PakaApp() {
     var codesWritable by remember { mutableStateOf(codeLoad.writable) }
     var mode by remember { mutableStateOf(Mode.CARDS) }
     var showSettings by remember { mutableStateOf(false) }
+    var showBackup by remember { mutableStateOf(false) }
     var manageMode by remember { mutableStateOf<Mode?>(null) }
     var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
     var selectedCard by remember { mutableStateOf<Card?>(null) }
@@ -196,15 +203,27 @@ fun PakaApp() {
     var vibrationEnabled by remember { mutableStateOf(Prefs.vibration(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
-    val codesVisible = mode == Mode.CODES &&
-        !showSettings && manageMode == null && renameTarget == null && !showDev &&
+    val homeVisible =
+        !showSettings && !showBackup && manageMode == null && renameTarget == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
+    val codesVisible = mode == Mode.CODES && homeVisible
+    val passWidthPx = with(density) { (configuration.screenWidthDp.dp - 32.dp).roundToPx() }
     LaunchedEffect(codesVisible) {
         if (codesVisible) {
             while (true) {
                 nowMs = System.currentTimeMillis()
                 delay(1000)
+            }
+        }
+    }
+    LaunchedEffect(homeVisible, mode, cards, passWidthPx) {
+        if (homeVisible && mode == Mode.CARDS) {
+            delay(250)
+            cards.take(6).forEach { card ->
+                withContext(Dispatchers.Default) {
+                    Barcodes.generateCached(card.format, card.data, passWidthPx)
+                }
             }
         }
     }
@@ -264,7 +283,7 @@ fun PakaApp() {
         }
     }
 
-    ProtectSensitiveContent(mode == Mode.CODES || manualCode || (scanning && scanMode == ScanMode.CODE))
+    ProtectSensitiveContent(mode == Mode.CODES || manualCode || showBackup || (scanning && scanMode == ScanMode.CODE))
 
     // ---- routing (topmost overlay wins) ----
 
@@ -315,9 +334,50 @@ fun PakaApp() {
         return
     }
 
+    if (showBackup) {
+        BackupScreen(
+            cards = cards,
+            accounts = codes,
+            onRestore = { restored ->
+                if (!cardsWritable || !codesWritable) {
+                    Toast.makeText(context, "Storage must be healthy before restoring", Toast.LENGTH_LONG).show()
+                    false
+                } else {
+                    val oldCards = cards
+                    val oldCodes = codes
+                    val codesSaved = SecureStore.saveAccounts(context, restored.accounts)
+                    if (codesSaved.isFailure) {
+                        Toast.makeText(context, "Backup could not be restored", Toast.LENGTH_LONG).show()
+                        false
+                    } else {
+                        val cardsSaved = CardStore.save(context, restored.cards)
+                        if (cardsSaved.isSuccess) {
+                            cards = restored.cards
+                            codes = restored.accounts
+                            true
+                        } else {
+                            val rolledBack = SecureStore.saveAccounts(context, oldCodes).isSuccess
+                            if (!rolledBack) codes = restored.accounts
+                            cards = oldCards
+                            Toast.makeText(
+                                context,
+                                if (rolledBack) "Backup could not be restored" else "Restore was interrupted; reopen Paka to verify data",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            false
+                        }
+                    }
+                }
+            },
+            onBack = { showBackup = false },
+        )
+        return
+    }
+
     if (showSettings) {
         SettingsScreen(
             onReorder = { showSettings = false; manageMode = mode },
+            onBackup = { showSettings = false; showBackup = true },
             vibrationEnabled = vibrationEnabled,
             onVibration = { enabled ->
                 vibrationEnabled = enabled
@@ -692,6 +752,7 @@ private fun formatCode(code: String): String = when (code.length) {
 @Composable
 private fun SettingsScreen(
     onReorder: () -> Unit,
+    onBackup: () -> Unit,
     vibrationEnabled: Boolean,
     onVibration: (Boolean) -> Unit,
     onDev: () -> Unit,
@@ -706,6 +767,7 @@ private fun SettingsScreen(
         SimpleTopBar("settings", onBack)
         ScrollList(topPadding = 44.dp, spacing = 36.dp) {
             Text("reorder", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.fillMaxWidth().then(tapModifier(onReorder)))
+            Text("backup", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.fillMaxWidth().then(tapModifier(onBackup)))
             Row(
                 modifier = Modifier.fillMaxWidth().then(
                     tapModifier {
@@ -732,6 +794,272 @@ private fun SettingsScreen(
                 ),
             )
         }
+    }
+}
+
+@Composable
+private fun BackupScreen(
+    cards: List<Card>,
+    accounts: List<OtpAccount>,
+    onRestore: (BackupData) -> Boolean,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var step by remember { mutableStateOf(BackupStep.MENU) }
+    var passphrase by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
+    var unlocked by remember { mutableStateOf<BackupData?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        val bytes = pendingExport
+        if (uri == null || bytes == null) {
+            bytes?.fill(0)
+            pendingExport = null
+        } else {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                            output.write(bytes)
+                            output.flush()
+                        } ?: error("Document could not be opened")
+                    }.isSuccess
+                }
+                bytes.fill(0)
+                pendingExport = null
+                if (saved) {
+                    passphrase = ""
+                    confirmation = ""
+                    step = BackupStep.MENU
+                    Toast.makeText(context, "encrypted backup saved", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "backup could not be saved", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                busy = true
+                val blob = withContext(Dispatchers.IO) { runCatching { readBackupBlob(context, uri) } }
+                busy = false
+                blob.onSuccess {
+                    pendingImport?.fill(0)
+                    pendingImport = it
+                    passphrase = ""
+                    step = BackupStep.IMPORT_PASSWORD
+                }.onFailure {
+                    Toast.makeText(context, "backup could not be read", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    fun resetToMenu() {
+        pendingExport?.fill(0)
+        pendingExport = null
+        pendingImport?.fill(0)
+        pendingImport = null
+        unlocked = null
+        passphrase = ""
+        confirmation = ""
+        busy = false
+        step = BackupStep.MENU
+    }
+
+    val goBack: () -> Unit = {
+        if (step == BackupStep.MENU) onBack() else resetToMenu()
+    }
+    BackHandler { goBack() }
+
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
+        SimpleTopBar(
+            when (step) {
+                BackupStep.MENU -> "backup"
+                BackupStep.EXPORT_PASSWORD -> "export"
+                BackupStep.IMPORT_PASSWORD -> "unlock"
+                BackupStep.CONFIRM_RESTORE -> "restore"
+            },
+            goBack,
+        )
+
+        when (step) {
+            BackupStep.MENU -> {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(top = 44.dp),
+                    verticalArrangement = Arrangement.spacedBy(36.dp),
+                ) {
+                    Text(
+                        "encrypted export",
+                        color = White,
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Normal,
+                        modifier = Modifier.fillMaxWidth().then(tapModifier { step = BackupStep.EXPORT_PASSWORD }),
+                    )
+                    Text(
+                        "restore backup",
+                        color = White,
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Normal,
+                        modifier = Modifier.fillMaxWidth().then(
+                            tapModifier {
+                                importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                            },
+                        ),
+                    )
+                    Text(
+                        "Backups contain all passes and 2FA secrets. They are encrypted offline with your passphrase.",
+                        color = Grey,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Light,
+                    )
+                }
+            }
+
+            BackupStep.EXPORT_PASSWORD -> {
+                val canExport = passphrase.length >= 8 && passphrase == confirmation && !busy
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    Text("Use at least 8 characters. This passphrase cannot be recovered.", color = Grey, fontSize = 16.sp)
+                    EditField("passphrase", passphrase, { passphrase = it }, "8+ characters", visualTransformation = PasswordVisualTransformation())
+                    EditField("repeat", confirmation, { confirmation = it }, "repeat passphrase", visualTransformation = PasswordVisualTransformation())
+                    if (confirmation.isNotEmpty() && passphrase != confirmation) {
+                        Text("passphrases do not match", color = Grey, fontSize = 14.sp)
+                    }
+                }
+                Text(
+                    if (busy) "encrypting…" else "save encrypted backup",
+                    color = if (canExport) White else Grey,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(vertical = 18.dp).then(
+                        if (canExport) tapModifier {
+                            val password = passphrase.toCharArray()
+                            busy = true
+                            scope.launch {
+                                val result = withContext(Dispatchers.Default) {
+                                    try {
+                                        runCatching { BackupStore.encrypt(cards, accounts, password) }
+                                    } finally {
+                                        password.fill('\u0000')
+                                    }
+                                }
+                                busy = false
+                                result.onSuccess { bytes ->
+                                    pendingExport = bytes
+                                    val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                    exportLauncher.launch("paka-$stamp.paka")
+                                }.onFailure {
+                                    Toast.makeText(context, "backup could not be encrypted", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        } else Modifier,
+                    ),
+                )
+            }
+
+            BackupStep.IMPORT_PASSWORD -> {
+                val canUnlock = passphrase.length >= 8 && pendingImport != null && !busy
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    Text("Enter the passphrase used when this backup was created.", color = Grey, fontSize = 16.sp)
+                    EditField("passphrase", passphrase, { passphrase = it }, "backup passphrase", visualTransformation = PasswordVisualTransformation())
+                }
+                Text(
+                    if (busy) "unlocking…" else "unlock backup",
+                    color = if (canUnlock) White else Grey,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(vertical = 18.dp).then(
+                        if (canUnlock) tapModifier {
+                            val blob = checkNotNull(pendingImport)
+                            val password = passphrase.toCharArray()
+                            busy = true
+                            scope.launch {
+                                val result = withContext(Dispatchers.Default) {
+                                    try {
+                                        runCatching { BackupStore.decrypt(blob, password) }
+                                    } finally {
+                                        password.fill('\u0000')
+                                    }
+                                }
+                                busy = false
+                                result.onSuccess { data ->
+                                    blob.fill(0)
+                                    pendingImport = null
+                                    passphrase = ""
+                                    unlocked = data
+                                    step = BackupStep.CONFIRM_RESTORE
+                                }.onFailure {
+                                    Toast.makeText(context, "incorrect passphrase or invalid backup", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        } else Modifier,
+                    ),
+                )
+            }
+
+            BackupStep.CONFIRM_RESTORE -> {
+                val data = unlocked
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text("replace current data?", color = White, fontSize = 32.sp, fontWeight = FontWeight.Normal)
+                    Spacer(Modifier.height(24.dp))
+                    Text(
+                        "${data?.cards?.size ?: 0} passes · ${data?.accounts?.size ?: 0} codes\nCurrent data will be replaced.",
+                        color = Grey,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Light,
+                    )
+                    Spacer(Modifier.height(42.dp))
+                    Text(
+                        "restore",
+                        color = if (data != null) White else Grey,
+                        fontSize = 24.sp,
+                        modifier = Modifier.fillMaxWidth().then(
+                            tapModifier {
+                                if (data != null && onRestore(data)) {
+                                    Toast.makeText(context, "backup restored", Toast.LENGTH_SHORT).show()
+                                    resetToMenu()
+                                    onBack()
+                                }
+                            },
+                        ),
+                    )
+                    Spacer(Modifier.height(28.dp))
+                    Text("cancel", color = Grey, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier { resetToMenu() }))
+                }
+            }
+        }
+    }
+}
+
+private fun readBackupBlob(context: Context, uri: Uri): ByteArray {
+    val input = context.contentResolver.openInputStream(uri) ?: error("Document could not be opened")
+    return input.use {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = it.read(buffer)
+            if (read < 0) break
+            total += read
+            require(total <= BackupStore.MAX_BACKUP_BYTES) { "Backup is too large" }
+            output.write(buffer, 0, read)
+        }
+        output.toByteArray()
     }
 }
 
@@ -1111,7 +1439,7 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
                 val uniqueCards = cards.distinctBy { it.id }
                 suspend fun render(stackCard: Card) {
                     val bitmap = withContext(Dispatchers.Default) {
-                        Barcodes.generate(stackCard.format, stackCard.data, targetWidthPx)
+                        Barcodes.generateCached(stackCard.format, stackCard.data, targetWidthPx)
                     }
                     rendered[stackCard.id] = BarcodeRender(bitmap)
                 }
@@ -1120,15 +1448,6 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
                 launch { uniqueCards.firstOrNull()?.let { render(it) } }
                 launch { uniqueCards.drop(1).forEach { render(it) } }
             }
-            DisposableEffect(rendered) {
-                onDispose {
-                    rendered.values.mapNotNull { it.bitmap }.distinct().forEach { bitmap ->
-                        if (!bitmap.isRecycled) bitmap.recycle()
-                    }
-                    rendered.clear()
-                }
-            }
-
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BarcodePanel(
                     card = card,
@@ -1160,15 +1479,9 @@ private fun rememberBarcodeRender(card: Card, targetWidthPx: Int): BarcodeRender
     var render by remember(card.id, card.data, card.format, targetWidthPx) { mutableStateOf<BarcodeRender?>(null) }
     LaunchedEffect(card.id, card.data, card.format, targetWidthPx) {
         val bitmap = withContext(Dispatchers.Default) {
-            Barcodes.generate(card.format, card.data, targetWidthPx)
+            Barcodes.generateCached(card.format, card.data, targetWidthPx)
         }
         render = BarcodeRender(bitmap)
-    }
-    DisposableEffect(render?.bitmap) {
-        val bitmap = render?.bitmap
-        onDispose {
-            if (bitmap != null && !bitmap.isRecycled) bitmap.recycle()
-        }
     }
     return render
 }

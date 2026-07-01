@@ -4,12 +4,14 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.util.LruCache
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import uk.org.okapibarcode.backend.DataBarExpanded
 import java.util.UUID
+import java.security.MessageDigest
 
 /** Every symbology Paka can render. */
 enum class PakaFormat {
@@ -48,6 +50,11 @@ private fun PakaFormat.zxing(): BarcodeFormat? = when (this) {
 }
 
 object Barcodes {
+    private const val CACHE_KIB = 12 * 1024
+    private val bitmapCache = object : LruCache<String, Bitmap>(CACHE_KIB) {
+        override fun sizeOf(key: String, value: Bitmap): Int = (value.allocationByteCount / 1024).coerceAtLeast(1)
+    }
+
     fun validationError(format: PakaFormat, data: String): String? {
         if (data.isBlank()) return "Code content is required"
         return when (format) {
@@ -92,6 +99,29 @@ object Barcodes {
         }
     }
 
+    /** Bounded cache for passes already verified by [generate]. */
+    fun generateCached(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
+        val width = targetWidthPx.coerceIn(240, 1440)
+        val key = cacheKey(format, data, width)
+        synchronized(bitmapCache) { bitmapCache.get(key) }?.let { return it }
+        val generated = generate(format, data, width) ?: return null
+        synchronized(bitmapCache) {
+            bitmapCache.get(key)?.let { existing ->
+                generated.recycle()
+                return existing
+            }
+            bitmapCache.put(key, generated)
+        }
+        return generated
+    }
+
+    private fun cacheKey(format: PakaFormat, data: String, width: Int): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(data.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return "${format.name}:$width:$digest"
+    }
+
     private fun generateZxing(format: BarcodeFormat, data: String, width: Int, height: Int): Bitmap? {
         return try {
             val hints = HashMap<EncodeHintType, Any>()
@@ -114,6 +144,7 @@ object Barcodes {
             val pixels = IntArray(w * h) { i ->
                 if (matrix.get(i % w, i / w)) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
             }
+            if (!BarcodePayloadVerifier.verify(w, h, pixels, format.paka(), data)) return null
             Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565).apply { setPixels(pixels, 0, w, 0, 0, w, h) }
         } catch (e: Exception) {
             null
@@ -157,9 +188,32 @@ object Barcodes {
                 val top = (r.y * modulePx + marginPx).toFloat()
                 canvas.drawRect(left, top, left + (r.width * modulePx).toFloat(), top + (r.height * modulePx).toFloat(), paint)
             }
+            val pixels = IntArray(w * h)
+            bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+            if (!BarcodePayloadVerifier.verify(w, h, pixels, PakaFormat.DATABAR_EXPANDED, data)) {
+                bmp.recycle()
+                return null
+            }
             bmp
         } catch (e: Exception) {
             null
         }
     }
+}
+
+private fun BarcodeFormat.paka(): PakaFormat = when (this) {
+    BarcodeFormat.QR_CODE -> PakaFormat.QR
+    BarcodeFormat.AZTEC -> PakaFormat.AZTEC
+    BarcodeFormat.PDF_417 -> PakaFormat.PDF417
+    BarcodeFormat.DATA_MATRIX -> PakaFormat.DATA_MATRIX
+    BarcodeFormat.CODE_128 -> PakaFormat.CODE128
+    BarcodeFormat.CODE_39 -> PakaFormat.CODE39
+    BarcodeFormat.CODE_93 -> PakaFormat.CODE93
+    BarcodeFormat.CODABAR -> PakaFormat.CODABAR
+    BarcodeFormat.EAN_13 -> PakaFormat.EAN13
+    BarcodeFormat.EAN_8 -> PakaFormat.EAN8
+    BarcodeFormat.UPC_A -> PakaFormat.UPCA
+    BarcodeFormat.UPC_E -> PakaFormat.UPCE
+    BarcodeFormat.ITF -> PakaFormat.ITF
+    else -> error("Unsupported Paka barcode format: $this")
 }

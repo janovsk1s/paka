@@ -1,10 +1,12 @@
 package com.paka.app
 
+import android.os.SystemClock
 import android.util.Size
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.core.resolutionselector.ResolutionSelector
@@ -39,6 +41,7 @@ import zxingcpp.BarcodeReader
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 data class ScanResult(val data: String, val format: PakaFormat)
@@ -51,6 +54,8 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var hasFlash by remember { mutableStateOf(false) }
     var torchEnabled by remember { mutableStateOf(false) }
+    var autoLight by remember { mutableStateOf(false) }
+    var lowLight by remember { mutableStateOf(false) }
     val readers = remember {
         listOf(
             BarcodeReader(
@@ -85,6 +90,10 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
     val providerRef = remember { AtomicReference<ProcessCameraProvider?>(null) }
     val cameraRef = remember { AtomicReference<Camera?>(null) }
     val previewRef = remember { AtomicReference<PreviewView?>(null) }
+    val hasFlashRef = remember { AtomicBoolean(false) }
+    val torchRef = remember { AtomicBoolean(false) }
+    val manualLightOverride = remember { AtomicBoolean(false) }
+    val lastFocusRetry = remember { AtomicLong(SystemClock.elapsedRealtime()) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -131,9 +140,56 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
                                 )
                                 .build()
                                 .also { imageAnalysis ->
+                                    var darkFrames = 0
+                                    var brightFrames = 0
                                     imageAnalysis.setAnalyzer(executor) { image ->
                                         try {
                                             if (!handled.get()) {
+                                                val isDark = averageLuma(image) < LOW_LIGHT_LUMA
+                                                if (isDark) {
+                                                    darkFrames++
+                                                    brightFrames = 0
+                                                } else {
+                                                    brightFrames++
+                                                    darkFrames = 0
+                                                }
+                                                if (darkFrames == LOW_LIGHT_FRAMES) {
+                                                    previewView.post {
+                                                        lowLight = true
+                                                        if (
+                                                            hasFlashRef.get() &&
+                                                            !torchRef.get() &&
+                                                            !manualLightOverride.get()
+                                                        ) {
+                                                            cameraRef.get()?.cameraControl?.enableTorch(true)
+                                                            torchRef.set(true)
+                                                            torchEnabled = true
+                                                            autoLight = true
+                                                        }
+                                                    }
+                                                } else if (brightFrames == BRIGHT_LIGHT_FRAMES) {
+                                                    previewView.post { lowLight = false }
+                                                }
+
+                                                val now = SystemClock.elapsedRealtime()
+                                                val previousFocus = lastFocusRetry.get()
+                                                if (
+                                                    now - previousFocus >= FOCUS_RETRY_MS &&
+                                                    lastFocusRetry.compareAndSet(previousFocus, now)
+                                                ) {
+                                                    previewView.post {
+                                                        val activeCamera = cameraRef.get()
+                                                        if (activeCamera != null && previewView.width > 0 && previewView.height > 0) {
+                                                            focusAt(
+                                                                activeCamera,
+                                                                previewView,
+                                                                previewView.width / 2f,
+                                                                previewView.height / 2f,
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
                                                 val result = readers.firstNotNullOfOrNull { reader ->
                                                     reader.read(image).firstOrNull { it.text != null || it.bytes != null }
                                                 }
@@ -168,7 +224,10 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
                                 analysis,
                             )
                             cameraRef.set(camera)
-                            hasFlash = camera.cameraInfo.hasFlashUnit()
+                            val flashAvailable = camera.cameraInfo.hasFlashUnit()
+                            hasFlash = flashAvailable
+                            hasFlashRef.set(flashAvailable)
+                            lastFocusRetry.set(SystemClock.elapsedRealtime())
                             previewView.post {
                                 focusAt(camera, previewView, previewView.width / 2f, previewView.height / 2f)
                             }
@@ -208,7 +267,11 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
 
         if (hasFlash) {
             Text(
-                text = if (torchEnabled) "light on" else "light",
+                text = when {
+                    autoLight -> "light auto"
+                    torchEnabled -> "light on"
+                    else -> "light"
+                },
                 color = if (torchEnabled) White else Grey,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -216,9 +279,12 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
                     .padding(horizontal = 20.dp, vertical = 22.dp)
                     .then(
                         tapModifier({
-                            val enabled = !torchEnabled
+                            manualLightOverride.set(true)
+                            val enabled = !torchRef.get()
                             cameraRef.get()?.cameraControl?.enableTorch(enabled)
+                            torchRef.set(enabled)
                             torchEnabled = enabled
+                            autoLight = false
                         }, "Toggle camera light"),
                     ),
             )
@@ -226,12 +292,48 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
 
         if (errorMessage == null && lifecycleOwner != null) {
             Text(
-                text = "tap to focus",
+                text = if (lowLight && !torchEnabled) "low light · use light" else "tap to focus",
                 color = White.copy(alpha = 0.72f),
                 modifier = Modifier.align(Alignment.BottomCenter).systemBarsPadding().padding(bottom = 24.dp),
             )
         }
     }
+}
+
+private const val LOW_LIGHT_LUMA = 48
+private const val LOW_LIGHT_FRAMES = 6
+private const val BRIGHT_LIGHT_FRAMES = 4
+private const val FOCUS_RETRY_MS = 2_200L
+
+/** Samples the central image area without allocating a full luminance copy. */
+private fun averageLuma(image: ImageProxy): Int {
+    val plane = image.planes.firstOrNull() ?: return 255
+    val buffer = plane.buffer
+    val width = image.width
+    val height = image.height
+    if (width <= 0 || height <= 0) return 255
+    val startX = width / 6
+    val endX = width - startX
+    val startY = height / 6
+    val endY = height - startY
+    val stepX = (width / 48).coerceAtLeast(1)
+    val stepY = (height / 36).coerceAtLeast(1)
+    var total = 0L
+    var samples = 0
+    var y = startY
+    while (y < endY) {
+        var x = startX
+        while (x < endX) {
+            val index = y * plane.rowStride + x * plane.pixelStride
+            if (index in 0 until buffer.limit()) {
+                total += buffer.get(index).toInt() and 0xFF
+                samples++
+            }
+            x += stepX
+        }
+        y += stepY
+    }
+    return if (samples == 0) 255 else (total / samples).toInt()
 }
 
 @Composable
