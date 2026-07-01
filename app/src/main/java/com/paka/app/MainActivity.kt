@@ -21,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,8 +38,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.pager.VerticalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -67,6 +66,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -130,12 +130,16 @@ private fun PakaFormat.label(): String = when (this) {
 }
 
 private fun buildEntries(cards: List<Card>): List<Entry> {
+    val groupedStacks = linkedMapOf<String, MutableList<Card>>()
+    cards.forEach { card ->
+        card.stack?.let { stack -> groupedStacks.getOrPut(stack) { mutableListOf() }.add(card) }
+    }
     val entries = mutableListOf<Entry>()
     val seen = mutableSetOf<String>()
     for (c in cards) {
         val s = c.stack
         if (s == null) entries.add(SingleEntry(c))
-        else if (seen.add(s)) entries.add(StackEntry(s, cards.filter { it.stack == s }))
+        else if (seen.add(s)) entries.add(StackEntry(s, groupedStacks.getValue(s)))
     }
     return entries
 }
@@ -184,7 +188,18 @@ fun PakaApp() {
     var textSize by remember { mutableStateOf(Prefs.textSize(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
+    val codesVisible = mode == Mode.CODES &&
+        !showSettings && manageMode == null && renameTarget == null && !showDev &&
+        !manualCard && !manualCode && pendingScan == null && !scanning &&
+        detailCard == null && selectedStack == null && selectedCard == null
+    LaunchedEffect(codesVisible) {
+        if (codesVisible) {
+            while (true) {
+                nowMs = System.currentTimeMillis()
+                delay(1000)
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         cardLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
         codeLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
@@ -472,51 +487,65 @@ private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
         val trackLen = (vh - 2 * margin).coerceAtLeast(1f)
         val thumbLen = (vh / total * trackLen).coerceIn(24.dp.toPx(), trackLen)
         val thumbY = margin + (state.value / maxV) * (trackLen - thumbLen)
-        val right = size.width
-        drawRect(White.copy(alpha = 0.3f), topLeft = Offset(right - 2.dp.toPx(), margin), size = Size(2.dp.toPx(), trackLen))
-        drawRect(White, topLeft = Offset(right - 6.dp.toPx(), thumbY), size = Size(6.dp.toPx(), thumbLen))
+        val centerX = size.width / 2f
+        drawRect(White.copy(alpha = 0.3f), topLeft = Offset(centerX - 1.dp.toPx(), margin), size = Size(2.dp.toPx(), trackLen))
+        drawRect(White, topLeft = Offset(centerX - 3.dp.toPx(), thumbY), size = Size(6.dp.toPx(), thumbLen))
     }
 }
 
 private const val ITEMS_PER_PAGE = 5
 
-/** Five fixed row slots per page. Vertical swipes snap cleanly between pages. */
+/** Five fixed row slots per page. Swipes replace the page instantly on release. */
 @Composable
 private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
     val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
-    val pagerState = rememberPagerState(pageCount = { pages.size })
+    if (pages.isEmpty()) return
+    var page by remember { mutableIntStateOf(0) }
+    val currentPage = page.coerceIn(0, pages.lastIndex)
 
     LaunchedEffect(pages.size) {
-        if (pages.isNotEmpty() && pagerState.currentPage >= pages.size) {
-            pagerState.scrollToPage(pages.lastIndex)
-        }
+        if (page > pages.lastIndex) page = pages.lastIndex
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        VerticalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-            pageSpacing = 0.dp,
-        ) { page ->
-            Column(
-                modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp),
-            ) {
-                pages[page].forEach { item ->
-                    Box(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        content(item)
+    Box(
+        modifier = Modifier.fillMaxSize().pointerInput(pages.size, currentPage) {
+            val threshold = 24.dp.toPx()
+            var dragDistance = 0f
+            detectVerticalDragGestures(
+                onDragStart = { dragDistance = 0f },
+                onVerticalDrag = { change, amount ->
+                    change.consume()
+                    dragDistance += amount
+                },
+                onDragEnd = {
+                    page = when {
+                        dragDistance <= -threshold -> (currentPage + 1).coerceAtMost(pages.lastIndex)
+                        dragDistance >= threshold -> (currentPage - 1).coerceAtLeast(0)
+                        else -> currentPage
                     }
+                },
+                onDragCancel = { dragDistance = 0f },
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp),
+        ) {
+            pages[currentPage].forEach { item ->
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    content(item)
                 }
-                repeat(ITEMS_PER_PAGE - pages[page].size) {
-                    Spacer(Modifier.weight(1f))
-                }
+            }
+            repeat(ITEMS_PER_PAGE - pages[currentPage].size) {
+                Spacer(Modifier.weight(1f))
             }
         }
         if (pages.size > 1) {
             PageIndicator(
-                page = pagerState.currentPage,
+                page = currentPage,
                 pageCount = pages.size,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
@@ -532,15 +561,15 @@ private fun PageIndicator(page: Int, pageCount: Int, modifier: Modifier = Modifi
         val thumbLength = (trackLength / pageCount).coerceAtLeast(24.dp.toPx()).coerceAtMost(trackLength)
         val availableTravel = trackLength - thumbLength
         val thumbY = margin + if (pageCount <= 1) 0f else availableTravel * page / (pageCount - 1)
-        val right = size.width
+        val centerX = size.width / 2f
         drawRect(
             White.copy(alpha = 0.3f),
-            topLeft = Offset(right - 2.dp.toPx(), margin),
+            topLeft = Offset(centerX - 1.dp.toPx(), margin),
             size = Size(2.dp.toPx(), trackLength),
         )
         drawRect(
             White,
-            topLeft = Offset(right - 6.dp.toPx(), thumbY),
+            topLeft = Offset(centerX - 3.dp.toPx(), thumbY),
             size = Size(6.dp.toPx(), thumbLength),
         )
     }
@@ -945,6 +974,12 @@ private fun rememberBarcodeRender(card: Card): BarcodeRender? {
     LaunchedEffect(card.id, card.data, card.format) {
         val bitmap = withContext(Dispatchers.Default) { Barcodes.generate(card.format, card.data) }
         render = BarcodeRender(bitmap)
+    }
+    DisposableEffect(render?.bitmap) {
+        val bitmap = render?.bitmap
+        onDispose {
+            if (bitmap != null && !bitmap.isRecycled) bitmap.recycle()
+        }
     }
     return render
 }
