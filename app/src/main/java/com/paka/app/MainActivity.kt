@@ -507,7 +507,7 @@ private fun rememberHapticScrollState(): ScrollState {
 @Composable
 private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
     if (state.maxValue <= 0) return
-    Canvas(modifier = modifier.fillMaxHeight().width(10.dp)) {
+    Canvas(modifier = modifier.offset(x = 18.dp).fillMaxHeight().width(6.dp)) {
         val vh = size.height
         val maxV = state.maxValue.toFloat()
         val total = vh + maxV
@@ -516,8 +516,8 @@ private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
         val thumbLen = (vh / total * trackLen).coerceIn(24.dp.toPx(), trackLen)
         val thumbY = margin + (state.value / maxV) * (trackLen - thumbLen)
         val centerX = size.width / 2f
-        drawRect(White.copy(alpha = 0.3f), topLeft = Offset(centerX - 1.dp.toPx(), margin), size = Size(2.dp.toPx(), trackLen))
-        drawRect(White, topLeft = Offset(centerX - 3.dp.toPx(), thumbY), size = Size(6.dp.toPx(), thumbLen))
+        drawRect(White.copy(alpha = 0.3f), topLeft = Offset(centerX - 0.5.dp.toPx(), margin), size = Size(1.dp.toPx(), trackLen))
+        drawRect(White, topLeft = Offset(centerX - 2.dp.toPx(), thumbY), size = Size(4.dp.toPx(), thumbLen))
     }
 }
 
@@ -609,7 +609,7 @@ private fun HardCutPager(
 
 @Composable
 private fun PageIndicator(page: Int, pageCount: Int, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.fillMaxHeight().width(10.dp)) {
+    Canvas(modifier = modifier.offset(x = 18.dp).fillMaxHeight().width(6.dp)) {
         val margin = 6.dp.toPx()
         val trackLength = (size.height - margin * 2).coerceAtLeast(1f)
         val thumbLength = (trackLength / pageCount).coerceAtLeast(24.dp.toPx()).coerceAtMost(trackLength)
@@ -618,13 +618,13 @@ private fun PageIndicator(page: Int, pageCount: Int, modifier: Modifier = Modifi
         val centerX = size.width / 2f
         drawRect(
             White.copy(alpha = 0.3f),
-            topLeft = Offset(centerX - 1.dp.toPx(), margin),
-            size = Size(2.dp.toPx(), trackLength),
+            topLeft = Offset(centerX - 0.5.dp.toPx(), margin),
+            size = Size(1.dp.toPx(), trackLength),
         )
         drawRect(
             White,
-            topLeft = Offset(centerX - 3.dp.toPx(), thumbY),
-            size = Size(6.dp.toPx(), thumbLength),
+            topLeft = Offset(centerX - 2.dp.toPx(), thumbY),
+            size = Size(4.dp.toPx(), thumbLength),
         )
     }
 }
@@ -672,7 +672,7 @@ private fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float, 
                 fontWeight = FontWeight.Light,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.align(Alignment.TopStart).offset(y = (-14).dp),
+                modifier = Modifier.align(Alignment.TopStart).offset(y = (-10).dp),
             )
             Row(modifier = Modifier.fillMaxWidth().align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
                 Text(formatCode(code), color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp, modifier = Modifier.weight(1f))
