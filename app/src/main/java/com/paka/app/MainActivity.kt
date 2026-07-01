@@ -24,6 +24,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -70,6 +71,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -901,6 +903,48 @@ private fun EditField(
 }
 
 @Composable
+private fun BarcodePanel(
+    card: Card,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .background(White)
+            .then(tapLongModifier(onClick = onClick, onLongClick = onLongClick, label = card.name))
+            .padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            val density = LocalDensity.current
+            val targetWidthPx = with(density) { maxWidth.roundToPx() }
+            val render = rememberBarcodeRender(card, targetWidthPx)
+            val bitmap = render?.bitmap
+            when {
+                bitmap != null -> {
+                    val painter = remember(bitmap) {
+                        BitmapPainter(bitmap.asImageBitmap(), filterQuality = FilterQuality.None)
+                    }
+                    val imageWidth = with(density) { bitmap.width.toDp() }
+                    val imageHeight = with(density) { bitmap.height.toDp() }
+                    Image(
+                        painter = painter,
+                        contentDescription = card.name,
+                        modifier = Modifier.size(imageWidth, imageHeight),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+                render == null -> Text("Rendering…", color = Grey, fontSize = 16.sp)
+                else -> Text("Couldn't render this code", color = Grey, fontSize = 16.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -> Unit, onBack: () -> Unit) {
     if (cards.isEmpty()) {
         LaunchedEffect(Unit) { onBack() }
@@ -916,26 +960,14 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(name, onBack) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val render = rememberBarcodeRender(card)
-                val bitmap = render?.bitmap
-                Box(
-                    modifier = Modifier.fillMaxWidth().background(White).padding(14.dp).then(
-                        tapLongModifier(
-                            onClick = { index = (index + 1) % cards.size; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
-                            onLongClick = { onLongCurrent(card) },
-                        ),
-                    ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (bitmap != null) {
-                        val painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap(), filterQuality = FilterQuality.None) }
-                        Image(painter = painter, contentDescription = card.name, modifier = Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
-                    } else if (render == null) {
-                        Text("Rendering…", color = Grey, fontSize = 16.sp)
-                    } else {
-                        Text("Couldn't render this code", color = Grey, fontSize = 16.sp)
-                    }
-                }
+                BarcodePanel(
+                    card = card,
+                    onClick = {
+                        index = (index + 1) % cards.size
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    },
+                    onLongClick = { onLongCurrent(card) },
+                )
                 Spacer(Modifier.height(18.dp))
                 Text("${card.name} · ${i + 1}/${cards.size}", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
             }
@@ -949,30 +981,18 @@ private fun CardScreen(card: Card, onLong: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val render = rememberBarcodeRender(card)
-            val bitmap = render?.bitmap
-            if (bitmap != null) {
-                val painter = remember(bitmap) { BitmapPainter(bitmap.asImageBitmap(), filterQuality = FilterQuality.None) }
-                Box(
-                    modifier = Modifier.fillMaxWidth().background(White).padding(14.dp).then(tapLongModifier(onClick = {}, onLongClick = onLong)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(painter = painter, contentDescription = card.name, modifier = Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
-                }
-            } else if (render == null) {
-                Text("Rendering…", color = Grey, fontSize = 20.sp, fontWeight = FontWeight.Light)
-            } else {
-                Text("Couldn't render this code", color = Grey, fontSize = 20.sp, fontWeight = FontWeight.Light, modifier = Modifier.padding(horizontal = 28.dp))
-            }
+            BarcodePanel(card = card, onClick = {}, onLongClick = onLong)
         }
     }
 }
 
 @Composable
-private fun rememberBarcodeRender(card: Card): BarcodeRender? {
-    var render by remember(card.id, card.data, card.format) { mutableStateOf<BarcodeRender?>(null) }
-    LaunchedEffect(card.id, card.data, card.format) {
-        val bitmap = withContext(Dispatchers.Default) { Barcodes.generate(card.format, card.data) }
+private fun rememberBarcodeRender(card: Card, targetWidthPx: Int): BarcodeRender? {
+    var render by remember(card.id, card.data, card.format, targetWidthPx) { mutableStateOf<BarcodeRender?>(null) }
+    LaunchedEffect(card.id, card.data, card.format, targetWidthPx) {
+        val bitmap = withContext(Dispatchers.Default) {
+            Barcodes.generate(card.format, card.data, targetWidthPx)
+        }
         render = BarcodeRender(bitmap)
     }
     DisposableEffect(render?.bitmap) {

@@ -7,6 +7,7 @@ import android.graphics.Paint
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import uk.org.okapibarcode.backend.DataBarExpanded
 import java.util.UUID
 
@@ -27,7 +28,7 @@ data class Card(
     val stack: String? = null,
 )
 
-private val TWO_D = setOf(PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.DATA_MATRIX, PakaFormat.PDF417)
+private val SQUARE_FORMATS = setOf(PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.DATA_MATRIX)
 
 private fun PakaFormat.zxing(): BarcodeFormat? = when (this) {
     PakaFormat.QR -> BarcodeFormat.QR_CODE
@@ -75,29 +76,39 @@ object Barcodes {
         else -> null
     }
 
-    /** Render [data] as [format] into a crisp black-on-white bitmap, or null on failure. */
-    fun generate(format: PakaFormat, data: String, scale: Int = 3): Bitmap? {
+    /** Render at the actual available display width so modules are never smoothly rescaled. */
+    fun generate(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
         if (validationError(format, data) != null) return null
+        val width = targetWidthPx.coerceIn(240, 1440)
         return if (format == PakaFormat.DATABAR_EXPANDED) {
-            generateDataBar(data)
+            generateDataBar(data, width)
         } else {
-            generateZxing(format.zxing() ?: return null, data, format in TWO_D, scale)
+            val height = when {
+                format in SQUARE_FORMATS -> width
+                format == PakaFormat.PDF417 -> (width * 0.42f).toInt().coerceAtLeast(240)
+                else -> (width * 0.30f).toInt().coerceAtLeast(180)
+            }
+            generateZxing(format.zxing() ?: return null, data, width, height)
         }
     }
 
-    private fun generateZxing(format: BarcodeFormat, data: String, is2D: Boolean, scale: Int): Bitmap? {
+    private fun generateZxing(format: BarcodeFormat, data: String, width: Int, height: Int): Bitmap? {
         return try {
-            val baseW = 320
-            val baseH = if (is2D) 320 else 96
             val hints = HashMap<EncodeHintType, Any>()
-            hints[EncodeHintType.MARGIN] = if (is2D) 2 else 8
+            hints[EncodeHintType.MARGIN] = when (format) {
+                BarcodeFormat.QR_CODE -> 4
+                BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> 2
+                BarcodeFormat.PDF_417 -> 4
+                else -> 10
+            }
             // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
             when (format) {
                 BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
                 BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
                 else -> Unit
             }
-            val matrix = MultiFormatWriter().encode(data, format, baseW * scale, baseH * scale, hints)
+            if (format == BarcodeFormat.QR_CODE) hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M
+            val matrix = MultiFormatWriter().encode(data, format, width, height, hints)
             val w = matrix.width
             val h = matrix.height
             val pixels = IntArray(w * h) { i ->
@@ -125,13 +136,16 @@ object Barcodes {
         return if (sb.isNotEmpty()) sb.toString() else raw
     }
 
-    private fun generateDataBar(data: String, modulePx: Int = 5, marginPx: Int = 12): Bitmap? {
+    private fun generateDataBar(data: String, targetWidthPx: Int): Bitmap? {
         return try {
             val symbol = DataBarExpanded()
             symbol.setStacked(true)
             symbol.setPreferredColumns(4) // 4 data columns lays a jö payload out in 2 rows
             symbol.content = gs1ToBrackets(data)
 
+            val quietModules = 4
+            val modulePx = (targetWidthPx / (symbol.width + quietModules * 2)).coerceAtLeast(1)
+            val marginPx = quietModules * modulePx
             val w = symbol.width * modulePx + marginPx * 2
             val h = symbol.height * modulePx + marginPx * 2
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
