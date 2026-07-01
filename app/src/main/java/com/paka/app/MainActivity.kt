@@ -49,6 +49,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -574,7 +575,10 @@ private fun HardCutPager(
                 onVerticalDrag = { change, amount ->
                     change.consume()
                     dragDistance += amount
-                    if (!feedbackSent && abs(dragDistance) >= threshold) {
+                    val canChangePage =
+                        (dragDistance <= -threshold && currentPage < pageCount - 1) ||
+                            (dragDistance >= threshold && currentPage > 0)
+                    if (!feedbackSent && canChangePage) {
                         performPakaHaptic(context, haptics)
                         feedbackSent = true
                     }
@@ -762,22 +766,40 @@ private fun ManageScreen(
                     Spacer(Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Canvas(Modifier.size(40.dp).then(tapModifier({ onRename(row.id) }, "Rename ${row.name}"))) { drawPencil(Grey) }
-                        Spacer(Modifier.width(8.dp))
-                        val upModifier = if (index > 0) tapModifier({ onUp(row.id) }, "Move ${row.name} up") else Modifier
-                        Canvas(Modifier.size(40.dp).then(upModifier)) { drawChevron(up = true, color = if (index > 0) White else Grey) }
-                        Spacer(Modifier.width(8.dp))
-                        val downModifier = if (index < rows.lastIndex) tapModifier({ onDown(row.id) }, "Move ${row.name} down") else Modifier
-                        Canvas(Modifier.size(40.dp).then(downModifier)) { drawChevron(up = false, color = if (index < rows.lastIndex) White else Grey) }
-                        Spacer(Modifier.width(8.dp))
-                        Canvas(Modifier.size(40.dp).then(tapModifier({ pendingDelete = row }, "Delete ${row.name}"))) { drawX() }
+                        ManageAction("rename", "Rename ${row.name}", Modifier.weight(1.35f)) { onRename(row.id) }
+                        ManageAction("up", "Move ${row.name} up", Modifier.weight(0.75f), enabled = index > 0) { onUp(row.id) }
+                        ManageAction("down", "Move ${row.name} down", Modifier.weight(0.9f), enabled = index < rows.lastIndex) { onDown(row.id) }
+                        ManageAction("delete", "Delete ${row.name}", Modifier.weight(1.2f), destructive = true) { pendingDelete = row }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ManageAction(
+    text: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    destructive: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val color = when {
+        !enabled -> Grey.copy(alpha = 0.45f)
+        destructive -> Grey
+        else -> White
+    }
+    Box(
+        modifier = modifier
+            .height(48.dp)
+            .then(if (enabled) tapModifier(onClick, description) else Modifier),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(text, color = color, fontSize = 15.sp, fontWeight = FontWeight.Normal)
     }
 }
 
@@ -1012,6 +1034,8 @@ private fun BarcodePanel(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    preRendered: BarcodeRender? = null,
+    usePreRendered: Boolean = false,
 ) {
     Box(
         modifier = modifier
@@ -1025,7 +1049,7 @@ private fun BarcodePanel(
         BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             val density = LocalDensity.current
             val targetWidthPx = with(density) { maxWidth.roundToPx() }
-            val render = rememberBarcodeRender(card, targetWidthPx)
+            val render = if (usePreRendered) preRendered else rememberBarcodeRender(card, targetWidthPx)
             val bitmap = render?.bitmap
             when {
                 bitmap != null -> {
@@ -1061,14 +1085,40 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(name, onBack) }
-        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            val density = LocalDensity.current
+            val targetWidthPx = with(density) { (maxWidth - 32.dp).roundToPx() }
+            val rendered = remember(name, cards, targetWidthPx) { mutableStateMapOf<String, BarcodeRender>() }
+
+            LaunchedEffect(cards, targetWidthPx) {
+                val uniqueCards = cards.distinctBy { it.id }
+                suspend fun render(stackCard: Card) {
+                    val bitmap = withContext(Dispatchers.Default) {
+                        Barcodes.generate(stackCard.format, stackCard.data, targetWidthPx)
+                    }
+                    rendered[stackCard.id] = BarcodeRender(bitmap)
+                }
+                // Render the visible and next cards in parallel, then warm the rest
+                // serially so switching is immediate without creating a CPU spike.
+                launch { uniqueCards.firstOrNull()?.let { render(it) } }
+                launch { uniqueCards.drop(1).forEach { render(it) } }
+            }
+            DisposableEffect(rendered) {
+                onDispose {
+                    rendered.values.mapNotNull { it.bitmap }.distinct().forEach { bitmap ->
+                        if (!bitmap.isRecycled) bitmap.recycle()
+                    }
+                    rendered.clear()
+                }
+            }
+
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BarcodePanel(
                     card = card,
-                    onClick = {
-                        index = (index + 1) % cards.size
-                    },
+                    onClick = { index = (index + 1) % cards.size },
                     onLongClick = { onLongCurrent(card) },
+                    preRendered = rendered[card.id],
+                    usePreRendered = true,
                 )
                 Spacer(Modifier.height(18.dp))
                 Text("${card.name} · ${i + 1}/${cards.size}", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
@@ -1196,31 +1246,4 @@ private fun DrawScope.drawAsterisk() {
         val dy = (r * sin(rad)).toFloat()
         drawLine(White, Offset(c.x - dx, c.y - dy), Offset(c.x + dx, c.y + dy), strokeWidth = w, cap = StrokeCap.Square)
     }
-}
-
-private fun DrawScope.drawPencil(color: Color) {
-    val s = size.minDimension
-    val w = s * 0.1f
-    drawLine(color, Offset(s * 0.28f, s * 0.72f), Offset(s * 0.64f, s * 0.36f), strokeWidth = w, cap = StrokeCap.Square)
-    drawLine(color, Offset(s * 0.64f, s * 0.36f), Offset(s * 0.74f, s * 0.46f), strokeWidth = w, cap = StrokeCap.Square)
-    drawLine(color, Offset(s * 0.28f, s * 0.72f), Offset(s * 0.38f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Square)
-}
-
-private fun DrawScope.drawChevron(up: Boolean, color: Color = White) {
-    val s = size.minDimension
-    val w = s * 0.09f
-    if (up) {
-        drawLine(color, Offset(s * 0.3f, s * 0.6f), Offset(s * 0.5f, s * 0.4f), strokeWidth = w, cap = StrokeCap.Square)
-        drawLine(color, Offset(s * 0.5f, s * 0.4f), Offset(s * 0.7f, s * 0.6f), strokeWidth = w, cap = StrokeCap.Square)
-    } else {
-        drawLine(color, Offset(s * 0.3f, s * 0.4f), Offset(s * 0.5f, s * 0.6f), strokeWidth = w, cap = StrokeCap.Square)
-        drawLine(color, Offset(s * 0.5f, s * 0.6f), Offset(s * 0.7f, s * 0.4f), strokeWidth = w, cap = StrokeCap.Square)
-    }
-}
-
-private fun DrawScope.drawX() {
-    val s = size.minDimension
-    val w = s * 0.09f
-    drawLine(Grey, Offset(s * 0.32f, s * 0.32f), Offset(s * 0.68f, s * 0.68f), strokeWidth = w, cap = StrokeCap.Square)
-    drawLine(Grey, Offset(s * 0.68f, s * 0.32f), Offset(s * 0.32f, s * 0.68f), strokeWidth = w, cap = StrokeCap.Square)
 }
