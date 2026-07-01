@@ -37,6 +37,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -476,23 +478,91 @@ private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
     }
 }
 
+private const val ITEMS_PER_PAGE = 5
+
+/** Five fixed row slots per page. Vertical swipes snap cleanly between pages. */
+@Composable
+private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
+    val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+
+    LaunchedEffect(pages.size) {
+        if (pages.isNotEmpty() && pagerState.currentPage >= pages.size) {
+            pagerState.scrollToPage(pages.lastIndex)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        VerticalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            pageSpacing = 0.dp,
+        ) { page ->
+            Column(
+                modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp),
+            ) {
+                pages[page].forEach { item ->
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        content(item)
+                    }
+                }
+                repeat(ITEMS_PER_PAGE - pages[page].size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+        if (pages.size > 1) {
+            PageIndicator(
+                page = pagerState.currentPage,
+                pageCount = pages.size,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PageIndicator(page: Int, pageCount: Int, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxHeight().width(10.dp)) {
+        val margin = 6.dp.toPx()
+        val trackLength = (size.height - margin * 2).coerceAtLeast(1f)
+        val thumbLength = (trackLength / pageCount).coerceAtLeast(24.dp.toPx()).coerceAtMost(trackLength)
+        val availableTravel = trackLength - thumbLength
+        val thumbY = margin + if (pageCount <= 1) 0f else availableTravel * page / (pageCount - 1)
+        val right = size.width
+        drawRect(
+            White.copy(alpha = 0.3f),
+            topLeft = Offset(right - 2.dp.toPx(), margin),
+            size = Size(2.dp.toPx(), trackLength),
+        )
+        drawRect(
+            White,
+            topLeft = Offset(right - 6.dp.toPx(), thumbY),
+            size = Size(6.dp.toPx(), thumbLength),
+        )
+    }
+}
+
 @Composable
 private fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card) -> Unit, onOpenStack: (String) -> Unit, onDetail: (Card) -> Unit) {
-    ScrollList(topPadding = 44.dp, spacing = 36.dp) {
-        for (entry in entries) {
-            when (entry) {
-                is SingleEntry -> Text(
-                    text = entry.card.name,
-                    color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, textAlign = TextAlign.Start,
-                    modifier = Modifier.fillMaxWidth().then(tapLongModifier(onClick = { onOpenCard(entry.card) }, onLongClick = { onDetail(entry.card) })),
-                )
-                is StackEntry -> Row(
-                    modifier = Modifier.fillMaxWidth().then(tapModifier { onOpenStack(entry.name) }),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(entry.name, color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
-                    Text("${entry.cards.size}", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
-                }
+    PagedList(entries) { entry ->
+        when (entry) {
+            is SingleEntry -> Text(
+                text = entry.card.name,
+                color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, textAlign = TextAlign.Start,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().then(tapLongModifier(onClick = { onOpenCard(entry.card) }, onLongClick = { onDetail(entry.card) })),
+            )
+            is StackEntry -> Row(
+                modifier = Modifier.fillMaxWidth().then(tapModifier { onOpenStack(entry.name) }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(entry.name, color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${entry.cards.size}", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
             }
         }
     }
@@ -500,17 +570,15 @@ private fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card) 
 
 @Composable
 private fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float, onCopy: (String) -> Unit) {
-    ScrollList(topPadding = 44.dp, spacing = 30.dp) {
-        for (account in accounts) {
-            val code = Totp.code(account, nowMs)
-            val remaining = Totp.secondsRemaining(account, nowMs)
-            Column(modifier = Modifier.fillMaxWidth().then(tapModifier { onCopy(code) })) {
-                Text(account.title(), color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatCode(code), color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp, modifier = Modifier.weight(1f))
-                    Text("$remaining", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
-                }
+    PagedList(accounts) { account ->
+        val code = Totp.code(account, nowMs)
+        val remaining = Totp.secondsRemaining(account, nowMs)
+        Column(modifier = Modifier.fillMaxWidth().then(tapModifier { onCopy(code) })) {
+            Text(account.title(), color = Grey, fontSize = 12.sp, fontWeight = FontWeight.Light, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(formatCode(code), color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp, modifier = Modifier.weight(1f))
+                Text("$remaining", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
             }
         }
     }

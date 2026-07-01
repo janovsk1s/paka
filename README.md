@@ -21,6 +21,7 @@ export format is planned before a public release.
 
 Tap `+` to scan. Long-press `+` for intentional manual entry. Long-press a card
 to edit its stack and notes. These restrained secondary gestures are deliberate.
+Lists show five entries at a time and snap vertically between full pages.
 
 ## Building
 
