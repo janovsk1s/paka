@@ -20,8 +20,8 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 31
-        versionName = "0.12.4"
+        versionCode = 32
+        versionName = "0.12.5"
     }
 
     signingConfigs {

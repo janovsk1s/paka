@@ -233,6 +233,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
     var vibrationEnabled by remember { mutableStateOf(Prefs.vibration(context)) }
     var returnHomeEnabled by remember { mutableStateOf(Prefs.returnHome(context)) }
     var autoLightEnabled by remember { mutableStateOf(Prefs.autoLight(context)) }
+    var maxCodeBrightnessEnabled by remember { mutableStateOf(Prefs.maxCodeBrightness(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
     val homeVisible =
@@ -447,6 +448,11 @@ fun PakaApp(homeResetSignal: Int = 0) {
                 autoLightEnabled = enabled
                 Prefs.setAutoLight(context, enabled)
             },
+            maxCodeBrightnessEnabled = maxCodeBrightnessEnabled,
+            onMaxCodeBrightness = { enabled ->
+                maxCodeBrightnessEnabled = enabled
+                Prefs.setMaxCodeBrightness(context, enabled)
+            },
             onBack = { showDev = false },
         )
         return
@@ -569,7 +575,13 @@ fun PakaApp(homeResetSignal: Int = 0) {
     if (stackName != null) {
         val stackCards = cards.filter { it.stack == stackName }
         BackHandler { selectedStack = null }
-        StackScreen(name = stackName, cards = stackCards, onLongCurrent = { detailCard = it }, onBack = { selectedStack = null })
+        StackScreen(
+            name = stackName,
+            cards = stackCards,
+            forceMaximumBrightness = maxCodeBrightnessEnabled,
+            onLongCurrent = { detailCard = it },
+            onBack = { selectedStack = null },
+        )
         return
     }
 
@@ -577,7 +589,12 @@ fun PakaApp(homeResetSignal: Int = 0) {
     if (card != null) {
         val fresh = cards.firstOrNull { it.id == card.id } ?: card
         BackHandler { selectedCard = null }
-        CardScreen(card = fresh, onLong = { detailCard = fresh }, onBack = { selectedCard = null })
+        CardScreen(
+            card = fresh,
+            forceMaximumBrightness = maxCodeBrightnessEnabled,
+            onLong = { detailCard = fresh },
+            onBack = { selectedCard = null },
+        )
         return
     }
 
@@ -747,6 +764,7 @@ private fun HardCutPager(
     pageCount: Int,
     modifier: Modifier = Modifier,
     indicatorOffset: Dp = 18.dp,
+    showIndicator: Boolean = true,
     content: @Composable (Int, () -> Unit) -> Unit,
 ) {
     if (pageCount <= 0) return
@@ -793,7 +811,7 @@ private fun HardCutPager(
         },
     ) {
         content(currentPage) { page = (currentPage + 1) % pageCount }
-        if (pageCount > 1) {
+        if (showIndicator && pageCount > 1) {
             PageIndicator(
                 page = currentPage,
                 pageCount = pageCount,
@@ -947,33 +965,26 @@ private fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("about", onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            PagedList(listOf(0, 1, 2, 3, 4)) { item ->
-                when (item) {
-                    0 -> Text(
+            Column(modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp)) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                    Text(
                         "Paka",
                         color = White,
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Normal,
                         modifier = Modifier.fillMaxWidth().then(tapModifier(hiddenDeveloperTap)),
                     )
-                    1 -> Text("Latvian for “package”.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
-                    2 -> Text(
-                        "Saves passes and carries 2FA codes in a light way.",
+                }
+                Box(Modifier.weight(3f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                    Text(
+                        "Latvian for “package”. Saves passes and carries 2FA codes in a light way. Long-presses may reveal more options.",
                         color = White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Normal,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                     )
-                    3 -> Text(
-                        "Long-presses may reveal more options.",
-                        color = White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Normal,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    else -> Text("With care, from a Latvian.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+                }
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                    Text("With care, from a Latvian.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
                 }
             }
         }
@@ -1259,13 +1270,15 @@ private fun DevScreen(
     onReturnHome: (Boolean) -> Unit,
     autoLightEnabled: Boolean,
     onAutoLight: (Boolean) -> Unit,
+    maxCodeBrightnessEnabled: Boolean,
+    onMaxCodeBrightness: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("developer", onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            PagedList(listOf(0, 1, 2, 3, 4)) { item ->
+            PagedList(listOf(0, 1, 2, 3, 4, 5)) { item ->
                 when (item) {
                     0 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("text size", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light, modifier = Modifier.weight(1f))
@@ -1300,10 +1313,15 @@ private fun DevScreen(
                         trailing = if (returnHomeEnabled) "on" else "off",
                         onClick = { onReturnHome(!returnHomeEnabled) },
                     )
-                    else -> SettingsItem(
+                    4 -> SettingsItem(
                         label = "auto light",
                         trailing = if (autoLightEnabled) "on" else "off",
                         onClick = { onAutoLight(!autoLightEnabled) },
+                    )
+                    else -> SettingsItem(
+                        label = "max brightness",
+                        trailing = if (maxCodeBrightnessEnabled) "on" else "off",
+                        onClick = { onMaxCodeBrightness(!maxCodeBrightnessEnabled) },
                     )
                 }
             }
@@ -1724,12 +1742,18 @@ private fun BarcodePanel(
 }
 
 @Composable
-private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -> Unit, onBack: () -> Unit) {
+private fun StackScreen(
+    name: String,
+    cards: List<Card>,
+    forceMaximumBrightness: Boolean,
+    onLongCurrent: (Card) -> Unit,
+    onBack: () -> Unit,
+) {
     if (cards.isEmpty()) {
         LaunchedEffect(Unit) { onBack() }
         return
     }
-    KeepScreenBright()
+    KeepScreenBright(forceMaximumBrightness)
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(name, onBack) }
         BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -1750,7 +1774,7 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
                 launch { uniqueCards.firstOrNull()?.let { render(it) } }
                 launch { uniqueCards.drop(1).forEach { render(it) } }
             }
-            HardCutPager(pageCount = cards.size, indicatorOffset = (-10).dp) { index, advance ->
+            HardCutPager(pageCount = cards.size, showIndicator = false) { index, advance ->
                 val card = cards[index]
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -1773,8 +1797,8 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
 }
 
 @Composable
-private fun CardScreen(card: Card, onLong: () -> Unit, onBack: () -> Unit) {
-    KeepScreenBright()
+private fun CardScreen(card: Card, forceMaximumBrightness: Boolean, onLong: () -> Unit, onBack: () -> Unit) {
+    KeepScreenBright(forceMaximumBrightness)
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -1796,17 +1820,21 @@ private fun rememberBarcodeRender(card: Card, targetWidthPx: Int): BarcodeRender
 }
 
 @Composable
-private fun KeepScreenBright() {
+private fun KeepScreenBright(forceMaximumBrightness: Boolean) {
     val context = LocalContext.current
-    DisposableEffect(Unit) {
+    DisposableEffect(forceMaximumBrightness) {
         val window = (context as? Activity)?.window
         window?.apply {
-            attributes = attributes.apply { screenBrightness = 1f }
+            if (forceMaximumBrightness) attributes = attributes.apply { screenBrightness = 1f }
             addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         onDispose {
             window?.apply {
-                attributes = attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
+                if (forceMaximumBrightness) {
+                    attributes = attributes.apply {
+                        screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    }
+                }
                 clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         }
