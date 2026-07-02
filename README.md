@@ -6,6 +6,18 @@ codes without Google Play Services.
 
 Current release: **0.12.6**
 
+## Compatibility and independence
+
+Paka is an independent, unofficial community tool designed for compatibility
+with Light Phone III. It is not affiliated with, endorsed by, sponsored by, or
+published by The Light Phone, Inc.
+
+The names “Light Phone,” “Light Phone III,” “LightOS,” and related marks belong
+to their respective owner and are used here only to describe compatibility.
+Paka does not contain LightOS source code, Light branding, or proprietary Light
+assets. Its original interface follows the public platform conventions and the
+intentional design principles described by the LightOS Developer Program.
+
 ## Privacy
 
 - Paka requests camera access only while scanning.
