@@ -2,6 +2,7 @@ package com.paka.app
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -107,6 +108,7 @@ import kotlin.math.sin
 private enum class Mode { CARDS, CODES }
 private enum class ScanMode { CARD, CODE }
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
+private enum class ManageGlyph { RENAME, UP, DOWN, DELETE }
 
 private sealed interface Entry
 private data class SingleEntry(val card: Card) : Entry
@@ -170,6 +172,20 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        setTaskDescription(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ActivityManager.TaskDescription.Builder()
+                    .setLabel(getString(R.string.app_name))
+                    .setPrimaryColor(android.graphics.Color.BLACK)
+                    .setBackgroundColor(android.graphics.Color.BLACK)
+                    .setStatusBarColor(android.graphics.Color.BLACK)
+                    .setNavigationBarColor(android.graphics.Color.BLACK)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                ActivityManager.TaskDescription(getString(R.string.app_name), null, android.graphics.Color.BLACK)
+            },
+        )
         setContent { PakaApp() }
     }
 }
@@ -467,7 +483,7 @@ fun PakaApp() {
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
-            Text("paka", color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
+            Text("Paka", color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
         }
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -522,8 +538,8 @@ fun PakaApp() {
 @Composable
 private fun SimpleTopBar(title: String, onBack: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
-        BackArrow(modifier = Modifier.align(Alignment.CenterStart), onBack = onBack)
-        Text(title, color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
+        BackArrow(modifier = Modifier.align(Alignment.CenterStart).offset(x = (-30).dp), onBack = onBack)
+        Text(title.replaceFirstChar { it.uppercase() }, color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
     }
 }
 
@@ -540,7 +556,7 @@ private fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Co
     val state = rememberHapticScrollState()
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(state).padding(top = topPadding, end = 14.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxSize().padding(top = topPadding, end = 14.dp, bottom = 8.dp).verticalScroll(state),
             verticalArrangement = Arrangement.spacedBy(spacing),
             content = content,
         )
@@ -765,35 +781,42 @@ private fun SettingsScreen(
     var lastTap by remember { mutableStateOf(0L) }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("settings", onBack)
-        ScrollList(topPadding = 44.dp, spacing = 36.dp) {
-            Text("reorder", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.fillMaxWidth().then(tapModifier(onReorder)))
-            Text("backup", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.fillMaxWidth().then(tapModifier(onBackup)))
-            Row(
-                modifier = Modifier.fillMaxWidth().then(
-                    tapModifier {
-                        val enabled = !vibrationEnabled
-                        onVibration(enabled)
-                        if (enabled) performPakaHaptic(context, haptics)
-                    },
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("vibration", color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
-                Text(if (vibrationEnabled) "on" else "off", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
-            }
-            Text(
-                "about",
-                color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal,
-                modifier = Modifier.fillMaxWidth().then(
-                    tapModifier {
-                        val now = System.currentTimeMillis()
-                        aboutTaps = if (now - lastTap < 600) aboutTaps + 1 else 1
-                        lastTap = now
-                        if (aboutTaps >= 3) { aboutTaps = 0; onDev() }
-                    },
-                ),
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 30.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            SettingsItem("reorder", onClick = onReorder)
+            SettingsItem("backup", onClick = onBackup)
+            SettingsItem(
+                label = "vibration",
+                trailing = if (vibrationEnabled) "on" else "off",
+                onClick = {
+                    val enabled = !vibrationEnabled
+                    onVibration(enabled)
+                    if (enabled) performPakaHaptic(context, haptics)
+                },
+            )
+            SettingsItem(
+                label = "about",
+                onClick = {
+                    val now = System.currentTimeMillis()
+                    aboutTaps = if (now - lastTap < 600) aboutTaps + 1 else 1
+                    lastTap = now
+                    if (aboutTaps >= 3) { aboutTaps = 0; onDev() }
+                },
             )
         }
+    }
+}
+
+@Composable
+private fun SettingsItem(label: String, trailing: String? = null, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(72.dp).then(tapModifier(onClick)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = White, fontSize = 36.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
+        if (trailing != null) Text(trailing, color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
     }
 }
 
@@ -1113,10 +1136,10 @@ private fun ManageScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        ManageAction("rename", "Rename ${row.name}", Modifier.weight(1.35f)) { onRename(row.id) }
-                        ManageAction("up", "Move ${row.name} up", Modifier.weight(0.75f), enabled = index > 0) { onUp(row.id) }
-                        ManageAction("down", "Move ${row.name} down", Modifier.weight(0.9f), enabled = index < rows.lastIndex) { onDown(row.id) }
-                        ManageAction("delete", "Delete ${row.name}", Modifier.weight(1.2f), destructive = true) { pendingDelete = row }
+                        ManageGlyphAction(ManageGlyph.RENAME, "Rename ${row.name}", Modifier.weight(1f)) { onRename(row.id) }
+                        ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.weight(1f), enabled = index > 0) { onUp(row.id) }
+                        ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.weight(1f), enabled = index < rows.lastIndex) { onDown(row.id) }
+                        ManageGlyphAction(ManageGlyph.DELETE, "Delete ${row.name}", Modifier.weight(1f), muted = true) { pendingDelete = row }
                     }
                 }
             }
@@ -1125,26 +1148,47 @@ private fun ManageScreen(
 }
 
 @Composable
-private fun ManageAction(
-    text: String,
+private fun ManageGlyphAction(
+    glyph: ManageGlyph,
     description: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    destructive: Boolean = false,
+    muted: Boolean = false,
     onClick: () -> Unit,
 ) {
     val color = when {
         !enabled -> Grey.copy(alpha = 0.45f)
-        destructive -> Grey
+        muted -> Grey
         else -> White
     }
     Box(
         modifier = modifier
-            .height(48.dp)
+            .height(52.dp)
             .then(if (enabled) tapModifier(onClick, description) else Modifier),
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = color, fontSize = 15.sp, fontWeight = FontWeight.Normal)
+        Canvas(Modifier.size(28.dp)) {
+            val stroke = 2.dp.toPx()
+            when (glyph) {
+                ManageGlyph.RENAME -> {
+                    drawLine(color, Offset(size.width * 0.27f, size.height * 0.73f), Offset(size.width * 0.68f, size.height * 0.32f), stroke, StrokeCap.Square)
+                    drawLine(color, Offset(size.width * 0.63f, size.height * 0.27f), Offset(size.width * 0.73f, size.height * 0.37f), stroke, StrokeCap.Square)
+                    drawLine(color, Offset(size.width * 0.23f, size.height * 0.77f), Offset(size.width * 0.35f, size.height * 0.73f), stroke, StrokeCap.Square)
+                }
+                ManageGlyph.UP -> {
+                    drawLine(color, Offset(size.width * 0.27f, size.height * 0.59f), Offset(size.width * 0.5f, size.height * 0.36f), stroke, StrokeCap.Square)
+                    drawLine(color, Offset(size.width * 0.5f, size.height * 0.36f), Offset(size.width * 0.73f, size.height * 0.59f), stroke, StrokeCap.Square)
+                }
+                ManageGlyph.DOWN -> {
+                    drawLine(color, Offset(size.width * 0.27f, size.height * 0.41f), Offset(size.width * 0.5f, size.height * 0.64f), stroke, StrokeCap.Square)
+                    drawLine(color, Offset(size.width * 0.5f, size.height * 0.64f), Offset(size.width * 0.73f, size.height * 0.41f), stroke, StrokeCap.Square)
+                }
+                ManageGlyph.DELETE -> {
+                    drawLine(color, Offset(size.width * 0.31f, size.height * 0.31f), Offset(size.width * 0.69f, size.height * 0.69f), stroke, StrokeCap.Square)
+                    drawLine(color, Offset(size.width * 0.69f, size.height * 0.31f), Offset(size.width * 0.31f, size.height * 0.69f), stroke, StrokeCap.Square)
+                }
+            }
+        }
     }
 }
 
