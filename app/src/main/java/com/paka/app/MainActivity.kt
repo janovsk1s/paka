@@ -109,7 +109,7 @@ import kotlin.math.sin
 private enum class Mode { CARDS, CODES }
 private enum class ScanMode { CARD, CODE }
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
-private enum class ManageGlyph { UP, DOWN, MORE }
+private enum class ManageGlyph { UP, DOWN }
 
 private sealed interface Entry
 private data class SingleEntry(val card: Card) : Entry
@@ -939,32 +939,36 @@ private fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("about", onBack)
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 34.dp, end = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp),
-        ) {
-            Text(
-                "Paka",
-                color = White,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Normal,
-                modifier = Modifier.fillMaxWidth().then(tapModifier(hiddenDeveloperTap)),
-            )
-            Text("Latvian for “package.”", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
-            Text(
-                "Saves passes and carries 2FA codes in a light way.",
-                color = White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Normal,
-            )
-            Text(
-                "Long-presses may reveal more options.",
-                color = Grey,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Light,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text("With care, from a Latvian.", color = White, fontSize = 18.sp, fontWeight = FontWeight.Light)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            PagedList(listOf(0, 1, 2, 3, 4)) { item ->
+                when (item) {
+                    0 -> Text(
+                        "Paka",
+                        color = White,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Normal,
+                        modifier = Modifier.fillMaxWidth().then(tapModifier(hiddenDeveloperTap)),
+                    )
+                    1 -> Text("Latvian for “package”.", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+                    2 -> Text(
+                        "Saves passes and carries 2FA codes in a light way.",
+                        color = White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    3 -> Text(
+                        "Long-presses may reveal more options.",
+                        color = Grey,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Light,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    else -> Text("With care, from a Latvian.", color = White, fontSize = 18.sp, fontWeight = FontWeight.Light)
+                }
+            }
         }
     }
 }
@@ -1251,22 +1255,45 @@ private fun DevScreen(
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("developer", onBack)
-        Column(modifier = Modifier.fillMaxSize().padding(top = 44.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
-            FieldLabel("list text size")
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("−", color = White, fontSize = 44.sp, fontWeight = FontWeight.Normal, modifier = tapModifier { onTextSize((textSize - 1f).coerceAtLeast(16f)) })
-                Text("${textSize.toInt()} sp", color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                Text("+", color = White, fontSize = 44.sp, fontWeight = FontWeight.Normal, modifier = tapModifier { onTextSize((textSize + 1f).coerceAtMost(64f)) })
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            PagedList(listOf(0, 1, 2, 3, 4)) { item ->
+                when (item) {
+                    0 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("text size", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light, modifier = Modifier.weight(1f))
+                        Text("${textSize.toInt()} sp", color = White, fontSize = 18.sp, fontWeight = FontWeight.Normal)
+                    }
+                    1 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "−",
+                            color = White,
+                            fontSize = 30.sp,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.weight(1f).then(tapModifier { onTextSize((textSize - 1f).coerceAtLeast(16f)) }),
+                        )
+                        Text(
+                            "+",
+                            color = White,
+                            fontSize = 30.sp,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.weight(1f).then(tapModifier { onTextSize((textSize + 1f).coerceAtMost(64f)) }),
+                        )
+                    }
+                    2 -> Text("preview", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+                    3 -> Text(
+                        "KlimaTicket",
+                        color = White,
+                        fontSize = textSize.sp,
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    else -> SettingsItem(
+                        label = "return home",
+                        trailing = if (returnHomeEnabled) "on" else "off",
+                        onClick = { onReturnHome(!returnHomeEnabled) },
+                    )
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            FieldLabel("preview")
-            Text("KlimaTicket", color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal)
-            Spacer(Modifier.height(8.dp))
-            SettingsItem(
-                label = "return home",
-                trailing = if (returnHomeEnabled) "on" else "off",
-                onClick = { onReturnHome(!returnHomeEnabled) },
-            )
         }
     }
 }
@@ -1320,11 +1347,10 @@ private fun ManageScreen(
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(tapModifier { actionRow = row }),
                     )
-                    ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(38.dp), enabled = index > 0) { onUp(row.id) }
-                    ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(38.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
-                    ManageGlyphAction(ManageGlyph.MORE, "Edit ${row.name}", Modifier.width(42.dp)) { actionRow = row }
+                    ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(48.dp), enabled = index > 0) { onUp(row.id) }
+                    ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(48.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
                 }
         }
     }
@@ -1369,7 +1395,7 @@ private fun ManageGlyphAction(
     onClick: () -> Unit,
 ) {
     val color = when {
-        !enabled -> Grey.copy(alpha = 0.45f)
+        !enabled -> Grey.copy(alpha = 0.7f)
         else -> White
     }
     Box(
@@ -1388,12 +1414,6 @@ private fun ManageGlyphAction(
                 ManageGlyph.DOWN -> {
                     drawLine(color, Offset(size.width * 0.27f, size.height * 0.41f), Offset(size.width * 0.5f, size.height * 0.64f), stroke, StrokeCap.Square)
                     drawLine(color, Offset(size.width * 0.5f, size.height * 0.64f), Offset(size.width * 0.73f, size.height * 0.41f), stroke, StrokeCap.Square)
-                }
-                ManageGlyph.MORE -> {
-                    val radius = 1.8.dp.toPx()
-                    drawCircle(color, radius, Offset(size.width * 0.28f, size.height * 0.5f))
-                    drawCircle(color, radius, Offset(size.width * 0.5f, size.height * 0.5f))
-                    drawCircle(color, radius, Offset(size.width * 0.72f, size.height * 0.5f))
                 }
             }
         }
