@@ -8,6 +8,7 @@ object Prefs {
     // New key intentionally resets existing installations to the new five-row layout.
     private const val KEY_TEXT_SIZE = "list_text_size_v2"
     private const val KEY_VIBRATION = "vibration_enabled"
+    private const val KEY_RETURN_HOME = "return_home_on_leave"
 
     const val DEFAULT_TEXT_SIZE = 30f
 
@@ -23,5 +24,11 @@ object Prefs {
 
     fun setVibration(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_VIBRATION, enabled).apply()
+    }
+
+    fun returnHome(context: Context): Boolean = prefs(context).getBoolean(KEY_RETURN_HOME, true)
+
+    fun setReturnHome(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_RETURN_HOME, enabled).apply()
     }
 }

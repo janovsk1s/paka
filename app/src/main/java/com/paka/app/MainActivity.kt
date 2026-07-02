@@ -174,6 +174,8 @@ private fun <T> List<T>.moved(index: Int, up: Boolean): List<T> {
 }
 
 class MainActivity : ComponentActivity() {
+    private var homeResetSignal by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -191,12 +193,17 @@ class MainActivity : ComponentActivity() {
                 ActivityManager.TaskDescription(getString(R.string.app_name), null, android.graphics.Color.BLACK)
             },
         )
-        setContent { PakaApp() }
+        setContent { PakaApp(homeResetSignal) }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Prefs.returnHome(this)) homeResetSignal++
     }
 }
 
 @Composable
-fun PakaApp() {
+fun PakaApp(homeResetSignal: Int = 0) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
@@ -223,6 +230,7 @@ fun PakaApp() {
     var showDev by remember { mutableStateOf(false) }
     var textSize by remember { mutableStateOf(Prefs.textSize(context)) }
     var vibrationEnabled by remember { mutableStateOf(Prefs.vibration(context)) }
+    var returnHomeEnabled by remember { mutableStateOf(Prefs.returnHome(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
     val homeVisible =
@@ -231,6 +239,24 @@ fun PakaApp() {
         detailCard == null && selectedStack == null && selectedCard == null
     val codesVisible = mode == Mode.CODES && homeVisible
     val passWidthPx = with(density) { (configuration.screenWidthDp.dp - 32.dp).roundToPx() }
+    LaunchedEffect(homeResetSignal) {
+        if (homeResetSignal > 0) {
+            mode = Mode.CARDS
+            showSettings = false
+            showBackup = false
+            manageMode = null
+            renameTarget = null
+            pendingDuplicate = null
+            selectedCard = null
+            selectedStack = null
+            detailCard = null
+            scanning = false
+            pendingScan = null
+            manualCard = false
+            manualCode = false
+            showDev = false
+        }
+    }
     LaunchedEffect(codesVisible) {
         if (codesVisible) {
             while (true) {
@@ -405,7 +431,16 @@ fun PakaApp() {
     }
 
     if (showDev) {
-        DevScreen(textSize = textSize, onTextSize = { textSize = it; Prefs.setTextSize(context, it) }, onBack = { showDev = false })
+        DevScreen(
+            textSize = textSize,
+            onTextSize = { textSize = it; Prefs.setTextSize(context, it) },
+            returnHomeEnabled = returnHomeEnabled,
+            onReturnHome = { enabled ->
+                returnHomeEnabled = enabled
+                Prefs.setReturnHome(context, enabled)
+            },
+            onBack = { showDev = false },
+        )
         return
     }
 
@@ -860,30 +895,30 @@ private fun SettingsScreen(
     var lastTap by remember { mutableStateOf(0L) }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("settings", onBack)
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 30.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            SettingsItem("reorder", onClick = onReorder)
-            SettingsItem("backup", onClick = onBackup)
-            SettingsItem(
-                label = "vibration",
-                trailing = if (vibrationEnabled) "on" else "off",
-                onClick = {
-                    val enabled = !vibrationEnabled
-                    onVibration(enabled)
-                    if (enabled) performPakaHaptic(context, haptics)
-                },
-            )
-            SettingsItem(
-                label = "about",
-                onClick = {
-                    val now = System.currentTimeMillis()
-                    aboutTaps = if (now - lastTap < 600) aboutTaps + 1 else 1
-                    lastTap = now
-                    if (aboutTaps >= 3) { aboutTaps = 0; onDev() }
-                },
-            )
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            PagedList(listOf("reorder", "backup", "vibration", "about")) { item ->
+                SettingsItem(
+                    label = item,
+                    trailing = if (item == "vibration") if (vibrationEnabled) "on" else "off" else null,
+                    onClick = {
+                        when (item) {
+                            "reorder" -> onReorder()
+                            "backup" -> onBackup()
+                            "vibration" -> {
+                                val enabled = !vibrationEnabled
+                                onVibration(enabled)
+                                if (enabled) performPakaHaptic(context, haptics)
+                            }
+                            else -> {
+                                val now = System.currentTimeMillis()
+                                aboutTaps = if (now - lastTap < 600) aboutTaps + 1 else 1
+                                lastTap = now
+                                if (aboutTaps >= 3) { aboutTaps = 0; onDev() }
+                            }
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -891,7 +926,7 @@ private fun SettingsScreen(
 @Composable
 private fun SettingsItem(label: String, trailing: String? = null, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(72.dp).then(tapModifier(onClick)),
+        modifier = Modifier.fillMaxWidth().then(tapModifier(onClick)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
@@ -995,33 +1030,27 @@ private fun BackupScreen(
 
         when (step) {
             BackupStep.MENU -> {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(top = 44.dp),
-                    verticalArrangement = Arrangement.spacedBy(36.dp),
-                ) {
-                    Text(
-                        "encrypted export",
-                        color = White,
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.Normal,
-                        modifier = Modifier.fillMaxWidth().then(tapModifier { step = BackupStep.EXPORT_PASSWORD }),
-                    )
-                    Text(
-                        "restore backup",
-                        color = White,
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.Normal,
-                        modifier = Modifier.fillMaxWidth().then(
-                            tapModifier {
-                                importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
-                            },
-                        ),
-                    )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    PagedList(listOf("encrypted export", "restore backup")) { item ->
+                        Text(
+                            item,
+                            color = White,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Normal,
+                            modifier = Modifier.fillMaxWidth().then(
+                                tapModifier {
+                                    if (item == "encrypted export") step = BackupStep.EXPORT_PASSWORD
+                                    else importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                                },
+                            ),
+                        )
+                    }
                     Text(
                         "Backups contain all passes and 2FA secrets. They are encrypted offline with your passphrase.",
                         color = Grey,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
+                        modifier = Modifier.align(Alignment.BottomStart).padding(end = 14.dp, bottom = 20.dp),
                     )
                 }
             }
@@ -1166,7 +1195,13 @@ private fun readBackupBlob(context: Context, uri: Uri): ByteArray {
 }
 
 @Composable
-private fun DevScreen(textSize: Float, onTextSize: (Float) -> Unit, onBack: () -> Unit) {
+private fun DevScreen(
+    textSize: Float,
+    onTextSize: (Float) -> Unit,
+    returnHomeEnabled: Boolean,
+    onReturnHome: (Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("developer", onBack)
@@ -1180,6 +1215,12 @@ private fun DevScreen(textSize: Float, onTextSize: (Float) -> Unit, onBack: () -
             Spacer(Modifier.height(8.dp))
             FieldLabel("preview")
             Text("KlimaTicket", color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal)
+            Spacer(Modifier.height(8.dp))
+            SettingsItem(
+                label = "return home",
+                trailing = if (returnHomeEnabled) "on" else "off",
+                onClick = { onReturnHome(!returnHomeEnabled) },
+            )
         }
     }
 }
@@ -1206,10 +1247,10 @@ private fun ManageScreen(
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("manage", onBack)
-        ScrollList(topPadding = 16.dp, spacing = 8.dp) {
-            rows.forEachIndexed { index, row ->
+        PagedList(rows) { row ->
+                val index = rows.indexOfFirst { it.id == row.id }
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(76.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -1226,7 +1267,6 @@ private fun ManageScreen(
                     ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(42.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
                     ManageGlyphAction(ManageGlyph.DELETE, "Delete ${row.name}", Modifier.width(42.dp), muted = true) { pendingDelete = row }
                 }
-            }
         }
     }
 }

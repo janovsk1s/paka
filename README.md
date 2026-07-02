@@ -29,6 +29,8 @@ Vibration feedback can be enabled or disabled in settings. The scanner uses a
 higher-resolution analysis stream, retries focus, detects sustained low light,
 and can engage the camera light automatically. Rendered barcodes are decoded and
 payload-checked before display; a bounded memory cache keeps common passes fast.
+Paka returns to the pass list after leaving the app by default; the hidden
+Developer screen can disable that behavior.
 
 ## Building
 
