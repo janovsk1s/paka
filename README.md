@@ -4,7 +4,7 @@ Paka is an intentionally small, offline card-and-authenticator tool designed for
 Light Phone III. It scans and renders common barcode formats and generates TOTP
 codes without Google Play Services.
 
-Current release: **0.12.8**
+Current release: **0.12.9**
 
 ## Photos
 
@@ -45,8 +45,9 @@ backup passphrase.
 
 ## Interaction
 
-Tap `+` to scan. Long-press `+` for intentional manual entry. Long-press a card
-to edit its stack and notes. These restrained secondary gestures are deliberate.
+Tap `+` to scan. Long-press `+` for intentional manual entry. Open a pass, then
+long-press its displayed code to edit its name, stack, and notes. These
+restrained secondary gestures are deliberate.
 Lists show five entries at a time and snap vertically between full pages.
 Vibration feedback can be enabled or disabled in settings. The scanner uses a
 higher-resolution analysis stream, retries focus, detects sustained low light,

@@ -2,6 +2,18 @@
 
 Notable changes to Paka are documented here.
 
+## 0.12.9 — 2026-07-02
+
+### Changed
+
+- Pass names can now be edited directly on the Details screen.
+- A right-aligned delete action on Details now requires explicit confirmation.
+- Reorder is movement-only; rename and delete actions were removed from it.
+- Reorder uses balanced outer spacing so its movement arrows sit naturally at the right edge.
+- Reorder arrows keep a consistent white treatment, including non-interactive boundary arrows.
+- Ordered encrypted writes now use a process-scoped coordinator so Activity teardown cannot discard queued edits.
+- Details long-press is available only after opening a pass, not from the main list.
+
 ## 0.12.8 — 2026-07-02
 
 ### Added

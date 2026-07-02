@@ -14,7 +14,7 @@ high-contrast character of LightOS without copying proprietary source or assets.
 The product goal is not to become a general Android wallet. Paka should remain
 fast, legible, monochrome, local-first, and unusually restrained.
 
-Current baseline: **0.12.8**, 2026-07-02. Consult `CHANGELOG.md` for recent work.
+Current baseline: **0.12.9**, 2026-07-02. Consult `CHANGELOG.md` for recent work.
 
 ## Non-negotiable design language
 
@@ -38,9 +38,10 @@ Current baseline: **0.12.8**, 2026-07-02. Consult `CHANGELOG.md` for recent work
   the far left. Back means one level back, not “jump to home.”
 - Bottom controls and reorder controls use the existing custom-drawn glyph
   language. Avoid importing a mismatched icon pack for convenience.
-- Hidden long-press actions are intentional. Long-press `+` opens manual entry;
-  card long-press reveals details. Preserve these unless the owner explicitly
-  changes the interaction model.
+- Hidden long-press actions are intentional. Long-press `+` opens manual entry.
+  Details are available only by opening a pass and then long-pressing its
+  displayed code—not by long-pressing a main-list row. Preserve this unless the
+  owner explicitly changes the interaction model.
 - Lone barcode and QR displays do not vibrate on ordinary taps. Haptics belong
   to actual actions, long-press discovery, and successful page changes.
 - Hardware photographs and official LightOS screens supplied by the owner are
@@ -119,8 +120,9 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 
 - Never perform encryption, file I/O, backup work, barcode rendering, or heavy
   decoding on the main thread.
-- Storage mutations are optimistic but ordered. Preserve generation checks so a
-  failed or restored store cannot be overwritten by an older queued save.
+- Storage mutations are optimistic but ordered in a process-scoped coordinator.
+  Preserve its barriers and generation checks so Activity teardown cannot drop
+  a queued edit and a restored store cannot be overwritten by an older save.
 - Pre-render the visible and next likely pass when useful, but keep caches
   bounded and do not delay initial interaction.
 - Avoid broad dependency upgrades in the same commit as behavioural changes.
@@ -141,6 +143,8 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 - `app/src/main/java/com/paka/app/CardStore.kt` and `SecureStore.kt` — encrypted
   on-device stores.
 - `app/src/main/java/com/paka/app/AtomicStore.kt` — crash-safe file replacement.
+- `app/src/main/java/com/paka/app/StoreWriteCoordinator.kt` — process-scoped,
+  ordered encrypted writes that survive Activity/Compose teardown.
 - `app/src/main/java/com/paka/app/BackupStore.kt` — encrypted portable backups.
 - `app/src/main/java/com/paka/app/Totp.kt` — URI parsing and RFC 6238 generation.
 - `app/src/main/java/com/paka/app/DemoData.kt` — synthetic in-memory demo data.

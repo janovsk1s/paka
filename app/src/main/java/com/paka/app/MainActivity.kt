@@ -90,21 +90,18 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.cos
 import kotlin.math.abs
 import kotlin.math.min
@@ -113,7 +110,6 @@ import kotlin.math.sin
 private enum class Mode { CARDS, CODES }
 private enum class ScanMode { CARD, CODE }
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
-private enum class RestoreOutcome { SUCCESS, FAILED_ROLLED_BACK, FAILED_PARTIAL }
 private enum class ManageGlyph { UP, DOWN }
 
 private sealed interface Entry
@@ -125,13 +121,11 @@ private sealed interface PendingDuplicate {
 }
 
 private data class ManageRow(val id: String, val name: String)
-private data class RenameTarget(val id: String, val current: String, val isCard: Boolean)
 private data class BarcodeRender(val bitmap: android.graphics.Bitmap?)
 private data class InitialAppLoad(
     val cards: LoadOutcome<List<Card>>,
     val codes: LoadOutcome<List<OtpAccount>>,
 )
-private data class SaveRequest<T>(val value: T, val generation: Long)
 private data class PendingClipboard(val value: String, val expiresAtMs: Long)
 
 private sealed interface ManualCardItem {
@@ -232,6 +226,7 @@ fun PakaApp(homeResetSignal: Int = 0, resumeSignal: Int = 0) {
     val context = LocalContext.current
     var initialLoad by remember { mutableStateOf<InitialAppLoad?>(null) }
     LaunchedEffect(Unit) {
+        StoreWriteCoordinator.awaitPendingWrites()
         initialLoad = withContext(Dispatchers.IO) {
             InitialAppLoad(
                 cards = CardStore.load(context),
@@ -269,18 +264,11 @@ private fun LoadedPakaApp(
     var committedCodes by remember { mutableStateOf(codeLoad.value) }
     var cardsWritable by remember { mutableStateOf(cardLoad.writable) }
     var codesWritable by remember { mutableStateOf(codeLoad.writable) }
-    val cardSaveQueue = remember { Channel<SaveRequest<List<Card>>>(Channel.UNLIMITED) }
-    val codeSaveQueue = remember { Channel<SaveRequest<List<OtpAccount>>>(Channel.UNLIMITED) }
-    val cardStoreMutex = remember { Mutex() }
-    val codeStoreMutex = remember { Mutex() }
-    val cardStorageGeneration = remember { AtomicLong(0L) }
-    val codeStorageGeneration = remember { AtomicLong(0L) }
     var mode by remember { mutableStateOf(Mode.CARDS) }
     var showSettings by remember { mutableStateOf(false) }
     var showBackup by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var manageMode by remember { mutableStateOf<Mode?>(null) }
-    var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
     var pendingDuplicate by remember { mutableStateOf<PendingDuplicate?>(null) }
     var selectedCard by remember { mutableStateOf<Card?>(null) }
     var selectedStack by remember { mutableStateOf<String?>(null) }
@@ -301,10 +289,11 @@ private fun LoadedPakaApp(
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var pendingClipboard by remember { mutableStateOf<PendingClipboard?>(null) }
+    val scope = rememberCoroutineScope()
     val activeCards = if (demoModeEnabled) demoContent.cards else cards
     val activeCodes = if (demoModeEnabled) demoContent.accounts else codes
     val homeVisible =
-        onboardingComplete && !showSettings && !showBackup && !showAbout && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
+        onboardingComplete && !showSettings && !showBackup && !showAbout && manageMode == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
     val codesVisible = mode == Mode.CODES && homeVisible
@@ -316,7 +305,6 @@ private fun LoadedPakaApp(
             showBackup = false
             showAbout = false
             manageMode = null
-            renameTarget = null
             pendingDuplicate = null
             selectedCard = null
             selectedStack = null
@@ -351,55 +339,6 @@ private fun LoadedPakaApp(
         codeLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
 
-    LaunchedEffect(cardSaveQueue) {
-        for (request in cardSaveQueue) {
-            if (request.generation != cardStorageGeneration.get()) continue
-            val result = withContext(Dispatchers.IO) {
-                cardStoreMutex.withLock {
-                    if (request.generation != cardStorageGeneration.get()) Result.success(Unit)
-                    else CardStore.save(context, request.value)
-                }
-            }
-            if (request.generation != cardStorageGeneration.get()) continue
-            result.fold(
-                onSuccess = { committedCards = request.value },
-                onFailure = {
-                    cardStorageGeneration.incrementAndGet()
-                    cards = committedCards
-                    cardsWritable = false
-                    Toast.makeText(context, "Cards could not be saved", Toast.LENGTH_LONG).show()
-                },
-            )
-        }
-    }
-    LaunchedEffect(codeSaveQueue) {
-        for (request in codeSaveQueue) {
-            if (request.generation != codeStorageGeneration.get()) continue
-            val result = withContext(Dispatchers.IO) {
-                codeStoreMutex.withLock {
-                    if (request.generation != codeStorageGeneration.get()) Result.success(Unit)
-                    else SecureStore.saveAccounts(context, request.value)
-                }
-            }
-            if (request.generation != codeStorageGeneration.get()) continue
-            result.fold(
-                onSuccess = { committedCodes = request.value },
-                onFailure = {
-                    codeStorageGeneration.incrementAndGet()
-                    codes = committedCodes
-                    codesWritable = false
-                    Toast.makeText(context, "2FA accounts could not be saved", Toast.LENGTH_LONG).show()
-                },
-            )
-        }
-    }
-    DisposableEffect(cardSaveQueue, codeSaveQueue) {
-        onDispose {
-            cardSaveQueue.close()
-            codeSaveQueue.close()
-        }
-    }
-
     LaunchedEffect(pendingClipboard, resumeSignal) {
         val pending = pendingClipboard ?: return@LaunchedEffect
         delay((pending.expiresAtMs - System.currentTimeMillis()).coerceAtLeast(0L))
@@ -426,13 +365,24 @@ private fun LoadedPakaApp(
             Toast.makeText(context, "Cards are read-only until storage is recovered", Toast.LENGTH_LONG).show()
             return false
         }
-        cards = list
-        val queued = cardSaveQueue.trySend(SaveRequest(list, cardStorageGeneration.get())).isSuccess
-        if (!queued) {
-            cards = committedCards
+        val write = StoreWriteCoordinator.saveCards(context, list)
+        if (write == null) {
             Toast.makeText(context, "Cards could not be queued for saving", Toast.LENGTH_LONG).show()
+            return false
         }
-        return queued
+        cards = list
+        scope.launch {
+            when (write.await()) {
+                StoreWriteStatus.SAVED -> committedCards = list
+                StoreWriteStatus.SUPERSEDED -> Unit
+                StoreWriteStatus.FAILED -> {
+                    cards = committedCards
+                    cardsWritable = false
+                    Toast.makeText(context, "Cards could not be saved", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        return true
     }
 
     fun saveCodes(list: List<OtpAccount>): Boolean {
@@ -444,13 +394,24 @@ private fun LoadedPakaApp(
             Toast.makeText(context, "2FA accounts are read-only until storage is recovered", Toast.LENGTH_LONG).show()
             return false
         }
-        codes = list
-        val queued = codeSaveQueue.trySend(SaveRequest(list, codeStorageGeneration.get())).isSuccess
-        if (!queued) {
-            codes = committedCodes
+        val write = StoreWriteCoordinator.saveCodes(context, list)
+        if (write == null) {
             Toast.makeText(context, "2FA accounts could not be queued for saving", Toast.LENGTH_LONG).show()
+            return false
         }
-        return queued
+        codes = list
+        scope.launch {
+            when (write.await()) {
+                StoreWriteStatus.SAVED -> committedCodes = list
+                StoreWriteStatus.SUPERSEDED -> Unit
+                StoreWriteStatus.FAILED -> {
+                    codes = committedCodes
+                    codesWritable = false
+                    Toast.makeText(context, "2FA accounts could not be saved", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        return true
     }
 
     val updateCard: (Card) -> Boolean = { u -> saveCards(activeCards.map { if (it.id == u.id) u else it }) }
@@ -543,31 +504,12 @@ private fun LoadedPakaApp(
         null -> Unit
     }
 
-    val rename = renameTarget
-    if (rename != null) {
-        TextEntryScreen(
-            title = "rename",
-            initial = rename.current,
-            onSave = { newName ->
-                val saved = if (rename.isCard) saveCards(activeCards.map { if (it.id == rename.id) it.copy(name = newName) else it })
-                else saveCodes(activeCodes.map { if (it.id == rename.id) it.copy(issuer = newName) else it })
-                if (saved) renameTarget = null
-            },
-            onBack = { renameTarget = null },
-        )
-        return
-    }
-
     val managing = manageMode
     if (managing != null) {
         val rows = if (managing == Mode.CARDS) activeCards.map { ManageRow(it.id, it.name) }
         else activeCodes.map { ManageRow(it.id, it.title()) }
         ManageScreen(
             rows = rows,
-            onRename = { id ->
-                if (managing == Mode.CARDS) activeCards.firstOrNull { it.id == id }?.let { renameTarget = RenameTarget(it.id, it.name, true) }
-                else activeCodes.firstOrNull { it.id == id }?.let { renameTarget = RenameTarget(it.id, it.issuer, false) }
-            },
             onUp = { id ->
                 if (managing == Mode.CARDS) saveCards(activeCards.moved(activeCards.indexOfFirst { it.id == id }, true))
                 else saveCodes(activeCodes.moved(activeCodes.indexOfFirst { it.id == id }, true))
@@ -575,10 +517,6 @@ private fun LoadedPakaApp(
             onDown = { id ->
                 if (managing == Mode.CARDS) saveCards(activeCards.moved(activeCards.indexOfFirst { it.id == id }, false))
                 else saveCodes(activeCodes.moved(activeCodes.indexOfFirst { it.id == id }, false))
-            },
-            onDelete = { id ->
-                if (managing == Mode.CARDS) saveCards(activeCards.filter { it.id != id })
-                else saveCodes(activeCodes.filter { it.id != id })
             },
             onBack = { manageMode = null },
         )
@@ -647,19 +585,12 @@ private fun LoadedPakaApp(
                 } else {
                     val oldCards = cards
                     val oldCodes = codes
-                    cardStorageGeneration.incrementAndGet()
-                    codeStorageGeneration.incrementAndGet()
-                    val outcome = withContext(Dispatchers.IO) {
-                        codeStoreMutex.withLock {
-                            cardStoreMutex.withLock {
-                                val codesSaved = SecureStore.saveAccounts(context, restored.accounts)
-                                if (codesSaved.isFailure) RestoreOutcome.FAILED_ROLLED_BACK
-                                else if (CardStore.save(context, restored.cards).isSuccess) RestoreOutcome.SUCCESS
-                                else if (SecureStore.saveAccounts(context, oldCodes).isSuccess) RestoreOutcome.FAILED_ROLLED_BACK
-                                else RestoreOutcome.FAILED_PARTIAL
-                            }
-                        }
-                    }
+                    val outcome = StoreWriteCoordinator.restore(
+                        context = context,
+                        oldCards = oldCards,
+                        oldCodes = oldCodes,
+                        restored = restored,
+                    ).await()
                     when (outcome) {
                         RestoreOutcome.SUCCESS -> {
                             cards = restored.cards
@@ -759,7 +690,12 @@ private fun LoadedPakaApp(
     val detail = detailCard
     if (detail != null) {
         val fresh = activeCards.firstOrNull { it.id == detail.id } ?: detail
-        CardDetail(card = fresh, onUpdate = updateCard, onBack = { detailCard = null })
+        CardDetail(
+            card = fresh,
+            onUpdate = updateCard,
+            onDelete = { saveCards(activeCards.filter { it.id != fresh.id }) },
+            onBack = { detailCard = null },
+        )
         return
     }
 
@@ -804,7 +740,6 @@ private fun LoadedPakaApp(
                         textSize = textSize,
                         onOpenCard = { selectedCard = it },
                         onOpenStack = { selectedStack = it },
-                        onDetail = { detailCard = it },
                     )
                 Mode.CODES ->
                     if (activeCodes.isEmpty()) EmptyHint("tap + to add a code")
@@ -867,7 +802,7 @@ private fun OnboardingScreen(onStart: () -> Unit) {
                 Text("Tap + to scan. Long-press + to enter manually.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
             }
             OnboardingRow(weight = 1f) {
-                Text("Swipe between pages. Long-press passes for details. Data stays encrypted on this phone.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+                Text("Swipe between pages. Open a pass, then long-press it for details. Data stays encrypted on this phone.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
             }
             OnboardingRow(weight = 1f) {
                 Text(
@@ -966,12 +901,16 @@ private const val ITEMS_PER_PAGE = 5
 
 /** Five fixed row slots per page. Swipes replace the page instantly on release. */
 @Composable
-private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
+private fun <T> PagedList(
+    items: List<T>,
+    endPadding: Dp = 14.dp,
+    content: @Composable (T) -> Unit,
+) {
     val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
     if (pages.isEmpty()) return
     HardCutPager(pageCount = pages.size) { currentPage, _ ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = endPadding, bottom = 8.dp),
         ) {
             pages[currentPage].forEach { item ->
                 Box(
@@ -1075,7 +1014,7 @@ private fun PageIndicator(page: Int, pageCount: Int, horizontalOffset: Dp, modif
 }
 
 @Composable
-private fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card) -> Unit, onOpenStack: (String) -> Unit, onDetail: (Card) -> Unit) {
+private fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card) -> Unit, onOpenStack: (String) -> Unit) {
     PagedList(entries) { entry ->
         when (entry) {
             is SingleEntry -> Text(
@@ -1083,7 +1022,7 @@ private fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card) 
                 color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, textAlign = TextAlign.Start,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().then(tapLongModifier(onClick = { onOpenCard(entry.card) }, onLongClick = { onDetail(entry.card) })),
+                modifier = Modifier.fillMaxWidth().then(tapModifier { onOpenCard(entry.card) }),
             )
             is StackEntry -> Row(
                 modifier = Modifier.fillMaxWidth().then(tapModifier { onOpenStack(entry.name) }),
@@ -1587,40 +1526,14 @@ private fun DevScreen(
 @Composable
 private fun ManageScreen(
     rows: List<ManageRow>,
-    onRename: (String) -> Unit,
     onUp: (String) -> Unit,
     onDown: (String) -> Unit,
-    onDelete: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    var pendingDelete by remember { mutableStateOf<ManageRow?>(null) }
-    var actionRow by remember { mutableStateOf<ManageRow?>(null) }
-    val deleting = pendingDelete
-    if (deleting != null) {
-        ConfirmDeleteScreen(
-            name = deleting.name,
-            onConfirm = { onDelete(deleting.id); pendingDelete = null },
-            onBack = { pendingDelete = null },
-        )
-        return
-    }
-    val editing = actionRow
-    if (editing != null) {
-        ManageItemScreen(
-            row = editing,
-            onRename = { onRename(editing.id) },
-            onDelete = {
-                actionRow = null
-                pendingDelete = editing
-            },
-            onBack = { actionRow = null },
-        )
-        return
-    }
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("reorder", onBack)
-        PagedList(rows) { row ->
+        PagedList(rows, endPadding = 0.dp) { row ->
                 val index = rows.indexOfFirst { it.id == row.id }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1633,41 +1546,11 @@ private fun ManageScreen(
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f).then(tapModifier { actionRow = row }),
+                        modifier = Modifier.weight(1f),
                     )
                     ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(48.dp), enabled = index > 0) { onUp(row.id) }
                     ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(48.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
                 }
-        }
-    }
-}
-
-@Composable
-private fun ManageItemScreen(row: ManageRow, onRename: () -> Unit, onDelete: () -> Unit, onBack: () -> Unit) {
-    BackHandler { onBack() }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("edit", onBack)
-        PagedList(listOf(0, 1, 2)) { item ->
-            val label = when (item) {
-                0 -> row.name
-                1 -> "rename"
-                else -> "delete"
-            }
-            Text(
-                text = label,
-                color = if (item == 0) Grey else White,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Normal,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().then(
-                    when (item) {
-                        1 -> tapModifier(onRename)
-                        2 -> tapModifier(onDelete)
-                        else -> Modifier
-                    },
-                ),
-            )
         }
     }
 }
@@ -1680,10 +1563,9 @@ private fun ManageGlyphAction(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val color = when {
-        !enabled -> Grey.copy(alpha = 0.7f)
-        else -> White
-    }
+    // Boundary arrows remain non-interactive, but keep the same visual weight
+    // as every other reorder glyph.
+    val color = White
     Box(
         modifier = modifier
             .height(48.dp)
@@ -1886,11 +1768,23 @@ private fun TextEntryScreen(title: String, initial: String, onSave: (String) -> 
 }
 
 @Composable
-private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onBack: () -> Unit) {
+private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> Boolean, onBack: () -> Unit) {
+    var name by remember(card.id) { mutableStateOf(card.name) }
     var notes by remember(card.id) { mutableStateOf(card.notes) }
     var stack by remember(card.id) { mutableStateOf(card.stack ?: "") }
+    var confirmDelete by remember(card.id) { mutableStateOf(false) }
     val persistAndBack = {
-        if (onUpdate(card.copy(notes = notes.trim(), stack = stack.trim().ifBlank { null }))) onBack()
+        val savedName = name.trim().ifBlank { card.name }
+        if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }))) onBack()
+    }
+
+    if (confirmDelete) {
+        ConfirmDeleteScreen(
+            name = name.trim().ifBlank { card.name },
+            onConfirm = { if (onDelete()) onBack() },
+            onBack = { confirmDelete = false },
+        )
+        return
     }
     BackHandler { persistAndBack() }
 
@@ -1902,12 +1796,7 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onBack: () -> Un
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 if (page == 0) {
-                    Column {
-                        FieldLabel("name")
-                        Spacer(Modifier.height(4.dp))
-                        Text(card.name, color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
+                    EditField("name", name, { name = it }, card.name, fontSize = 30.sp)
                     EditField("stack", stack, { stack = it }, "none")
                     Row(modifier = Modifier.fillMaxWidth()) {
                         LabelValue("format", card.format.label(), Modifier.weight(1f))
@@ -1932,12 +1821,24 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onBack: () -> Un
                 }
             }
         }
-        Text(
-            text = "save",
-            color = White,
-            fontSize = 18.sp,
-            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier(persistAndBack)),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "save",
+                color = if (name.isBlank()) Grey else White,
+                fontSize = 18.sp,
+                modifier = Modifier.weight(1f).then(if (name.isNotBlank()) tapModifier(persistAndBack) else Modifier),
+            )
+            Text(
+                text = "delete",
+                color = White,
+                fontSize = 18.sp,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f).then(tapModifier { confirmDelete = true }),
+            )
+        }
     }
 }
 
@@ -1963,18 +1864,19 @@ private fun EditField(
     placeholder: String,
     singleLine: Boolean = true,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    fontSize: TextUnit = 20.sp,
 ) {
     Column {
         FieldLabel(label)
         Spacer(Modifier.height(6.dp))
         Box {
-            if (value.isEmpty()) Text(placeholder, color = Grey, fontSize = 20.sp, fontWeight = FontWeight.Light)
+            if (value.isEmpty()) Text(placeholder, color = Grey, fontSize = fontSize, fontWeight = FontWeight.Light)
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
                 singleLine = singleLine,
                 visualTransformation = visualTransformation,
-                textStyle = TextStyle(color = White, fontSize = 20.sp, fontWeight = FontWeight.Light),
+                textStyle = TextStyle(color = White, fontSize = fontSize, fontWeight = FontWeight.Light),
                 cursorBrush = SolidColor(White),
                 modifier = Modifier.fillMaxWidth().then(if (singleLine) Modifier else Modifier.height(120.dp)),
             )
