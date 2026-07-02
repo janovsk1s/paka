@@ -10,7 +10,6 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import uk.org.okapibarcode.backend.DataBarExpanded
-import java.util.UUID
 import java.security.MessageDigest
 
 /** Every symbology Paka can render. */
@@ -19,16 +18,6 @@ enum class PakaFormat {
     CODE128, CODE39, CODE93, CODABAR, EAN13, EAN8, UPCA, UPCE, ITF,
     DATABAR_EXPANDED,
 }
-
-data class Card(
-    val name: String,
-    val data: String,
-    val format: PakaFormat,
-    val id: String = UUID.randomUUID().toString(),
-    val createdAt: Long = System.currentTimeMillis(),
-    val notes: String = "",
-    val stack: String? = null,
-)
 
 private val SQUARE_FORMATS = setOf(PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.DATA_MATRIX)
 

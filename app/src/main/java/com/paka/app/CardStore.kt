@@ -19,7 +19,7 @@ internal object CardStore {
     private const val LEGACY_FILE = "cards.json"
     private const val KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"
-    private const val SCHEMA = 1
+    private const val SCHEMA = 2
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'C'.code.toByte(), 1)
     private val AAD = "paka-cards-v1".toByteArray(Charsets.UTF_8)
 
@@ -134,35 +134,58 @@ internal object CardStore {
     private fun serialize(cards: List<Card>): String {
         val array = JSONArray()
         cards.forEach { card ->
-            array.put(
-                JSONObject()
-                    .put("id", card.id)
-                    .put("name", card.name)
-                    .put("data", card.data)
-                    .put("format", card.format.name)
-                    .put("createdAt", card.createdAt)
-                    .put("notes", card.notes)
-                    .put("stack", card.stack ?: JSONObject.NULL),
-            )
+            val item = JSONObject()
+                .put("id", card.id)
+                .put("name", card.name)
+                .put("createdAt", card.createdAt)
+                .put("notes", card.notes)
+                .put("stack", card.stack ?: JSONObject.NULL)
+            when (val content = card.content) {
+                is PassContent.Barcode -> item
+                    .put("type", "barcode")
+                    .put("data", content.data)
+                    .put("format", content.format.name)
+                is PassContent.Pdf -> item
+                    .put("type", "pdf")
+                    .put("documentId", content.documentId)
+                    .put("pageCount", content.pageCount)
+            }
+            array.put(item)
         }
         return JSONObject().put("schema", SCHEMA).put("cards", array).toString()
     }
 
     private fun parse(json: String): List<Card> {
         val root = json.trim()
-        val array = if (root.startsWith("[")) {
-            JSONArray(root)
+        val schema: Int
+        val array: JSONArray
+        if (root.startsWith("[")) {
+            schema = 1
+            array = JSONArray(root)
         } else {
             val envelope = JSONObject(root)
-            require(envelope.getInt("schema") == SCHEMA) { "Unsupported pass-store version" }
-            envelope.getJSONArray("cards")
+            schema = envelope.getInt("schema")
+            require(schema in 1..SCHEMA) { "Unsupported pass-store version" }
+            array = envelope.getJSONArray("cards")
         }
         return (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
+            val content = when (if (schema == 1) "barcode" else item.optString("type", "barcode")) {
+                "barcode" -> PassContent.Barcode(
+                    format = PakaFormat.valueOf(item.getString("format")),
+                    data = item.getString("data").also { require(it.isNotBlank()) { "Invalid pass payload" } },
+                )
+                "pdf" -> PassContent.Pdf(
+                    documentId = item.getString("documentId").also {
+                        require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
+                    },
+                    pageCount = item.getInt("pageCount").also { require(it in 1..1_000) { "Invalid PDF page count" } },
+                )
+                else -> error("Unsupported pass type")
+            }
             Card(
                 name = item.getString("name"),
-                data = item.getString("data"),
-                format = PakaFormat.valueOf(item.getString("format")),
+                content = content,
                 id = item.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
                 createdAt = item.optLong("createdAt", System.currentTimeMillis()),
                 notes = item.optString("notes", ""),

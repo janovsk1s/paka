@@ -1,10 +1,10 @@
 # Paka
 
-Paka is an intentionally small, offline card-and-authenticator tool designed for
-Light Phone III. It scans and renders common barcode formats and generates TOTP
-codes without Google Play Services.
+Paka is an intentionally small, offline pass-and-authenticator tool designed for
+Light Phone III. It scans and renders common barcode formats, carries encrypted
+PDF passes, and generates TOTP codes without Google Play Services.
 
-Current release: **0.12.9**
+Current release: **0.13.0**
 
 ## Photos
 
@@ -33,6 +33,9 @@ intentional design principles described by the LightOS Developer Program.
 - Paka does not request internet access and contains no analytics or advertising.
 - Pass data and TOTP secrets are encrypted with separate AES-256-GCM keys held
   by Android Keystore. Existing plaintext pass stores migrate automatically.
+- Imported PDFs use their own Android Keystore key. Their encrypted copies are
+  stored privately; viewing decrypts them into anonymous RAM through `memfd`,
+  never a plaintext file. PDF passes require Android 11 or newer.
 - Android cloud backup and device transfer are disabled.
 - User-created portable backups are encrypted and authenticated offline with an
   AES-256-GCM key derived from the user's passphrase.
@@ -53,6 +56,8 @@ Vibration feedback can be enabled or disabled in settings. The scanner uses a
 higher-resolution analysis stream, retries focus, detects sustained low light,
 and can engage the camera light automatically. Rendered barcodes are decoded and
 payload-checked before display; a bounded memory cache keeps common passes fast.
+PDF pages open at a fitted overview, support pinch and instant double-tap zoom,
+and rerender the settled viewport for sharp text without giant zoom bitmaps.
 Paka returns to the pass list after leaving the app by default; the hidden
 Developer screen can disable that behavior.
 The same screen can enable an isolated demo mode with freshly generated,

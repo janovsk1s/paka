@@ -2,6 +2,24 @@
 
 Notable changes to Paka are documented here.
 
+## 0.13.0 — 2026-07-02
+
+### Added
+
+- Encrypted PDF passes imported through Android's permissionless document picker.
+- RAM-only PDF viewing on Android 11+ using `memfd` and the platform `PdfRenderer`.
+- Multi-page hard-cut paging, pinch/pan, and instant anchored double-tap zoom.
+- A debounced screen-sized rerender keeps settled zoomed text sharp without large full-page bitmaps.
+- PDF passes can be renamed, stacked, reordered, backed up, restored, and deleted like barcode passes.
+
+### Security
+
+- PDFs are validated by opening and rendering page 1 before they can be saved.
+- Each PDF is capped at 10 MB and stored under a dedicated AES-256-GCM Android Keystore key.
+- Plaintext PDF bytes exist only briefly in RAM and anonymous `memfd`; no plaintext cache file is created.
+- Encrypted backup schema 2 embeds referenced PDFs and restores documents, passes, and 2FA accounts transactionally.
+- Orphaned encrypted PDF blobs are removed only after a healthy pass-store load.
+
 ## 0.12.9 — 2026-07-02
 
 ### Changed

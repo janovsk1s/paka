@@ -28,6 +28,7 @@ internal object StoreWriteCoordinator {
         data class Write(
             val context: Context,
             val value: List<Card>,
+            val deletePdfIds: Set<String>,
             val generation: Long,
             val completion: CompletableDeferred<StoreWriteStatus>,
         ) : CardTask
@@ -70,11 +71,16 @@ internal object StoreWriteCoordinator {
         }
     }
 
-    fun saveCards(context: Context, value: List<Card>): Deferred<StoreWriteStatus>? {
+    fun saveCards(
+        context: Context,
+        value: List<Card>,
+        deletePdfIds: Set<String> = emptySet(),
+    ): Deferred<StoreWriteStatus>? {
         val completion = CompletableDeferred<StoreWriteStatus>()
         val task = CardTask.Write(
             context = context.applicationContext,
             value = value,
+            deletePdfIds = deletePdfIds,
             generation = cardGeneration.get(),
             completion = completion,
         )
@@ -119,11 +125,7 @@ internal object StoreWriteCoordinator {
             scope.async {
                 codeMutex.withLock {
                     cardMutex.withLock {
-                        val codesSaved = SecureStore.saveAccounts(appContext, restored.accounts)
-                        if (codesSaved.isFailure) RestoreOutcome.FAILED_ROLLED_BACK
-                        else if (CardStore.save(appContext, restored.cards).isSuccess) RestoreOutcome.SUCCESS
-                        else if (SecureStore.saveAccounts(appContext, oldCodes).isSuccess) RestoreOutcome.FAILED_ROLLED_BACK
-                        else RestoreOutcome.FAILED_PARTIAL
+                        performRestore(appContext, oldCards, oldCodes, restored)
                     }
                 }
             }.also { restoreJob ->
@@ -134,6 +136,53 @@ internal object StoreWriteCoordinator {
                     }
                 }
             }
+        }
+    }
+
+    private fun performRestore(
+        context: Context,
+        oldCards: List<Card>,
+        oldCodes: List<OtpAccount>,
+        restored: BackupData,
+    ): RestoreOutcome {
+        val oldIds = oldCards.mapNotNull { it.pdfContent?.documentId }.toSet()
+        val restoredIds = restored.cards.mapNotNull { it.pdfContent?.documentId }.toSet()
+        val oldDocuments = linkedMapOf<String, ByteArray>()
+        val oldLoaded = runCatching {
+            oldIds.forEach { id -> oldDocuments[id] = PdfStore.readPlaintext(context, id) }
+        }.isSuccess
+        if (!oldLoaded) {
+            oldDocuments.values.forEach { it.fill(0) }
+            return RestoreOutcome.FAILED_ROLLED_BACK
+        }
+
+        fun rollbackDocuments(): Boolean {
+            var success = true
+            oldDocuments.forEach { (id, bytes) ->
+                if (runCatching { PdfStore.writePlaintext(context, id, bytes) }.isFailure) success = false
+            }
+            (restoredIds - oldIds).forEach { PdfStore.delete(context, it) }
+            return success
+        }
+
+        return try {
+            val documentsSaved = runCatching {
+                restored.documents.forEach { (id, bytes) -> PdfStore.writePlaintext(context, id, bytes) }
+            }.isSuccess
+            if (!documentsSaved) {
+                if (rollbackDocuments()) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
+            } else if (SecureStore.saveAccounts(context, restored.accounts).isFailure) {
+                if (rollbackDocuments()) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
+            } else if (CardStore.save(context, restored.cards).isSuccess) {
+                PdfStore.deleteOrphans(context, restoredIds)
+                RestoreOutcome.SUCCESS
+            } else {
+                val codesRolledBack = SecureStore.saveAccounts(context, oldCodes).isSuccess
+                val documentsRolledBack = rollbackDocuments()
+                if (codesRolledBack && documentsRolledBack) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
+            }
+        } finally {
+            oldDocuments.values.forEach { it.fill(0) }
         }
     }
 
@@ -148,7 +197,10 @@ internal object StoreWriteCoordinator {
         }
         val status = when {
             task.generation != cardGeneration.get() || result == null -> StoreWriteStatus.SUPERSEDED
-            result.isSuccess -> StoreWriteStatus.SAVED
+            result.isSuccess -> {
+                task.deletePdfIds.forEach { PdfStore.delete(task.context, it) }
+                StoreWriteStatus.SAVED
+            }
             else -> {
                 cardGeneration.compareAndSet(task.generation, task.generation + 1)
                 StoreWriteStatus.FAILED

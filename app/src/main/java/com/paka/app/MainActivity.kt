@@ -132,9 +132,11 @@ private sealed interface ManualCardItem {
     data object Name : ManualCardItem
     data object Data : ManualCardItem
     data class Format(val format: PakaFormat) : ManualCardItem
+    data object PdfDocument : ManualCardItem
 }
 
 private enum class ManualCodeItem { NAME, ACCOUNT, SECRET }
+private enum class ManualCardField { NAME, DATA }
 
 private val MANUAL_FORMATS = listOf(
     PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.PDF417, PakaFormat.DATA_MATRIX,
@@ -189,6 +191,11 @@ private fun <T> List<T>.moved(index: Int, up: Boolean): List<T> {
 class MainActivity : ComponentActivity() {
     private var homeResetSignal by mutableIntStateOf(0)
     private var resumeSignal by mutableIntStateOf(0)
+    private var externalFlowActive = false
+
+    fun setExternalFlowActive(active: Boolean) {
+        externalFlowActive = active
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -217,8 +224,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Prefs.returnHome(this)) homeResetSignal++
+        if (!externalFlowActive && Prefs.returnHome(this)) homeResetSignal++
     }
+}
+
+private fun Context.setPakaExternalFlowActive(active: Boolean) {
+    (this as? MainActivity)?.setExternalFlowActive(active)
 }
 
 @Composable
@@ -228,10 +239,11 @@ fun PakaApp(homeResetSignal: Int = 0, resumeSignal: Int = 0) {
     LaunchedEffect(Unit) {
         StoreWriteCoordinator.awaitPendingWrites()
         initialLoad = withContext(Dispatchers.IO) {
-            InitialAppLoad(
-                cards = CardStore.load(context),
-                codes = SecureStore.loadAccounts(context),
-            )
+            val cards = CardStore.load(context)
+            if (cards.writable) {
+                PdfStore.deleteOrphans(context, cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
+            }
+            InitialAppLoad(cards = cards, codes = SecureStore.loadAccounts(context))
         }
     }
 
@@ -328,8 +340,10 @@ private fun LoadedPakaApp(
         if (homeVisible && mode == Mode.CARDS) {
             delay(250)
             activeCards.take(6).forEach { card ->
-                withContext(Dispatchers.Default) {
-                    Barcodes.generateCached(card.format, card.data, passWidthPx)
+                card.barcodeContent?.let { barcode ->
+                    withContext(Dispatchers.Default) {
+                        Barcodes.generateCached(barcode.format, barcode.data, passWidthPx)
+                    }
                 }
             }
         }
@@ -365,7 +379,9 @@ private fun LoadedPakaApp(
             Toast.makeText(context, "Cards are read-only until storage is recovered", Toast.LENGTH_LONG).show()
             return false
         }
-        val write = StoreWriteCoordinator.saveCards(context, list)
+        val keptPdfIds = list.mapNotNull { it.pdfContent?.documentId }.toSet()
+        val removedPdfIds = cards.mapNotNull { it.pdfContent?.documentId }.toSet() - keptPdfIds
+        val write = StoreWriteCoordinator.saveCards(context, list, removedPdfIds)
         if (write == null) {
             Toast.makeText(context, "Cards could not be queued for saving", Toast.LENGTH_LONG).show()
             return false
@@ -417,7 +433,7 @@ private fun LoadedPakaApp(
     val updateCard: (Card) -> Boolean = { u -> saveCards(activeCards.map { if (it.id == u.id) u else it }) }
     fun addCard(card: Card, allowDuplicate: Boolean = false): Boolean {
         if (!allowDuplicate) {
-            activeCards.firstOrNull { it.format == card.format && it.data == card.data }?.let { existing ->
+            activeCards.firstOrNull { it.content == card.content }?.let { existing ->
                 pendingDuplicate = PendingDuplicate.Pass(card, existing.name)
                 return false
             }
@@ -717,12 +733,21 @@ private fun LoadedPakaApp(
     if (card != null) {
         val fresh = activeCards.firstOrNull { it.id == card.id } ?: card
         BackHandler { selectedCard = null }
-        CardScreen(
-            card = fresh,
-            forceMaximumBrightness = maxCodeBrightnessEnabled,
-            onLong = { detailCard = fresh },
-            onBack = { selectedCard = null },
-        )
+        when (val content = fresh.content) {
+            is PassContent.Barcode -> CardScreen(
+                card = fresh,
+                forceMaximumBrightness = maxCodeBrightnessEnabled,
+                onLong = { detailCard = fresh },
+                onBack = { selectedCard = null },
+            )
+            is PassContent.Pdf -> PdfScreen(
+                card = fresh,
+                content = content,
+                forceMaximumBrightness = maxCodeBrightnessEnabled,
+                onLong = { detailCard = fresh },
+                onBack = { selectedCard = null },
+            )
+        }
         return
     }
 
@@ -928,11 +953,12 @@ private fun <T> PagedList(
 }
 
 @Composable
-private fun HardCutPager(
+internal fun HardCutPager(
     pageCount: Int,
     modifier: Modifier = Modifier,
     indicatorOffset: Dp = 18.dp,
     showIndicator: Boolean = true,
+    gesturesEnabled: Boolean = true,
     content: @Composable (Int, () -> Unit) -> Unit,
 ) {
     if (pageCount <= 0) return
@@ -946,37 +972,39 @@ private fun HardCutPager(
     }
 
     Box(
-        modifier = modifier.fillMaxSize().pointerInput(pageCount, currentPage) {
-            val threshold = 24.dp.toPx()
-            var dragDistance = 0f
-            var feedbackSent = false
-            detectVerticalDragGestures(
-                onDragStart = {
-                    dragDistance = 0f
-                    feedbackSent = false
-                },
-                onVerticalDrag = { change, amount ->
-                    change.consume()
-                    dragDistance += amount
-                    val canChangePage =
-                        (dragDistance <= -threshold && currentPage < pageCount - 1) ||
-                            (dragDistance >= threshold && currentPage > 0)
-                    if (!feedbackSent && canChangePage) {
-                        performPakaHaptic(context, haptics)
-                        feedbackSent = true
-                    }
-                },
-                onDragEnd = {
-                    val destination = when {
-                        dragDistance <= -threshold -> (currentPage + 1).coerceAtMost(pageCount - 1)
-                        dragDistance >= threshold -> (currentPage - 1).coerceAtLeast(0)
-                        else -> currentPage
-                    }
-                    page = destination
-                },
-                onDragCancel = { dragDistance = 0f },
-            )
-        },
+        modifier = modifier.fillMaxSize().then(
+            if (gesturesEnabled) Modifier.pointerInput(pageCount, currentPage) {
+                val threshold = 24.dp.toPx()
+                var dragDistance = 0f
+                var feedbackSent = false
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        dragDistance = 0f
+                        feedbackSent = false
+                    },
+                    onVerticalDrag = { change, amount ->
+                        change.consume()
+                        dragDistance += amount
+                        val canChangePage =
+                            (dragDistance <= -threshold && currentPage < pageCount - 1) ||
+                                (dragDistance >= threshold && currentPage > 0)
+                        if (!feedbackSent && canChangePage) {
+                            performPakaHaptic(context, haptics)
+                            feedbackSent = true
+                        }
+                    },
+                    onDragEnd = {
+                        val destination = when {
+                            dragDistance <= -threshold -> (currentPage + 1).coerceAtMost(pageCount - 1)
+                            dragDistance >= threshold -> (currentPage - 1).coerceAtLeast(0)
+                            else -> currentPage
+                        }
+                        page = destination
+                    },
+                    onDragCancel = { dragDistance = 0f },
+                )
+            } else Modifier,
+        ),
     ) {
         content(currentPage) { page = (currentPage + 1) % pageCount }
         if (showIndicator && pageCount > 1) {
@@ -1204,6 +1232,7 @@ private fun BackupScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
+        context.setPakaExternalFlowActive(false)
         val bytes = pendingExport
         if (uri == null || bytes == null) {
             bytes?.fill(0)
@@ -1233,6 +1262,7 @@ private fun BackupScreen(
     }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        context.setPakaExternalFlowActive(false)
         if (uri != null) {
             scope.launch {
                 busy = true
@@ -1255,6 +1285,7 @@ private fun BackupScreen(
         pendingExport = null
         pendingImport?.fill(0)
         pendingImport = null
+        unlocked?.clearDocuments()
         unlocked = null
         passphrase = ""
         confirmation = ""
@@ -1290,7 +1321,10 @@ private fun BackupScreen(
                             modifier = Modifier.fillMaxWidth().then(
                                 tapModifier {
                                     if (item == "encrypted export") step = BackupStep.EXPORT_PASSWORD
-                                    else importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                                    else {
+                                        context.setPakaExternalFlowActive(true)
+                                        importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                                    }
                                 },
                             ),
                         )
@@ -1327,10 +1361,17 @@ private fun BackupScreen(
                             val password = passphrase.toCharArray()
                             busy = true
                             scope.launch {
-                                val result = withContext(Dispatchers.Default) {
+                                val result = withContext(Dispatchers.IO) {
+                                    val documents = linkedMapOf<String, ByteArray>()
                                     try {
-                                        runCatching { BackupStore.encrypt(cards, accounts, password) }
+                                        runCatching {
+                                            cards.mapNotNull { it.pdfContent?.documentId }.distinct().forEach { id ->
+                                                documents[id] = PdfStore.readPlaintext(context, id)
+                                            }
+                                            BackupStore.encrypt(cards, accounts, password, documents)
+                                        }
                                     } finally {
+                                        documents.values.forEach { it.fill(0) }
                                         password.fill('\u0000')
                                     }
                                 }
@@ -1338,6 +1379,7 @@ private fun BackupScreen(
                                 result.onSuccess { bytes ->
                                     pendingExport = bytes
                                     val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                    context.setPakaExternalFlowActive(true)
                                     exportLauncher.launch("paka-$stamp.paka")
                                 }.onFailure {
                                     Toast.makeText(context, "backup could not be encrypted", Toast.LENGTH_LONG).show()
@@ -1622,37 +1664,116 @@ private fun DuplicateConfirmScreen(kind: String, existingName: String, onConfirm
 
 @Composable
 private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var data by remember { mutableStateOf("") }
-    var format by remember { mutableStateOf(PakaFormat.QR) }
+    var format by remember { mutableStateOf<PakaFormat?>(PakaFormat.QR) }
+    var pdfImport by remember { mutableStateOf<PdfImport?>(null) }
+    var pdfChecking by remember { mutableStateOf(false) }
+    var pdfError by remember { mutableStateOf<String?>(null) }
+    var editingField by remember { mutableStateOf<ManualCardField?>(null) }
     val trimmedData = data.trim()
-    val renderKey = "${format.name}:$trimmedData"
-    val basicValidationError = trimmedData.takeIf { it.isNotBlank() }?.let { Barcodes.validationError(format, it) }
+    val renderKey = "${format?.name}:$trimmedData"
+    val basicValidationError = format?.let { selected ->
+        trimmedData.takeIf { it.isNotBlank() }?.let { Barcodes.validationError(selected, it) }
+    }
     var renderCheck by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     val renderable = renderCheck?.takeIf { it.first == renderKey }?.second
-    val validating = trimmedData.isNotBlank() && basicValidationError == null && renderable == null
+    val validating = format != null && trimmedData.isNotBlank() && basicValidationError == null && renderable == null
     val validationError = basicValidationError ?: if (renderable == false) "Code cannot be rendered exactly" else null
-    val canSave = name.isNotBlank() && trimmedData.isNotBlank() && validationError == null && renderable == true
-    val items = remember { listOf(ManualCardItem.Name, ManualCardItem.Data) + MANUAL_FORMATS.map(ManualCardItem::Format) }
-    BackHandler { onBack() }
+    val canSave = name.isNotBlank() && !pdfChecking && if (format == null) {
+        pdfImport != null && pdfError == null
+    } else {
+        trimmedData.isNotBlank() && validationError == null && renderable == true
+    }
+    val items = remember {
+        listOf(ManualCardItem.Name, ManualCardItem.Data) +
+            MANUAL_FORMATS.map(ManualCardItem::Format) + ManualCardItem.PdfDocument
+    }
+    val discardAndBack = {
+        pdfImport?.takeIf { it.created }?.let { orphan ->
+            scope.launch(Dispatchers.IO) { PdfStore.delete(context, orphan.documentId) }
+        }
+        onBack()
+    }
+    BackHandler { discardAndBack() }
+
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        context.setPakaExternalFlowActive(false)
+        if (uri != null) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                pdfError = "PDF passes require Android 11 or newer"
+            } else {
+                scope.launch {
+                    pdfChecking = true
+                    pdfError = null
+                    val result = withContext(Dispatchers.IO) { PdfStore.import(context, uri) }
+                    pdfChecking = false
+                    result.onSuccess { imported ->
+                        pdfImport?.takeIf { it.created && it.documentId != imported.documentId }?.let { orphan ->
+                            withContext(Dispatchers.IO) { PdfStore.delete(context, orphan.documentId) }
+                        }
+                        pdfImport = imported
+                    }.onFailure { error ->
+                        pdfError = when (error) {
+                            is SecurityException -> "Password-protected PDFs are not supported"
+                            else -> error.message ?: "PDF could not be opened"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    editingField?.let { field ->
+        TextEntryScreen(
+            title = if (field == ManualCardField.NAME) "name" else "data",
+            initial = if (field == ManualCardField.NAME) name else data,
+            onSave = { value ->
+                if (field == ManualCardField.NAME) name = value else data = value
+                editingField = null
+            },
+            onBack = { editingField = null },
+        )
+        return
+    }
 
     LaunchedEffect(renderKey, basicValidationError) {
+        val selected = format ?: return@LaunchedEffect
         if (trimmedData.isBlank() || basicValidationError != null) return@LaunchedEffect
         delay(120)
         val verified = withContext(Dispatchers.Default) {
-            val bitmap = Barcodes.generate(format, trimmedData, 320)
+            val bitmap = Barcodes.generate(selected, trimmedData, 320)
             (bitmap != null).also { bitmap?.recycle() }
         }
         renderCheck = renderKey to verified
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("card", onBack)
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+        SimpleTopBar("card", discardAndBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             PagedList(items) { item ->
                 when (item) {
-                    ManualCardItem.Name -> EditField("name", name, { name = it }, "e.g. Billa")
-                    ManualCardItem.Data -> EditField("data", data, { data = it }, "code content")
+                    ManualCardItem.Name -> ManualEntryRow("name", name, "e.g. Billa") {
+                        editingField = ManualCardField.NAME
+                    }
+                    ManualCardItem.Data -> if (format == null) {
+                        SettingsItem(
+                            label = if (pdfChecking) "checking PDF…" else "choose PDF",
+                            trailing = pdfImport?.let { "${it.pageCount}p" },
+                            onClick = {
+                                if (!pdfChecking) {
+                                    context.setPakaExternalFlowActive(true)
+                                    pdfPicker.launch(arrayOf("application/pdf"))
+                                }
+                            },
+                        )
+                    } else {
+                        ManualEntryRow("data", data, "code content") {
+                            editingField = ManualCardField.DATA
+                        }
+                    }
                     is ManualCardItem.Format -> {
                         val f = item.format
                         Row(
@@ -1669,19 +1790,60 @@ private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
                             if (f == format) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
                         }
                     }
+                    ManualCardItem.PdfDocument -> Row(
+                        modifier = Modifier.fillMaxWidth().then(tapModifier {
+                            format = null
+                            pdfError = null
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                if (!pdfChecking) {
+                                    context.setPakaExternalFlowActive(true)
+                                    pdfPicker.launch(arrayOf("application/pdf"))
+                                }
+                            } else {
+                                pdfError = "PDF passes require Android 11 or newer"
+                            }
+                        }),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "PDF document",
+                            color = if (format == null) White else Grey,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Light,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (format == null) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
+                    }
                 }
             }
         }
-        val actionText = validationError ?: if (validating) "checking…" else "save"
+        val actionError = if (format == null) pdfError else validationError
+        val actionText = actionError ?: if (validating || pdfChecking) "checking…" else "save"
         Text(
             text = actionText,
             color = if (canSave) White else Grey,
-            fontSize = if (validationError == null) 18.sp else 14.sp,
+            fontSize = if (actionError == null) 18.sp else 14.sp,
             fontWeight = FontWeight.Light,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(vertical = 18.dp).then(
-                if (canSave) tapModifier { onSave(Card(name = name.trim(), data = trimmedData, format = format)) }
+                if (canSave) tapModifier {
+                    val selected = format
+                    if (selected == null) {
+                        val imported = checkNotNull(pdfImport)
+                        onSave(
+                            Card(
+                                name = name.trim(),
+                                content = PassContent.Pdf(imported.documentId, imported.pageCount),
+                            ),
+                        )
+                    } else {
+                        pdfImport?.takeIf { it.created }?.let { orphan ->
+                            scope.launch(Dispatchers.IO) { PdfStore.delete(context, orphan.documentId) }
+                        }
+                        onSave(Card(name = name.trim(), data = trimmedData, format = selected))
+                    }
+                }
                 else Modifier,
             ),
         )
@@ -1693,6 +1855,7 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
     var issuer by remember { mutableStateOf("") }
     var account by remember { mutableStateOf("") }
     var secret by remember { mutableStateOf("") }
+    var editingItem by remember { mutableStateOf<ManualCodeItem?>(null) }
     val draft = OtpAccount(
         issuer = issuer.trim(),
         account = account.trim(),
@@ -1700,22 +1863,47 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
     )
     val validationError = if (issuer.isBlank() || secret.isBlank()) null else Totp.validationError(draft)
     val canSave = issuer.isNotBlank() && secret.isNotBlank() && validationError == null
+
+    editingItem?.let { item ->
+        TextEntryScreen(
+            title = when (item) {
+                ManualCodeItem.NAME -> "name"
+                ManualCodeItem.ACCOUNT -> "account"
+                ManualCodeItem.SECRET -> "secret"
+            },
+            initial = when (item) {
+                ManualCodeItem.NAME -> issuer
+                ManualCodeItem.ACCOUNT -> account
+                ManualCodeItem.SECRET -> secret
+            },
+            visualTransformation = if (item == ManualCodeItem.SECRET) PasswordVisualTransformation() else VisualTransformation.None,
+            allowBlank = item == ManualCodeItem.ACCOUNT,
+            onSave = { value ->
+                when (item) {
+                    ManualCodeItem.NAME -> issuer = value
+                    ManualCodeItem.ACCOUNT -> account = value
+                    ManualCodeItem.SECRET -> secret = value
+                }
+                editingItem = null
+            },
+            onBack = { editingItem = null },
+        )
+        return
+    }
     BackHandler { onBack() }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("code", onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             PagedList(ManualCodeItem.entries) { item ->
                 when (item) {
-                    ManualCodeItem.NAME -> EditField("name", issuer, { issuer = it }, "e.g. GitHub")
-                    ManualCodeItem.ACCOUNT -> EditField("account", account, { account = it }, "optional")
-                    ManualCodeItem.SECRET -> EditField(
+                    ManualCodeItem.NAME -> ManualEntryRow("name", issuer, "e.g. GitHub") { editingItem = item }
+                    ManualCodeItem.ACCOUNT -> ManualEntryRow("account", account, "optional") { editingItem = item }
+                    ManualCodeItem.SECRET -> ManualEntryRow(
                         "secret",
-                        secret,
-                        { secret = it },
+                        if (secret.isEmpty()) "" else "•".repeat(min(secret.length, 16)),
                         "base32 key",
-                        visualTransformation = PasswordVisualTransformation(),
-                    )
+                    ) { editingItem = item }
                 }
             }
         }
@@ -1733,8 +1921,16 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
 }
 
 @Composable
-private fun TextEntryScreen(title: String, initial: String, onSave: (String) -> Unit, onBack: () -> Unit) {
+private fun TextEntryScreen(
+    title: String,
+    initial: String,
+    onSave: (String) -> Unit,
+    onBack: () -> Unit,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    allowBlank: Boolean = false,
+) {
     var text by remember { mutableStateOf(initial) }
+    val canSave = allowBlank || text.isNotBlank()
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler { onBack() }
@@ -1748,10 +1944,11 @@ private fun TextEntryScreen(title: String, initial: String, onSave: (String) -> 
                     value = text,
                     onValueChange = { text = it },
                     singleLine = true,
+                    visualTransformation = visualTransformation,
                     textStyle = TextStyle(color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal),
                     cursorBrush = SolidColor(White),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { keyboard?.hide(); onSave(text.trim()) } }),
+                    keyboardActions = KeyboardActions(onDone = { if (canSave) { keyboard?.hide(); onSave(text.trim()) } }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
                 )
                 Spacer(Modifier.height(10.dp))
@@ -1760,9 +1957,14 @@ private fun TextEntryScreen(title: String, initial: String, onSave: (String) -> 
         }
         Text(
             text = "save",
-            color = if (text.isBlank()) Grey else White,
+            color = if (canSave) White else Grey,
             fontSize = 18.sp,
-            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier { if (text.isNotBlank()) onSave(text.trim()) }),
+            modifier = Modifier.padding(vertical = 18.dp).then(
+                if (canSave) tapModifier {
+                    keyboard?.hide()
+                    onSave(text.trim())
+                } else Modifier,
+            ),
         )
     }
 }
@@ -1799,7 +2001,14 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                     EditField("name", name, { name = it }, card.name, fontSize = 30.sp)
                     EditField("stack", stack, { stack = it }, "none")
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        LabelValue("format", card.format.label(), Modifier.weight(1f))
+                        LabelValue(
+                            "format",
+                            when (val content = card.content) {
+                                is PassContent.Barcode -> content.format.label()
+                                is PassContent.Pdf -> "PDF · ${content.pageCount} page${if (content.pageCount == 1) "" else "s"}"
+                            },
+                            Modifier.weight(1f),
+                        )
                         LabelValue("added", formatDate(card.createdAt), Modifier.weight(1f))
                     }
                 } else {
@@ -1807,7 +2016,10 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                         FieldLabel("code")
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            card.data,
+                            when (val content = card.content) {
+                                is PassContent.Barcode -> content.data
+                                is PassContent.Pdf -> "encrypted document · ${content.documentId.take(12)}"
+                            },
                             color = Grey,
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace,
@@ -1853,6 +2065,24 @@ private fun LabelValue(label: String, value: String, modifier: Modifier = Modifi
         FieldLabel(label)
         Spacer(Modifier.height(4.dp))
         Text(value, color = White, fontSize = 20.sp, fontWeight = FontWeight.Light)
+    }
+}
+
+@Composable
+private fun ManualEntryRow(label: String, value: String, placeholder: String, onClick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().then(tapModifier(onClick))) {
+        FieldLabel(label)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = value.ifEmpty { placeholder },
+            color = if (value.isEmpty()) Grey else White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Light,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(6.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey))
     }
 }
 
@@ -1957,8 +2187,13 @@ private fun StackScreen(
             LaunchedEffect(cards, targetWidthPx) {
                 val uniqueCards = cards.distinctBy { it.id }
                 suspend fun render(stackCard: Card) {
+                    val barcode = stackCard.barcodeContent
+                    if (barcode == null) {
+                        rendered[stackCard.id] = BarcodeRender(null)
+                        return
+                    }
                     val bitmap = withContext(Dispatchers.Default) {
-                        Barcodes.generateCached(stackCard.format, stackCard.data, targetWidthPx)
+                        Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
                     }
                     rendered[stackCard.id] = BarcodeRender(bitmap)
                 }
@@ -1974,13 +2209,21 @@ private fun StackScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    BarcodePanel(
-                        card = card,
-                        onClick = advance,
-                        onLongClick = { onLongCurrent(card) },
-                        preRendered = rendered[card.id],
-                        usePreRendered = true,
-                    )
+                    when (val content = card.content) {
+                        is PassContent.Barcode -> BarcodePanel(
+                            card = card,
+                            onClick = advance,
+                            onLongClick = { onLongCurrent(card) },
+                            preRendered = rendered[card.id],
+                            usePreRendered = true,
+                        )
+                        is PassContent.Pdf -> PdfDocumentPreview(
+                            card = card,
+                            content = content,
+                            onClick = advance,
+                            onLongPress = { onLongCurrent(card) },
+                        )
+                    }
                     Spacer(Modifier.height(18.dp))
                     Text("${card.name} · ${index + 1}/${cards.size}", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
                 }
@@ -2001,11 +2244,31 @@ private fun CardScreen(card: Card, forceMaximumBrightness: Boolean, onLong: () -
 }
 
 @Composable
+private fun PdfScreen(
+    card: Card,
+    content: PassContent.Pdf,
+    forceMaximumBrightness: Boolean,
+    onLong: () -> Unit,
+    onBack: () -> Unit,
+) {
+    KeepScreenBright(forceMaximumBrightness)
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
+        PdfDocumentViewer(
+            content = content,
+            onLongPress = onLong,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
 private fun rememberBarcodeRender(card: Card, targetWidthPx: Int): BarcodeRender? {
-    var render by remember(card.id, card.data, card.format, targetWidthPx) { mutableStateOf<BarcodeRender?>(null) }
-    LaunchedEffect(card.id, card.data, card.format, targetWidthPx) {
+    val barcode = card.barcodeContent ?: return BarcodeRender(null)
+    var render by remember(card.id, barcode.data, barcode.format, targetWidthPx) { mutableStateOf<BarcodeRender?>(null) }
+    LaunchedEffect(card.id, barcode.data, barcode.format, targetWidthPx) {
         val bitmap = withContext(Dispatchers.Default) {
-            Barcodes.generateCached(card.format, card.data, targetWidthPx)
+            Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
         }
         render = BarcodeRender(bitmap)
     }

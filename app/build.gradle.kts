@@ -20,8 +20,8 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.12.9"
+        versionCode = 37
+        versionName = "0.13.0"
     }
 
     signingConfigs {
@@ -36,6 +36,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".pdfpreview"
+            versionNameSuffix = "-pdf-preview"
+            resValue("string", "app_name", "Paka PDF Test")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

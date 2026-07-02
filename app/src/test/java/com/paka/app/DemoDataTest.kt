@@ -13,7 +13,10 @@ class DemoDataTest {
 
         assertTrue(demo.cards.size > 5)
         assertTrue(demo.accounts.size > 5)
-        demo.cards.forEach { assertNull(Barcodes.validationError(it.format, it.data)) }
+        demo.cards.forEach {
+            val barcode = requireNotNull(it.barcodeContent)
+            assertNull(Barcodes.validationError(barcode.format, barcode.data))
+        }
         demo.accounts.forEach {
             assertNull(Totp.validationError(it))
             assertTrue(it.account.endsWith("@example.invalid"))
@@ -27,7 +30,10 @@ class DemoDataTest {
         val first = DemoData.create()
         val second = DemoData.create()
 
-        assertNotEquals(first.cards.map(Card::data), second.cards.map(Card::data))
+        assertNotEquals(
+            first.cards.map { requireNotNull(it.barcodeContent).data },
+            second.cards.map { requireNotNull(it.barcodeContent).data },
+        )
         assertNotEquals(first.accounts.map(OtpAccount::secret), second.accounts.map(OtpAccount::secret))
     }
 }

@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.security.SecureRandom
+import java.util.Base64
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
@@ -11,17 +12,29 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
-internal data class BackupData(val cards: List<Card>, val accounts: List<OtpAccount>)
+internal data class BackupData(
+    val cards: List<Card>,
+    val accounts: List<OtpAccount>,
+    val documents: Map<String, ByteArray> = emptyMap(),
+) {
+    fun clearDocuments() = documents.values.forEach { it.fill(0) }
+}
 
 /** Portable, passphrase-encrypted backup containing both Paka data stores. */
 internal object BackupStore {
-    const val MAX_BACKUP_BYTES = 16 * 1024 * 1024
-    private const val SCHEMA = 1
+    const val MAX_BACKUP_BYTES = 32 * 1024 * 1024
+    private const val MAX_PDF_TOTAL_BYTES = 20 * 1024 * 1024
+    private const val SCHEMA = 2
     private const val MAX_ITEMS = 10_000
     private const val MAX_TEXT = 1_000_000
 
-    fun encrypt(cards: List<Card>, accounts: List<OtpAccount>, passphrase: CharArray): ByteArray {
-        val payload = serialize(cards, accounts).toByteArray(Charsets.UTF_8)
+    fun encrypt(
+        cards: List<Card>,
+        accounts: List<OtpAccount>,
+        passphrase: CharArray,
+        documents: Map<String, ByteArray> = emptyMap(),
+    ): ByteArray {
+        val payload = serialize(cards, accounts, documents).toByteArray(Charsets.UTF_8)
         require(payload.size <= MAX_BACKUP_BYTES) { "Backup is too large" }
         return try {
             BackupCrypto.encrypt(payload, passphrase)
@@ -41,19 +54,26 @@ internal object BackupStore {
         }
     }
 
-    private fun serialize(cards: List<Card>, accounts: List<OtpAccount>): String {
+    private fun serialize(cards: List<Card>, accounts: List<OtpAccount>, documents: Map<String, ByteArray>): String {
         val cardArray = JSONArray()
         cards.forEach { card ->
-            cardArray.put(
-                JSONObject()
-                    .put("id", card.id)
-                    .put("name", card.name)
-                    .put("data", card.data)
-                    .put("format", card.format.name)
-                    .put("createdAt", card.createdAt)
-                    .put("notes", card.notes)
-                    .put("stack", card.stack ?: JSONObject.NULL),
-            )
+            val item = JSONObject()
+                .put("id", card.id)
+                .put("name", card.name)
+                .put("createdAt", card.createdAt)
+                .put("notes", card.notes)
+                .put("stack", card.stack ?: JSONObject.NULL)
+            when (val content = card.content) {
+                is PassContent.Barcode -> item
+                    .put("type", "barcode")
+                    .put("data", content.data)
+                    .put("format", content.format.name)
+                is PassContent.Pdf -> item
+                    .put("type", "pdf")
+                    .put("documentId", content.documentId)
+                    .put("pageCount", content.pageCount)
+            }
+            cardArray.put(item)
         }
         val accountArray = JSONArray()
         accounts.forEach { account ->
@@ -69,16 +89,30 @@ internal object BackupStore {
                     .put("createdAt", account.createdAt),
             )
         }
+        val referencedDocuments = cards.mapNotNull { it.pdfContent?.documentId }.toSet()
+        require(documents.keys == referencedDocuments) { "Backup is missing PDF data" }
+        require(documents.values.sumOf { it.size.toLong() } <= MAX_PDF_TOTAL_BYTES) { "PDF backup data is too large" }
+        val documentArray = JSONArray()
+        documents.forEach { (id, bytes) ->
+            require(bytes.size <= PdfStore.MAX_PDF_BYTES && pdfDocumentId(bytes) == id) { "Invalid PDF backup data" }
+            documentArray.put(
+                JSONObject()
+                    .put("id", id)
+                    .put("data", Base64.getEncoder().encodeToString(bytes)),
+            )
+        }
         return JSONObject()
             .put("schema", SCHEMA)
             .put("cards", cardArray)
             .put("accounts", accountArray)
+            .put("documents", documentArray)
             .toString()
     }
 
     private fun parse(json: String): BackupData {
         val root = JSONObject(json)
-        require(root.getInt("schema") == SCHEMA) { "Unsupported backup version" }
+        val schema = root.getInt("schema")
+        require(schema in 1..SCHEMA) { "Unsupported backup version" }
         val cardArray = root.getJSONArray("cards")
         val accountArray = root.getJSONArray("accounts")
         require(cardArray.length() <= MAX_ITEMS && accountArray.length() <= MAX_ITEMS) { "Backup has too many entries" }
@@ -86,13 +120,24 @@ internal object BackupStore {
         val cards = (0 until cardArray.length()).map { index ->
             val item = cardArray.getJSONObject(index)
             val name = limited(item.getString("name"))
-            val data = limited(item.getString("data"))
             val id = limited(item.getString("id"))
-            require(name.isNotBlank() && data.isNotBlank() && id.isNotBlank()) { "Invalid pass entry" }
+            require(name.isNotBlank() && id.isNotBlank()) { "Invalid pass entry" }
+            val content = when (if (schema == 1) "barcode" else item.optString("type", "barcode")) {
+                "barcode" -> PassContent.Barcode(
+                    format = PakaFormat.valueOf(item.getString("format")),
+                    data = limited(item.getString("data")).also { require(it.isNotBlank()) { "Invalid pass entry" } },
+                )
+                "pdf" -> PassContent.Pdf(
+                    documentId = limited(item.getString("documentId")).also {
+                        require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
+                    },
+                    pageCount = item.getInt("pageCount").also { require(it in 1..1_000) { "Invalid PDF page count" } },
+                )
+                else -> error("Unsupported pass type")
+            }
             Card(
                 name = name,
-                data = data,
-                format = PakaFormat.valueOf(item.getString("format")),
+                content = content,
                 id = id,
                 createdAt = item.getLong("createdAt"),
                 notes = limited(item.optString("notes", "")),
@@ -114,15 +159,40 @@ internal object BackupStore {
                 createdAt = item.getLong("createdAt"),
             ).also { require(Totp.validationError(it) == null) { "Invalid 2FA entry" } }
         }
-        require(cards.map { it.id }.toSet().size == cards.size) { "Duplicate pass identifiers" }
-        require(accounts.map { it.id }.toSet().size == accounts.size) { "Duplicate 2FA identifiers" }
-        return BackupData(cards, accounts)
+        val documents = linkedMapOf<String, ByteArray>()
+        try {
+            if (schema >= 2) {
+                val documentArray = root.optJSONArray("documents") ?: JSONArray()
+                require(documentArray.length() <= MAX_ITEMS) { "Backup has too many documents" }
+                var totalDocumentBytes = 0L
+                for (index in 0 until documentArray.length()) {
+                    val item = documentArray.getJSONObject(index)
+                    val id = limited(item.getString("id"))
+                    require(id.matches(Regex("[0-9a-f]{64}")) && id !in documents) { "Invalid PDF backup entry" }
+                    val encoded = item.getString("data")
+                    require(encoded.length <= ((PdfStore.MAX_PDF_BYTES + 2L) / 3L * 4L + 4L).toInt()) { "PDF backup entry is too large" }
+                    val bytes = Base64.getDecoder().decode(encoded)
+                    require(bytes.size <= PdfStore.MAX_PDF_BYTES && pdfDocumentId(bytes) == id) { "Invalid PDF backup entry" }
+                    totalDocumentBytes += bytes.size
+                    require(totalDocumentBytes <= MAX_PDF_TOTAL_BYTES) { "PDF backup data is too large" }
+                    documents[id] = bytes
+                }
+            }
+            require(cards.map { it.id }.toSet().size == cards.size) { "Duplicate pass identifiers" }
+            require(accounts.map { it.id }.toSet().size == accounts.size) { "Duplicate 2FA identifiers" }
+            require(cards.mapNotNull { it.pdfContent?.documentId }.toSet() == documents.keys) { "Backup is missing PDF data" }
+            return BackupData(cards, accounts, documents)
+        } catch (error: Throwable) {
+            documents.values.forEach { it.fill(0) }
+            throw error
+        }
     }
 
     private fun limited(value: String): String {
         require(value.length <= MAX_TEXT) { "Backup text is too large" }
         return value
     }
+
 }
 
 /** Versioned authenticated encryption container: magic, rounds, salt, IV, ciphertext+tag. */

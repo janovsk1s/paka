@@ -14,7 +14,7 @@ high-contrast character of LightOS without copying proprietary source or assets.
 The product goal is not to become a general Android wallet. Paka should remain
 fast, legible, monochrome, local-first, and unusually restrained.
 
-Current baseline: **0.12.9**, 2026-07-02. Consult `CHANGELOG.md` for recent work.
+Current PDF feature baseline: **0.13.0**, 2026-07-02. Consult `CHANGELOG.md` for recent work.
 
 ## Non-negotiable design language
 
@@ -78,6 +78,22 @@ barcode is not sufficient: scanners must receive the exact original payload.
 - Scanner changes must be tested against dense Aztec, GS1 DataBar Expanded,
   EAN/UPC, damaged print, glare, and genuinely low-light samples. A sharp camera
   preview does not prove that decoding succeeds.
+
+## PDF pass invariants
+
+- PDFs are a distinct `PassContent.Pdf` type, never a fake barcode format.
+- PDF passes require API 30+ and use `Os.memfd_create`; do not add a plaintext
+  cache-file fallback.
+- Persist only AES-256-GCM ciphertext under the dedicated PDF Keystore key.
+- Validate the PDF header, open it with `PdfRenderer`, and render page 1 before
+  accepting an import. Keep the 10 MB per-document limit.
+- Pinch and pan transform an existing bitmap during the gesture. After settling,
+  rerender only a screen-sized viewport for sharpness. Never allocate a giant
+  full-page bitmap at maximum zoom.
+- Double-tap zoom is an immediate hard cut, not an animation.
+- PDF bytes must be included in encrypted backups, restored transactionally,
+  removed after pass deletion, and garbage-collected only when the card store
+  loaded successfully.
 
 ## Security and privacy invariants
 
@@ -145,6 +161,10 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 - `app/src/main/java/com/paka/app/AtomicStore.kt` — crash-safe file replacement.
 - `app/src/main/java/com/paka/app/StoreWriteCoordinator.kt` — process-scoped,
   ordered encrypted writes that survive Activity/Compose teardown.
+- `app/src/main/java/com/paka/app/PdfStore.kt` — encrypted PDF blobs, RAM-only
+  `PdfRenderer` sessions, validation, and page rendering.
+- `app/src/main/java/com/paka/app/PdfViewer.kt` — fitted pages, hard-cut paging,
+  GPU gestures, and sharp settled viewport layers.
 - `app/src/main/java/com/paka/app/BackupStore.kt` — encrypted portable backups.
 - `app/src/main/java/com/paka/app/Totp.kt` — URI parsing and RFC 6238 generation.
 - `app/src/main/java/com/paka/app/DemoData.kt` — synthetic in-memory demo data.
@@ -181,6 +201,10 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 9. Do not push, publish a release, rewrite history, or rotate signing material
    without explicit owner approval.
 10. Record meaningful user-visible or security changes in `CHANGELOG.md`.
+
+On `feature/pdf-passes`, the debug variant deliberately uses the
+`com.paka.app.pdfpreview` application ID and “Paka PDF Test” label. Keep feature
+testing isolated from the owner's real encrypted Paka installation.
 
 When a proposed improvement conflicts with this document, pause and explain the
 trade-off. The owner’s explicit instruction wins; otherwise preserve Paka’s core:
