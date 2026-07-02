@@ -7,6 +7,13 @@ sealed interface PassContent {
     data class Pdf(val documentId: String, val pageCount: Int) : PassContent
 }
 
+/** A persistable Android document link. The referenced file is not copied or encrypted by Paka. */
+data class PassReference(
+    val uri: String,
+    val name: String,
+    val mimeType: String,
+)
+
 data class Card(
     val name: String,
     val content: PassContent,
@@ -14,6 +21,7 @@ data class Card(
     val createdAt: Long = System.currentTimeMillis(),
     val notes: String = "",
     val stack: String? = null,
+    val references: List<PassReference> = emptyList(),
 ) {
     constructor(
         name: String,
@@ -23,7 +31,8 @@ data class Card(
         createdAt: Long = System.currentTimeMillis(),
         notes: String = "",
         stack: String? = null,
-    ) : this(name, PassContent.Barcode(format, data), id, createdAt, notes, stack)
+        references: List<PassReference> = emptyList(),
+    ) : this(name, PassContent.Barcode(format, data), id, createdAt, notes, stack, references)
 }
 
 internal val Card.barcodeContent: PassContent.Barcode?

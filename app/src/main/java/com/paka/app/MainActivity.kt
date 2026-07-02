@@ -6,7 +6,9 @@ import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.OpenableColumns
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -231,6 +233,19 @@ class MainActivity : ComponentActivity() {
 
 private fun Context.setPakaExternalFlowActive(active: Boolean) {
     (this as? MainActivity)?.setExternalFlowActive(active)
+}
+
+private fun Context.passReference(uri: Uri): PassReference {
+    val displayName = runCatching {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    }.getOrNull().orEmpty().ifBlank { uri.lastPathSegment?.substringAfterLast('/') ?: "reference" }
+    return PassReference(
+        uri = uri.toString(),
+        name = displayName.take(512),
+        mimeType = (contentResolver.getType(uri) ?: "application/octet-stream").take(256),
+    )
 }
 
 @Composable
@@ -1332,7 +1347,7 @@ private fun BackupScreen(
                         )
                     }
                     Text(
-                        "Backups contain all passes and 2FA secrets. They are encrypted offline with your passphrase.",
+                        "Backups are encrypted offline and contain all passes and 2FA secrets. External file references are not included.",
                         color = Grey,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
@@ -1665,6 +1680,48 @@ private fun DuplicateConfirmScreen(kind: String, existingName: String, onConfirm
 }
 
 @Composable
+private fun ReferenceOptionsScreen(
+    name: String,
+    onOpen: () -> Unit,
+    onReplace: () -> Unit,
+    onRemove: () -> Unit,
+    onBack: () -> Unit,
+) {
+    BackHandler { onBack() }
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+        SimpleTopBar("reference", onBack)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            PagedList(listOf("open", "replace", "remove")) { action ->
+                Text(
+                    action,
+                    color = White,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.fillMaxWidth().then(
+                        tapModifier {
+                            when (action) {
+                                "open" -> onOpen()
+                                "replace" -> onReplace()
+                                else -> onRemove()
+                            }
+                        },
+                    ),
+                )
+            }
+            Text(
+                "$name is an external file. Its contents are not encrypted or backed up by Paka.",
+                color = Grey,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Light,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.BottomStart).padding(end = 14.dp, bottom = 18.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1983,14 +2040,80 @@ private fun TextEntryScreen(
 
 @Composable
 private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> Boolean, onBack: () -> Unit) {
+    val context = LocalContext.current
     var name by remember(card.id) { mutableStateOf(card.name) }
     var notes by remember(card.id) { mutableStateOf(card.notes) }
     var stack by remember(card.id) { mutableStateOf(card.stack ?: "") }
+    var references by remember(card.id) { mutableStateOf(card.references.take(2)) }
     var confirmDelete by remember(card.id) { mutableStateOf(false) }
     var editingField by remember(card.id) { mutableStateOf<DetailField?>(null) }
+    var activeReferenceIndex by remember(card.id) { mutableStateOf<Int?>(null) }
+    val addReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        context.setPakaExternalFlowActive(false)
+        val remaining = (2 - references.size).coerceAtLeast(0)
+        val additions = uris
+            .distinctBy(Uri::toString)
+            .filterNot { candidate -> references.any { it.uri == candidate.toString() } }
+            .take(remaining)
+            .mapNotNull { uri ->
+                val retained = runCatching {
+                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }.isSuccess
+                if (retained) context.passReference(uri) else null
+            }
+        if (additions.isNotEmpty()) references = references + additions
+        if (uris.isNotEmpty() && additions.isEmpty() && remaining > 0) {
+            Toast.makeText(context, "Paka could not keep access to those files", Toast.LENGTH_LONG).show()
+        }
+    }
+    val replaceReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        context.setPakaExternalFlowActive(false)
+        val index = activeReferenceIndex
+        if (uri != null && index != null && index in references.indices) {
+            val retained = runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }.isSuccess
+            if (retained) {
+                references = references.toMutableList().also { it[index] = context.passReference(uri) }
+                activeReferenceIndex = null
+            } else {
+                Toast.makeText(context, "Paka could not keep access to that file", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val referenceViewer = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        context.setPakaExternalFlowActive(false)
+    }
+    val chooseReferences: () -> Unit = {
+        context.setPakaExternalFlowActive(true)
+        runCatching { addReferencePicker.launch(arrayOf("*/*")) }.onFailure {
+            context.setPakaExternalFlowActive(false)
+            Toast.makeText(context, "File picker could not be opened", Toast.LENGTH_LONG).show()
+        }
+    }
+    val replaceReference: () -> Unit = {
+        context.setPakaExternalFlowActive(true)
+        runCatching { replaceReferencePicker.launch(arrayOf("*/*")) }.onFailure {
+            context.setPakaExternalFlowActive(false)
+            Toast.makeText(context, "File picker could not be opened", Toast.LENGTH_LONG).show()
+        }
+    }
+    val openReference: (Int) -> Unit = { index ->
+        references.getOrNull(index)?.let { selected ->
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.parse(selected.uri), selected.mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.setPakaExternalFlowActive(true)
+            runCatching { referenceViewer.launch(intent) }.onFailure {
+                context.setPakaExternalFlowActive(false)
+                Toast.makeText(context, "No app can open this file", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
     val persistAndBack = {
         val savedName = name.trim().ifBlank { card.name }
-        if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }))) onBack()
+        if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }, references = references))) onBack()
     }
 
     if (confirmDelete) {
@@ -2028,11 +2151,26 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
         )
         return
     }
+
+    val selectedReferenceIndex = activeReferenceIndex
+    if (selectedReferenceIndex != null && selectedReferenceIndex in references.indices) {
+        ReferenceOptionsScreen(
+            name = references[selectedReferenceIndex].name,
+            onOpen = { openReference(selectedReferenceIndex) },
+            onReplace = replaceReference,
+            onRemove = {
+                references = references.filterIndexed { index, _ -> index != selectedReferenceIndex }
+                activeReferenceIndex = null
+            },
+            onBack = { activeReferenceIndex = null },
+        )
+        return
+    }
     BackHandler { persistAndBack() }
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("details", persistAndBack)
-        HardCutPager(pageCount = 2, modifier = Modifier.weight(1f).fillMaxWidth()) { page, _ ->
+        HardCutPager(pageCount = 3, modifier = Modifier.weight(1f).fillMaxWidth()) { page, _ ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(top = 12.dp, end = 14.dp, bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -2051,7 +2189,7 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                         )
                         LabelValue("added", formatDate(card.createdAt), Modifier.weight(1f))
                     }
-                } else {
+                } else if (page == 1) {
                     Column {
                         FieldLabel("code")
                         Spacer(Modifier.height(4.dp))
@@ -2070,6 +2208,19 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                     }
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
                     ManualEntryRow("notes", notes, "add a note") { editingField = DetailField.NOTES }
+                } else {
+                    ReferenceEntryRow("reference 1", references.getOrNull(0)) {
+                        if (references.isEmpty()) chooseReferences() else activeReferenceIndex = 0
+                    }
+                    ReferenceEntryRow("reference 2", references.getOrNull(1)) {
+                        if (references.size < 2) chooseReferences() else activeReferenceIndex = 1
+                    }
+                    Text(
+                        "Select up to two files at once. References stay external and are not encrypted or backed up by Paka.",
+                        color = Grey,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Light,
+                    )
                 }
             }
         }
@@ -2121,6 +2272,28 @@ private fun ManualEntryRow(label: String, value: String, placeholder: String, on
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        Spacer(Modifier.height(6.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey))
+    }
+}
+
+@Composable
+private fun ReferenceEntryRow(label: String, reference: PassReference?, onClick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().then(tapModifier(onClick))) {
+        FieldLabel(label)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = reference?.name ?: "add a file",
+            color = if (reference == null) Grey else White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Light,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (reference != null) {
+            Spacer(Modifier.height(2.dp))
+            Text("external · not encrypted", color = Grey, fontSize = 12.sp, fontWeight = FontWeight.Light)
+        }
         Spacer(Modifier.height(6.dp))
         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey))
     }

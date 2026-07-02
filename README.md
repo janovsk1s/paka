@@ -36,6 +36,9 @@ intentional design principles described by the LightOS Developer Program.
 - Imported PDFs use their own Android Keystore key. Their encrypted copies are
   stored privately; viewing decrypts them into anonymous RAM through `memfd`,
   never a plaintext file. PDF passes require Android 11 or newer.
+- Up to two optional file references in pass Details are external links. Paka stores only
+  the link metadata in its encrypted pass database; the referenced file itself
+  is not copied, encrypted, or included in Paka backups.
 - Android cloud backup and device transfer are disabled.
 - User-created portable backups are encrypted and authenticated offline with an
   AES-256-GCM key derived from the user's passphrase.

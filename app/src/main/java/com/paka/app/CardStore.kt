@@ -19,7 +19,7 @@ internal object CardStore {
     private const val LEGACY_FILE = "cards.json"
     private const val KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"
-    private const val SCHEMA = 2
+    private const val SCHEMA = 4
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'C'.code.toByte(), 1)
     private val AAD = "paka-cards-v1".toByteArray(Charsets.UTF_8)
 
@@ -140,6 +140,10 @@ internal object CardStore {
                 .put("createdAt", card.createdAt)
                 .put("notes", card.notes)
                 .put("stack", card.stack ?: JSONObject.NULL)
+                .put("references", JSONArray().also { references ->
+                    require(card.references.size <= 2) { "A pass can have at most two references" }
+                    card.references.forEach { reference -> references.put(serializeReference(reference)) }
+                })
             when (val content = card.content) {
                 is PassContent.Barcode -> item
                     .put("type", "barcode")
@@ -190,9 +194,34 @@ internal object CardStore {
                 createdAt = item.optLong("createdAt", System.currentTimeMillis()),
                 notes = item.optString("notes", ""),
                 stack = if (item.isNull("stack")) null else item.optString("stack", "").ifBlank { null },
+                references = when {
+                    schema >= 4 -> item.optJSONArray("references")?.let { references ->
+                        require(references.length() <= 2) { "Too many pass references" }
+                        (0 until references.length()).map { parseReference(references.getJSONObject(it)) }
+                    }.orEmpty()
+                    schema == 3 && !item.isNull("reference") -> listOf(parseReference(item.getJSONObject("reference")))
+                    else -> emptyList()
+                },
             )
         }
     }
+
+    private fun serializeReference(reference: PassReference): JSONObject = JSONObject()
+        .put("uri", reference.uri)
+        .put("name", reference.name)
+        .put("mimeType", reference.mimeType)
+
+    private fun parseReference(reference: JSONObject): PassReference = PassReference(
+        uri = reference.getString("uri").also {
+            require(it.startsWith("content://") && it.length <= 8_192) { "Invalid reference URI" }
+        },
+        name = reference.getString("name").also {
+            require(it.isNotBlank() && it.length <= 512) { "Invalid reference name" }
+        },
+        mimeType = reference.optString("mimeType", "application/octet-stream").also {
+            require(it.isNotBlank() && it.length <= 256) { "Invalid reference type" }
+        },
+    )
 
     private fun erasePlaintext(file: File) {
         if (!file.exists()) return

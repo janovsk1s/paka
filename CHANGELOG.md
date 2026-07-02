@@ -11,6 +11,7 @@ Notable changes to Paka are documented here.
 - Multi-page hard-cut paging, pinch/pan, and instant anchored double-tap zoom.
 - A debounced screen-sized rerender keeps settled zoomed text sharp without large full-page bitmaps.
 - PDF passes can be renamed, stacked, reordered, backed up, restored, and deleted like barcode passes.
+- A dedicated third Details page can retain up to two external references of any file type and open them through Android's document provider.
 
 ### Security
 
@@ -19,10 +20,12 @@ Notable changes to Paka are documented here.
 - Plaintext PDF bytes exist only briefly in RAM and anonymous `memfd`; no plaintext cache file is created.
 - Encrypted backup schema 2 embeds referenced PDFs and restores documents, passes, and 2FA accounts transactionally.
 - Orphaned encrypted PDF blobs are removed only after a healthy pass-store load.
+- Referenced files remain in their original external provider; Paka does not copy, encrypt, or include them in portable backups.
 
 ### Changed
 
 - Details fields now use the same focused full-screen text editor as manual entry, including multiline notes.
+- The reference picker accepts two files in one operation, with individual open, replace, and remove controls afterward.
 - PDF pages open edge-to-edge within the viewer while preserving the complete page aspect ratio.
 - The default page is locked in place; free panning starts only after pinch or 3× double-tap zoom.
 - Double-tap returns a zoomed document to its complete-page view.
@@ -32,6 +35,7 @@ Notable changes to Paka are documented here.
 
 - Transparent PDF page backgrounds now render as white paper instead of disappearing into Paka's black canvas.
 - PDF pages share a stable top content edge with opened barcode passes instead of being vertically centered by page height.
+- Landscape PDF pages are vertically centered so their shallow layout does not appear top-heavy.
 - Page swiping works on multi-page PDFs: the zoom layer now consumes only pinches and zoomed-in pans instead of every drag.
 - Closing a PDF pass while a page was still rendering no longer races the renderer teardown.
 - PDF open and render failures show a message instead of crashing the app.

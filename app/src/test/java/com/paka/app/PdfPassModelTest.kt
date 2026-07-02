@@ -26,4 +26,17 @@ class PdfPassModelTest {
             pdfDocumentId("abc".toByteArray()),
         )
     }
+
+    @Test
+    fun `external references remain separate from pass content`() {
+        val reference = PassReference(
+            uri = "content://example/document/receipt",
+            name = "receipt.jpg",
+            mimeType = "image/jpeg",
+        )
+        val card = Card("Receipt", "123", PakaFormat.CODE128, references = listOf(reference))
+
+        assertEquals(listOf(reference), card.references)
+        assertEquals("123", card.barcodeContent?.data)
+    }
 }

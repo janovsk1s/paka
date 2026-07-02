@@ -94,6 +94,10 @@ barcode is not sufficient: scanners must receive the exact original payload.
 - PDF bytes must be included in encrypted backups, restored transactionally,
   removed after pass deletion, and garbage-collected only when the card store
   loaded successfully.
+- Up to two optional `PassReference` values are persistable `content://` links. The link
+  metadata lives in the encrypted card store, but the external file is never
+  copied, encrypted, or placed in portable backups. Keep that boundary explicit
+  in Details and backup UI.
 
 ## Security and privacy invariants
 

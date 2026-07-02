@@ -218,9 +218,13 @@ private fun PdfZoomPage(
 
     val page = basePage
     val pageLeft = if (page == null) 0f else (viewportWidth - page.bitmap.width) / 2f
-    // Match the highest content edge used by an opened barcode instead of
-    // vertically floating each PDF according to its page height.
-    val pageTop = 0f
+    // Tall documents share the opened-barcode top edge. Landscape documents
+    // sit in the vertical middle so a shallow page does not look top-heavy.
+    val pageTop = if (page != null && page.bitmap.width > page.bitmap.height) {
+        (viewportHeight - page.bitmap.height) / 2f
+    } else {
+        0f
+    }
     fun clampX(value: Float, targetZoom: Float): Float {
         val width = (page?.bitmap?.width ?: 0) * targetZoom
         return if (width <= viewportWidth) (viewportWidth - width) / 2f - pageLeft
@@ -228,7 +232,7 @@ private fun PdfZoomPage(
     }
     fun clampY(value: Float, targetZoom: Float): Float {
         val height = (page?.bitmap?.height ?: 0) * targetZoom
-        return if (height <= viewportHeight) -pageTop
+        return if (height <= viewportHeight) 0f
         else value.coerceIn(viewportHeight - pageTop - height, -pageTop)
     }
 
