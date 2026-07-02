@@ -20,6 +20,12 @@ Notable changes to Paka are documented here.
 - Encrypted backup schema 2 embeds referenced PDFs and restores documents, passes, and 2FA accounts transactionally.
 - Orphaned encrypted PDF blobs are removed only after a healthy pass-store load.
 
+### Changed
+
+- PDF pages open fitted to the viewport width and scroll vertically; swiping past the top or bottom edge changes pages.
+- Double-tap zooms 2.5× into the tapped area and returns to the fit-width top view; pinching out below fit-width shows the whole page.
+- The multi-page indicator sits on a subtle scrim so it stays readable over white page content.
+
 ### Fixed
 
 - Page swiping works on multi-page PDFs: the zoom layer now consumes only pinches and zoomed-in pans instead of every drag.
