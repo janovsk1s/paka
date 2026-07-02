@@ -9,12 +9,10 @@ Current release: **0.12.6**
 ## Photos
 
 <p align="center">
-  <img src="docs/screenshots/home.jpeg" width="46%" alt="Paka pass list on Light Phone III">
-  <img src="docs/screenshots/two-factor.jpeg" width="46%" alt="Paka 2FA code screen on Light Phone III">
-</p>
-<p align="center">
-  <img src="docs/screenshots/settings.jpeg" width="46%" alt="Paka settings on Light Phone III">
-  <img src="docs/screenshots/scanner.jpeg" width="46%" alt="Paka scanner on Light Phone III">
+  <img src="docs/screenshots/home.jpeg" width="23%" alt="Paka pass list on Light Phone III">
+  <img src="docs/screenshots/two-factor.jpeg" width="23%" alt="Paka 2FA code screen on Light Phone III">
+  <img src="docs/screenshots/settings.jpeg" width="23%" alt="Paka settings on Light Phone III">
+  <img src="docs/screenshots/scanner.jpeg" width="23%" alt="Paka scanner on Light Phone III">
 </p>
 
 ## Compatibility and independence
