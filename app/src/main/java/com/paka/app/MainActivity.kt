@@ -137,6 +137,7 @@ private sealed interface ManualCardItem {
 
 private enum class ManualCodeItem { NAME, ACCOUNT, SECRET }
 private enum class ManualCardField { NAME, DATA }
+private enum class DetailField { NAME, STACK, NOTES }
 
 private val MANUAL_FORMATS = listOf(
     PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.PDF417, PakaFormat.DATA_MATRIX,
@@ -1935,6 +1936,7 @@ private fun TextEntryScreen(
     onBack: () -> Unit,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     allowBlank: Boolean = false,
+    singleLine: Boolean = true,
 ) {
     var text by remember { mutableStateOf(initial) }
     val canSave = allowBlank || text.isNotBlank()
@@ -1950,13 +1952,16 @@ private fun TextEntryScreen(
                 BasicTextField(
                     value = text,
                     onValueChange = { text = it },
-                    singleLine = true,
+                    singleLine = singleLine,
                     visualTransformation = visualTransformation,
                     textStyle = TextStyle(color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal),
                     cursorBrush = SolidColor(White),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default),
                     keyboardActions = KeyboardActions(onDone = { if (canSave) { keyboard?.hide(); onSave(text.trim()) } }),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (singleLine) Modifier else Modifier.height(180.dp))
+                        .focusRequester(focusRequester),
                 )
                 Spacer(Modifier.height(10.dp))
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(White))
@@ -1982,6 +1987,7 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
     var notes by remember(card.id) { mutableStateOf(card.notes) }
     var stack by remember(card.id) { mutableStateOf(card.stack ?: "") }
     var confirmDelete by remember(card.id) { mutableStateOf(false) }
+    var editingField by remember(card.id) { mutableStateOf<DetailField?>(null) }
     val persistAndBack = {
         val savedName = name.trim().ifBlank { card.name }
         if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }))) onBack()
@@ -1995,9 +2001,36 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
         )
         return
     }
+
+    editingField?.let { field ->
+        TextEntryScreen(
+            title = when (field) {
+                DetailField.NAME -> "name"
+                DetailField.STACK -> "stack"
+                DetailField.NOTES -> "notes"
+            },
+            initial = when (field) {
+                DetailField.NAME -> name
+                DetailField.STACK -> stack
+                DetailField.NOTES -> notes
+            },
+            allowBlank = field != DetailField.NAME,
+            singleLine = field != DetailField.NOTES,
+            onSave = { value ->
+                when (field) {
+                    DetailField.NAME -> name = value
+                    DetailField.STACK -> stack = value
+                    DetailField.NOTES -> notes = value
+                }
+                editingField = null
+            },
+            onBack = { editingField = null },
+        )
+        return
+    }
     BackHandler { persistAndBack() }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("details", persistAndBack)
         HardCutPager(pageCount = 2, modifier = Modifier.weight(1f).fillMaxWidth()) { page, _ ->
             Column(
@@ -2005,8 +2038,8 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 if (page == 0) {
-                    EditField("name", name, { name = it }, card.name, fontSize = 30.sp)
-                    EditField("stack", stack, { stack = it }, "none")
+                    ManualEntryRow("name", name, card.name) { editingField = DetailField.NAME }
+                    ManualEntryRow("stack", stack, "none") { editingField = DetailField.STACK }
                     Row(modifier = Modifier.fillMaxWidth()) {
                         LabelValue(
                             "format",
@@ -2036,7 +2069,7 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                         )
                     }
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
-                    EditField("notes", notes, { notes = it }, "add a note", singleLine = false)
+                    ManualEntryRow("notes", notes, "add a note") { editingField = DetailField.NOTES }
                 }
             }
         }

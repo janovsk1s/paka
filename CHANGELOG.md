@@ -22,6 +22,7 @@ Notable changes to Paka are documented here.
 
 ### Changed
 
+- Details fields now use the same focused full-screen text editor as manual entry, including multiline notes.
 - PDF pages open edge-to-edge within the viewer while preserving the complete page aspect ratio.
 - The default page is locked in place; free panning starts only after pinch or 3× double-tap zoom.
 - Double-tap returns a zoomed document to its complete-page view.
