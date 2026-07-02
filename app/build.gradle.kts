@@ -20,8 +20,8 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 33
-        versionName = "0.12.6"
+        versionCode = 34
+        versionName = "0.12.7"
     }
 
     signingConfigs {
@@ -76,8 +76,6 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation(libs.androidx.material.icons.extended)
-    implementation(libs.androidx.navigation.compose)
 
     // Barcode generation — Apache-2.0 ZXing, no Google Play Services.
     implementation(libs.zxing.core)

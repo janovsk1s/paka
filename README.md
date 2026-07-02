@@ -36,7 +36,7 @@ intentional design principles described by the LightOS Developer Program.
 - Android cloud backup and device transfer are disabled.
 - User-created portable backups are encrypted and authenticated offline with an
   AES-256-GCM key derived from the user's passphrase.
-- TOTP codes copied to the clipboard are marked sensitive and cleared after 30 seconds.
+- TOTP codes copied to the clipboard are marked sensitive and cleared after 30 seconds while Paka has focus, or safely on the next return to Paka if the code is still present.
 
 Uninstalling Paka permanently removes data that was not exported first. If an
 Android Keystore key is invalidated, on-device encrypted data can only

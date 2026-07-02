@@ -95,12 +95,16 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.cos
 import kotlin.math.abs
 import kotlin.math.min
@@ -109,6 +113,7 @@ import kotlin.math.sin
 private enum class Mode { CARDS, CODES }
 private enum class ScanMode { CARD, CODE }
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
+private enum class RestoreOutcome { SUCCESS, FAILED_ROLLED_BACK, FAILED_PARTIAL }
 private enum class ManageGlyph { UP, DOWN }
 
 private sealed interface Entry
@@ -122,6 +127,20 @@ private sealed interface PendingDuplicate {
 private data class ManageRow(val id: String, val name: String)
 private data class RenameTarget(val id: String, val current: String, val isCard: Boolean)
 private data class BarcodeRender(val bitmap: android.graphics.Bitmap?)
+private data class InitialAppLoad(
+    val cards: LoadOutcome<List<Card>>,
+    val codes: LoadOutcome<List<OtpAccount>>,
+)
+private data class SaveRequest<T>(val value: T, val generation: Long)
+private data class PendingClipboard(val value: String, val expiresAtMs: Long)
+
+private sealed interface ManualCardItem {
+    data object Name : ManualCardItem
+    data object Data : ManualCardItem
+    data class Format(val format: PakaFormat) : ManualCardItem
+}
+
+private enum class ManualCodeItem { NAME, ACCOUNT, SECRET }
 
 private val MANUAL_FORMATS = listOf(
     PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.PDF417, PakaFormat.DATA_MATRIX,
@@ -175,6 +194,7 @@ private fun <T> List<T>.moved(index: Int, up: Boolean): List<T> {
 
 class MainActivity : ComponentActivity() {
     private var homeResetSignal by mutableIntStateOf(0)
+    private var resumeSignal by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -193,7 +213,12 @@ class MainActivity : ComponentActivity() {
                 ActivityManager.TaskDescription(getString(R.string.app_name), null, android.graphics.Color.BLACK)
             },
         )
-        setContent { PakaApp(homeResetSignal) }
+        setContent { PakaApp(homeResetSignal, resumeSignal) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumeSignal++
     }
 
     override fun onUserLeaveHint() {
@@ -203,16 +228,53 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PakaApp(homeResetSignal: Int = 0) {
+fun PakaApp(homeResetSignal: Int = 0, resumeSignal: Int = 0) {
+    val context = LocalContext.current
+    var initialLoad by remember { mutableStateOf<InitialAppLoad?>(null) }
+    LaunchedEffect(Unit) {
+        initialLoad = withContext(Dispatchers.IO) {
+            InitialAppLoad(
+                cards = CardStore.load(context),
+                codes = SecureStore.loadAccounts(context),
+            )
+        }
+    }
+
+    val loaded = initialLoad
+    if (loaded == null) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Text("Paka", color = White, fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
+        }
+        return
+    }
+    LoadedPakaApp(homeResetSignal, resumeSignal, loaded.cards, loaded.codes)
+}
+
+@Composable
+private fun LoadedPakaApp(
+    homeResetSignal: Int,
+    resumeSignal: Int,
+    cardLoad: LoadOutcome<List<Card>>,
+    codeLoad: LoadOutcome<List<OtpAccount>>,
+) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
-    val cardLoad = remember { CardStore.load(context) }
-    val codeLoad = remember { SecureStore.loadAccounts(context) }
     var cards by remember { mutableStateOf(cardLoad.value) }
     var codes by remember { mutableStateOf(codeLoad.value) }
+    var committedCards by remember { mutableStateOf(cardLoad.value) }
+    var committedCodes by remember { mutableStateOf(codeLoad.value) }
     var cardsWritable by remember { mutableStateOf(cardLoad.writable) }
     var codesWritable by remember { mutableStateOf(codeLoad.writable) }
+    val cardSaveQueue = remember { Channel<SaveRequest<List<Card>>>(Channel.UNLIMITED) }
+    val codeSaveQueue = remember { Channel<SaveRequest<List<OtpAccount>>>(Channel.UNLIMITED) }
+    val cardStoreMutex = remember { Mutex() }
+    val codeStoreMutex = remember { Mutex() }
+    val cardStorageGeneration = remember { AtomicLong(0L) }
+    val codeStorageGeneration = remember { AtomicLong(0L) }
     var mode by remember { mutableStateOf(Mode.CARDS) }
     var showSettings by remember { mutableStateOf(false) }
     var showBackup by remember { mutableStateOf(false) }
@@ -236,7 +298,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
     var maxCodeBrightnessEnabled by remember { mutableStateOf(Prefs.maxCodeBrightness(context)) }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
-    val scope = rememberCoroutineScope()
+    var pendingClipboard by remember { mutableStateOf<PendingClipboard?>(null) }
     val homeVisible =
         onboardingComplete && !showSettings && !showBackup && !showAbout && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
@@ -285,19 +347,84 @@ fun PakaApp(homeResetSignal: Int = 0) {
         codeLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
 
+    LaunchedEffect(cardSaveQueue) {
+        for (request in cardSaveQueue) {
+            if (request.generation != cardStorageGeneration.get()) continue
+            val result = withContext(Dispatchers.IO) {
+                cardStoreMutex.withLock {
+                    if (request.generation != cardStorageGeneration.get()) Result.success(Unit)
+                    else CardStore.save(context, request.value)
+                }
+            }
+            if (request.generation != cardStorageGeneration.get()) continue
+            result.fold(
+                onSuccess = { committedCards = request.value },
+                onFailure = {
+                    cardStorageGeneration.incrementAndGet()
+                    cards = committedCards
+                    cardsWritable = false
+                    Toast.makeText(context, "Cards could not be saved", Toast.LENGTH_LONG).show()
+                },
+            )
+        }
+    }
+    LaunchedEffect(codeSaveQueue) {
+        for (request in codeSaveQueue) {
+            if (request.generation != codeStorageGeneration.get()) continue
+            val result = withContext(Dispatchers.IO) {
+                codeStoreMutex.withLock {
+                    if (request.generation != codeStorageGeneration.get()) Result.success(Unit)
+                    else SecureStore.saveAccounts(context, request.value)
+                }
+            }
+            if (request.generation != codeStorageGeneration.get()) continue
+            result.fold(
+                onSuccess = { committedCodes = request.value },
+                onFailure = {
+                    codeStorageGeneration.incrementAndGet()
+                    codes = committedCodes
+                    codesWritable = false
+                    Toast.makeText(context, "2FA accounts could not be saved", Toast.LENGTH_LONG).show()
+                },
+            )
+        }
+    }
+    DisposableEffect(cardSaveQueue, codeSaveQueue) {
+        onDispose {
+            cardSaveQueue.close()
+            codeSaveQueue.close()
+        }
+    }
+
+    LaunchedEffect(pendingClipboard, resumeSignal) {
+        val pending = pendingClipboard ?: return@LaunchedEffect
+        delay((pending.expiresAtMs - System.currentTimeMillis()).coerceAtLeast(0L))
+        // Android 10+ hides clipboard contents while an app lacks focus. Keep the
+        // pending marker and retry on resume instead of blindly erasing newer data.
+        delay(150)
+        val activity = context as? Activity
+        if (activity?.hasWindowFocus() != true) return@LaunchedEffect
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
+        if (current == pending.value) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+        }
+        pendingClipboard = null
+    }
+
     fun saveCards(list: List<Card>): Boolean {
         if (!cardsWritable) {
             Toast.makeText(context, "Cards are read-only until storage is recovered", Toast.LENGTH_LONG).show()
             return false
         }
-        return CardStore.save(context, list).fold(
-            onSuccess = { cards = list; true },
-            onFailure = {
-                cardsWritable = false
-                Toast.makeText(context, "Cards could not be saved", Toast.LENGTH_LONG).show()
-                false
-            },
-        )
+        cards = list
+        val queued = cardSaveQueue.trySend(SaveRequest(list, cardStorageGeneration.get())).isSuccess
+        if (!queued) {
+            cards = committedCards
+            Toast.makeText(context, "Cards could not be queued for saving", Toast.LENGTH_LONG).show()
+        }
+        return queued
     }
 
     fun saveCodes(list: List<OtpAccount>): Boolean {
@@ -305,14 +432,13 @@ fun PakaApp(homeResetSignal: Int = 0) {
             Toast.makeText(context, "2FA accounts are read-only until storage is recovered", Toast.LENGTH_LONG).show()
             return false
         }
-        return SecureStore.saveAccounts(context, list).fold(
-            onSuccess = { codes = list; true },
-            onFailure = {
-                codesWritable = false
-                Toast.makeText(context, "2FA accounts could not be saved", Toast.LENGTH_LONG).show()
-                false
-            },
-        )
+        codes = list
+        val queued = codeSaveQueue.trySend(SaveRequest(list, codeStorageGeneration.get())).isSuccess
+        if (!queued) {
+            codes = committedCodes
+            Toast.makeText(context, "2FA accounts could not be queued for saving", Toast.LENGTH_LONG).show()
+        }
+        return queued
     }
 
     val updateCard: (Card) -> Boolean = { u -> saveCards(cards.map { if (it.id == u.id) u else it }) }
@@ -485,25 +611,41 @@ fun PakaApp(homeResetSignal: Int = 0) {
                 } else {
                     val oldCards = cards
                     val oldCodes = codes
-                    val codesSaved = SecureStore.saveAccounts(context, restored.accounts)
-                    if (codesSaved.isFailure) {
-                        Toast.makeText(context, "Backup could not be restored", Toast.LENGTH_LONG).show()
-                        false
-                    } else {
-                        val cardsSaved = CardStore.save(context, restored.cards)
-                        if (cardsSaved.isSuccess) {
+                    cardStorageGeneration.incrementAndGet()
+                    codeStorageGeneration.incrementAndGet()
+                    val outcome = withContext(Dispatchers.IO) {
+                        codeStoreMutex.withLock {
+                            cardStoreMutex.withLock {
+                                val codesSaved = SecureStore.saveAccounts(context, restored.accounts)
+                                if (codesSaved.isFailure) RestoreOutcome.FAILED_ROLLED_BACK
+                                else if (CardStore.save(context, restored.cards).isSuccess) RestoreOutcome.SUCCESS
+                                else if (SecureStore.saveAccounts(context, oldCodes).isSuccess) RestoreOutcome.FAILED_ROLLED_BACK
+                                else RestoreOutcome.FAILED_PARTIAL
+                            }
+                        }
+                    }
+                    when (outcome) {
+                        RestoreOutcome.SUCCESS -> {
                             cards = restored.cards
                             codes = restored.accounts
+                            committedCards = restored.cards
+                            committedCodes = restored.accounts
                             true
-                        } else {
-                            val rolledBack = SecureStore.saveAccounts(context, oldCodes).isSuccess
-                            if (!rolledBack) codes = restored.accounts
+                        }
+                        RestoreOutcome.FAILED_ROLLED_BACK -> {
                             cards = oldCards
-                            Toast.makeText(
-                                context,
-                                if (rolledBack) "Backup could not be restored" else "Restore was interrupted; reopen Paka to verify data",
-                                Toast.LENGTH_LONG,
-                            ).show()
+                            codes = oldCodes
+                            committedCards = oldCards
+                            committedCodes = oldCodes
+                            Toast.makeText(context, "Backup could not be restored", Toast.LENGTH_LONG).show()
+                            false
+                        }
+                        RestoreOutcome.FAILED_PARTIAL -> {
+                            cards = oldCards
+                            codes = restored.accounts
+                            committedCards = oldCards
+                            committedCodes = restored.accounts
+                            Toast.makeText(context, "Restore was interrupted; reopen Paka to verify data", Toast.LENGTH_LONG).show()
                             false
                         }
                     }
@@ -639,15 +781,11 @@ fun PakaApp(homeResetSignal: Int = 0) {
                                 putBoolean("android.content.extra.IS_SENSITIVE", true)
                             }
                             clip.setPrimaryClip(data)
+                            pendingClipboard = PendingClipboard(
+                                value = code,
+                                expiresAtMs = System.currentTimeMillis() + 30_000L,
+                            )
                             Toast.makeText(context, "copied", Toast.LENGTH_SHORT).show()
-                            scope.launch {
-                                delay(30_000)
-                                val current = clip.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-                                if (current == code) {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clip.clearPrimaryClip()
-                                    else clip.setPrimaryClip(ClipData.newPlainText("", ""))
-                                }
-                            }
                         },
                     )
             }
@@ -1072,7 +1210,7 @@ private fun SettingsItem(label: String, trailing: String? = null, onClick: () ->
 private fun BackupScreen(
     cards: List<Card>,
     accounts: List<OtpAccount>,
-    onRestore: (BackupData) -> Boolean,
+    onRestore: suspend (BackupData) -> Boolean,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1294,13 +1432,18 @@ private fun BackupScreen(
                         color = if (data != null) White else Grey,
                         fontSize = 24.sp,
                         modifier = Modifier.fillMaxWidth().then(
-                            tapModifier {
-                                if (data != null && onRestore(data)) {
-                                    Toast.makeText(context, "backup restored", Toast.LENGTH_SHORT).show()
-                                    resetToMenu()
-                                    onBack()
+                            if (data != null && !busy) tapModifier {
+                                busy = true
+                                scope.launch {
+                                    val restored = onRestore(data)
+                                    busy = false
+                                    if (restored) {
+                                        Toast.makeText(context, "backup restored", Toast.LENGTH_SHORT).show()
+                                        resetToMenu()
+                                        onBack()
+                                    }
                                 }
-                            },
+                            } else Modifier,
                         ),
                     )
                     Spacer(Modifier.height(28.dp))
@@ -1554,38 +1697,65 @@ private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var data by remember { mutableStateOf("") }
     var format by remember { mutableStateOf(PakaFormat.QR) }
-    val validationError = data.takeIf { it.isNotBlank() }?.let { Barcodes.validationError(format, it.trim()) }
-    val canSave = name.isNotBlank() && data.isNotBlank() && validationError == null
+    val trimmedData = data.trim()
+    val renderKey = "${format.name}:$trimmedData"
+    val basicValidationError = trimmedData.takeIf { it.isNotBlank() }?.let { Barcodes.validationError(format, it) }
+    var renderCheck by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    val renderable = renderCheck?.takeIf { it.first == renderKey }?.second
+    val validating = trimmedData.isNotBlank() && basicValidationError == null && renderable == null
+    val validationError = basicValidationError ?: if (renderable == false) "Code cannot be rendered exactly" else null
+    val canSave = name.isNotBlank() && trimmedData.isNotBlank() && validationError == null && renderable == true
+    val items = remember { listOf(ManualCardItem.Name, ManualCardItem.Data) + MANUAL_FORMATS.map(ManualCardItem::Format) }
     BackHandler { onBack() }
+
+    LaunchedEffect(renderKey, basicValidationError) {
+        if (trimmedData.isBlank() || basicValidationError != null) return@LaunchedEffect
+        delay(120)
+        val verified = withContext(Dispatchers.Default) {
+            val bitmap = Barcodes.generate(format, trimmedData, 320)
+            (bitmap != null).also { bitmap?.recycle() }
+        }
+        renderCheck = renderKey to verified
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("card", onBack)
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 20.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            EditField("name", name, { name = it }, "e.g. Billa")
-            EditField("data", data, { data = it }, "code content")
-            FieldLabel("format")
-            Column {
-                for (f in MANUAL_FORMATS) {
-                    Text(
-                        text = f.label(),
-                        color = if (f == format) White else Grey,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Light,
-                        modifier = Modifier.fillMaxWidth().then(tapModifier { format = f }).padding(vertical = 8.dp),
-                    )
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            PagedList(items) { item ->
+                when (item) {
+                    ManualCardItem.Name -> EditField("name", name, { name = it }, "e.g. Billa")
+                    ManualCardItem.Data -> EditField("data", data, { data = it }, "code content")
+                    is ManualCardItem.Format -> {
+                        val f = item.format
+                        Row(
+                            modifier = Modifier.fillMaxWidth().then(tapModifier { format = f }),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = f.label(),
+                                color = if (f == format) White else Grey,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Light,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (f == format) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
+                        }
+                    }
                 }
             }
-            validationError?.let { Text(it, color = Grey, fontSize = 14.sp) }
         }
+        val actionText = validationError ?: if (validating) "checking…" else "save"
         Text(
-            text = "save",
+            text = actionText,
             color = if (canSave) White else Grey,
-            fontSize = 18.sp,
+            fontSize = if (validationError == null) 18.sp else 14.sp,
             fontWeight = FontWeight.Light,
-            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier { if (canSave) onSave(Card(name = name.trim(), data = data.trim(), format = format)) }),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(vertical = 18.dp).then(
+                if (canSave) tapModifier { onSave(Card(name = name.trim(), data = trimmedData, format = format)) }
+                else Modifier,
+            ),
         )
     }
 }
@@ -1606,21 +1776,30 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("code", onBack)
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 20.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            EditField("name", issuer, { issuer = it }, "e.g. GitHub")
-            EditField("account", account, { account = it }, "optional")
-            EditField("secret", secret, { secret = it }, "base32 key", visualTransformation = PasswordVisualTransformation())
-            validationError?.let { Text(it, color = Grey, fontSize = 14.sp) }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            PagedList(ManualCodeItem.entries) { item ->
+                when (item) {
+                    ManualCodeItem.NAME -> EditField("name", issuer, { issuer = it }, "e.g. GitHub")
+                    ManualCodeItem.ACCOUNT -> EditField("account", account, { account = it }, "optional")
+                    ManualCodeItem.SECRET -> EditField(
+                        "secret",
+                        secret,
+                        { secret = it },
+                        "base32 key",
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
+                }
+            }
         }
+        val actionText = validationError ?: "save"
         Text(
-            text = "save",
+            text = actionText,
             color = if (canSave) White else Grey,
-            fontSize = 18.sp,
+            fontSize = if (validationError == null) 18.sp else 14.sp,
             fontWeight = FontWeight.Light,
-            modifier = Modifier.padding(vertical = 18.dp).then(tapModifier { if (canSave) onSave(draft) }),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(vertical = 18.dp).then(if (canSave) tapModifier { onSave(draft) } else Modifier),
         )
     }
 }
@@ -1909,6 +2088,8 @@ private fun KeepScreenBright(forceMaximumBrightness: Boolean) {
 
 @Composable
 private fun ProtectSensitiveContent(enabled: Boolean) {
+    // 2FA secrets and backup flows forbid screenshots. Pass barcodes remain
+    // intentionally capturable because exporting a pass image is a core use case.
     val context = LocalContext.current
     DisposableEffect(enabled) {
         val window = (context as? Activity)?.window

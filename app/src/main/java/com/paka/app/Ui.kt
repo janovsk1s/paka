@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
@@ -49,11 +48,11 @@ internal fun tapModifier(onClick: () -> Unit, label: String? = null): Modifier {
     val haptics = LocalHapticFeedback.current
     val semantics = if (label == null) Modifier else Modifier.semantics {
         contentDescription = label
-        role = Role.Button
     }
     return semantics.clickable(
         interactionSource = interaction,
         indication = null,
+        role = Role.Button,
         onClick = {
             performPakaHaptic(context, haptics)
             onClick()
@@ -71,11 +70,11 @@ internal fun tapLongModifier(onClick: () -> Unit, onLongClick: () -> Unit, label
     val haptics = LocalHapticFeedback.current
     val semantics = if (label == null) Modifier else Modifier.semantics {
         contentDescription = label
-        role = Role.Button
     }
     return semantics.combinedClickable(
         interactionSource = interaction,
         indication = null,
+        role = Role.Button,
         onClick = {
             performPakaHaptic(context, haptics)
             onClick()
@@ -97,11 +96,11 @@ internal fun longPressModifier(onLongClick: () -> Unit, label: String? = null): 
     val haptics = LocalHapticFeedback.current
     val semantics = if (label == null) Modifier else Modifier.semantics {
         contentDescription = label
-        role = Role.Button
     }
     return semantics.combinedClickable(
         interactionSource = interaction,
         indication = null,
+        role = Role.Button,
         onClick = {},
         onLongClick = {
             performPakaHaptic(context, haptics, HapticFeedbackType.LongPress)
