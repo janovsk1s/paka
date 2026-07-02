@@ -296,9 +296,13 @@ private fun LoadedPakaApp(
     var returnHomeEnabled by remember { mutableStateOf(Prefs.returnHome(context)) }
     var autoLightEnabled by remember { mutableStateOf(Prefs.autoLight(context)) }
     var maxCodeBrightnessEnabled by remember { mutableStateOf(Prefs.maxCodeBrightness(context)) }
+    var demoModeEnabled by remember { mutableStateOf(Prefs.demoMode(context)) }
+    var demoContent by remember { mutableStateOf(DemoData.create()) }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var pendingClipboard by remember { mutableStateOf<PendingClipboard?>(null) }
+    val activeCards = if (demoModeEnabled) demoContent.cards else cards
+    val activeCodes = if (demoModeEnabled) demoContent.accounts else codes
     val homeVisible =
         onboardingComplete && !showSettings && !showBackup && !showAbout && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
@@ -332,10 +336,10 @@ private fun LoadedPakaApp(
             }
         }
     }
-    LaunchedEffect(homeVisible, mode, cards, passWidthPx) {
+    LaunchedEffect(homeVisible, mode, activeCards, passWidthPx) {
         if (homeVisible && mode == Mode.CARDS) {
             delay(250)
-            cards.take(6).forEach { card ->
+            activeCards.take(6).forEach { card ->
                 withContext(Dispatchers.Default) {
                     Barcodes.generateCached(card.format, card.data, passWidthPx)
                 }
@@ -414,6 +418,10 @@ private fun LoadedPakaApp(
     }
 
     fun saveCards(list: List<Card>): Boolean {
+        if (demoModeEnabled) {
+            demoContent = demoContent.copy(cards = list)
+            return true
+        }
         if (!cardsWritable) {
             Toast.makeText(context, "Cards are read-only until storage is recovered", Toast.LENGTH_LONG).show()
             return false
@@ -428,6 +436,10 @@ private fun LoadedPakaApp(
     }
 
     fun saveCodes(list: List<OtpAccount>): Boolean {
+        if (demoModeEnabled) {
+            demoContent = demoContent.copy(accounts = list)
+            return true
+        }
         if (!codesWritable) {
             Toast.makeText(context, "2FA accounts are read-only until storage is recovered", Toast.LENGTH_LONG).show()
             return false
@@ -441,15 +453,15 @@ private fun LoadedPakaApp(
         return queued
     }
 
-    val updateCard: (Card) -> Boolean = { u -> saveCards(cards.map { if (it.id == u.id) u else it }) }
+    val updateCard: (Card) -> Boolean = { u -> saveCards(activeCards.map { if (it.id == u.id) u else it }) }
     fun addCard(card: Card, allowDuplicate: Boolean = false): Boolean {
         if (!allowDuplicate) {
-            cards.firstOrNull { it.format == card.format && it.data == card.data }?.let { existing ->
+            activeCards.firstOrNull { it.format == card.format && it.data == card.data }?.let { existing ->
                 pendingDuplicate = PendingDuplicate.Pass(card, existing.name)
                 return false
             }
         }
-        if (!saveCards(cards + card)) return false
+        if (!saveCards(activeCards + card)) return false
         manualCard = false
         pendingScan = null
         selectedCard = card
@@ -457,12 +469,12 @@ private fun LoadedPakaApp(
     }
     fun addCode(account: OtpAccount, allowDuplicate: Boolean = false): Boolean {
         if (!allowDuplicate) {
-            codes.firstOrNull { it.duplicateKey() == account.duplicateKey() }?.let { existing ->
+            activeCodes.firstOrNull { it.duplicateKey() == account.duplicateKey() }?.let { existing ->
                 pendingDuplicate = PendingDuplicate.Code(account, existing.title())
                 return false
             }
         }
-        if (!saveCodes(codes + account)) return false
+        if (!saveCodes(activeCodes + account)) return false
         manualCode = false
         mode = Mode.CODES
         return true
@@ -482,7 +494,9 @@ private fun LoadedPakaApp(
         }
     }
 
-    ProtectSensitiveContent(mode == Mode.CODES || manualCode || showBackup || (scanning && scanMode == ScanMode.CODE))
+    ProtectSensitiveContent(
+        showBackup || manualCode || (scanning && scanMode == ScanMode.CODE) || (mode == Mode.CODES && !demoModeEnabled),
+    )
 
     // ---- routing (topmost overlay wins) ----
 
@@ -535,8 +549,8 @@ private fun LoadedPakaApp(
             title = "rename",
             initial = rename.current,
             onSave = { newName ->
-                val saved = if (rename.isCard) saveCards(cards.map { if (it.id == rename.id) it.copy(name = newName) else it })
-                else saveCodes(codes.map { if (it.id == rename.id) it.copy(issuer = newName) else it })
+                val saved = if (rename.isCard) saveCards(activeCards.map { if (it.id == rename.id) it.copy(name = newName) else it })
+                else saveCodes(activeCodes.map { if (it.id == rename.id) it.copy(issuer = newName) else it })
                 if (saved) renameTarget = null
             },
             onBack = { renameTarget = null },
@@ -546,25 +560,25 @@ private fun LoadedPakaApp(
 
     val managing = manageMode
     if (managing != null) {
-        val rows = if (managing == Mode.CARDS) cards.map { ManageRow(it.id, it.name) }
-        else codes.map { ManageRow(it.id, it.title()) }
+        val rows = if (managing == Mode.CARDS) activeCards.map { ManageRow(it.id, it.name) }
+        else activeCodes.map { ManageRow(it.id, it.title()) }
         ManageScreen(
             rows = rows,
             onRename = { id ->
-                if (managing == Mode.CARDS) cards.firstOrNull { it.id == id }?.let { renameTarget = RenameTarget(it.id, it.name, true) }
-                else codes.firstOrNull { it.id == id }?.let { renameTarget = RenameTarget(it.id, it.issuer, false) }
+                if (managing == Mode.CARDS) activeCards.firstOrNull { it.id == id }?.let { renameTarget = RenameTarget(it.id, it.name, true) }
+                else activeCodes.firstOrNull { it.id == id }?.let { renameTarget = RenameTarget(it.id, it.issuer, false) }
             },
             onUp = { id ->
-                if (managing == Mode.CARDS) saveCards(cards.moved(cards.indexOfFirst { it.id == id }, true))
-                else saveCodes(codes.moved(codes.indexOfFirst { it.id == id }, true))
+                if (managing == Mode.CARDS) saveCards(activeCards.moved(activeCards.indexOfFirst { it.id == id }, true))
+                else saveCodes(activeCodes.moved(activeCodes.indexOfFirst { it.id == id }, true))
             },
             onDown = { id ->
-                if (managing == Mode.CARDS) saveCards(cards.moved(cards.indexOfFirst { it.id == id }, false))
-                else saveCodes(codes.moved(codes.indexOfFirst { it.id == id }, false))
+                if (managing == Mode.CARDS) saveCards(activeCards.moved(activeCards.indexOfFirst { it.id == id }, false))
+                else saveCodes(activeCodes.moved(activeCodes.indexOfFirst { it.id == id }, false))
             },
             onDelete = { id ->
-                if (managing == Mode.CARDS) saveCards(cards.filter { it.id != id })
-                else saveCodes(codes.filter { it.id != id })
+                if (managing == Mode.CARDS) saveCards(activeCards.filter { it.id != id })
+                else saveCodes(activeCodes.filter { it.id != id })
             },
             onBack = { manageMode = null },
         )
@@ -589,6 +603,28 @@ private fun LoadedPakaApp(
             onMaxCodeBrightness = { enabled ->
                 maxCodeBrightnessEnabled = enabled
                 Prefs.setMaxCodeBrightness(context, enabled)
+            },
+            demoModeEnabled = demoModeEnabled,
+            onDemoMode = { enabled ->
+                if (enabled) {
+                    demoContent = DemoData.create()
+                    pendingClipboard?.let { pending ->
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
+                        if (current == pending.value) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+                            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                        }
+                    }
+                    pendingClipboard = null
+                }
+                demoModeEnabled = enabled
+                Prefs.setDemoMode(context, enabled)
+                Toast.makeText(
+                    context,
+                    if (enabled) "temporary demo data enabled" else "real data restored",
+                    Toast.LENGTH_SHORT,
+                ).show()
             },
             onBack = { showDev = false },
         )
@@ -659,7 +695,10 @@ private fun LoadedPakaApp(
     if (showSettings) {
         SettingsScreen(
             onReorder = { manageMode = mode },
-            onBackup = { showBackup = true },
+            onBackup = {
+                if (demoModeEnabled) Toast.makeText(context, "backup is unavailable in demo mode", Toast.LENGTH_SHORT).show()
+                else showBackup = true
+            },
             vibrationEnabled = vibrationEnabled,
             onVibration = { enabled ->
                 vibrationEnabled = enabled
@@ -719,14 +758,14 @@ private fun LoadedPakaApp(
 
     val detail = detailCard
     if (detail != null) {
-        val fresh = cards.firstOrNull { it.id == detail.id } ?: detail
+        val fresh = activeCards.firstOrNull { it.id == detail.id } ?: detail
         CardDetail(card = fresh, onUpdate = updateCard, onBack = { detailCard = null })
         return
     }
 
     val stackName = selectedStack
     if (stackName != null) {
-        val stackCards = cards.filter { it.stack == stackName }
+        val stackCards = activeCards.filter { it.stack == stackName }
         BackHandler { selectedStack = null }
         StackScreen(
             name = stackName,
@@ -740,7 +779,7 @@ private fun LoadedPakaApp(
 
     val card = selectedCard
     if (card != null) {
-        val fresh = cards.firstOrNull { it.id == card.id } ?: card
+        val fresh = activeCards.firstOrNull { it.id == card.id } ?: card
         BackHandler { selectedCard = null }
         CardScreen(
             card = fresh,
@@ -753,24 +792,24 @@ private fun LoadedPakaApp(
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
-            Text("Paka", color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
+            Text(if (demoModeEnabled) "Paka · demo" else "Paka", color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
         }
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (mode) {
                 Mode.CARDS ->
-                    if (cards.isEmpty()) EmptyHint("tap + to add a card")
+                    if (activeCards.isEmpty()) EmptyHint("tap + to add a card")
                     else CardsList(
-                        entries = buildEntries(cards),
+                        entries = buildEntries(activeCards),
                         textSize = textSize,
                         onOpenCard = { selectedCard = it },
                         onOpenStack = { selectedStack = it },
                         onDetail = { detailCard = it },
                     )
                 Mode.CODES ->
-                    if (codes.isEmpty()) EmptyHint("tap + to add a code")
+                    if (activeCodes.isEmpty()) EmptyHint("tap + to add a code")
                     else CodesList(
-                        accounts = codes,
+                        accounts = activeCodes,
                         nowMs = nowMs,
                         textSize = textSize,
                         onCopy = { code ->
@@ -1481,13 +1520,15 @@ private fun DevScreen(
     onAutoLight: (Boolean) -> Unit,
     maxCodeBrightnessEnabled: Boolean,
     onMaxCodeBrightness: (Boolean) -> Unit,
+    demoModeEnabled: Boolean,
+    onDemoMode: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("developer", onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            PagedList(listOf(0, 1, 2, 3, 4, 5)) { item ->
+            PagedList(listOf(0, 1, 2, 3, 4, 5, 6)) { item ->
                 when (item) {
                     0 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("text size", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light, modifier = Modifier.weight(1f))
@@ -1527,10 +1568,15 @@ private fun DevScreen(
                         trailing = if (autoLightEnabled) "on" else "off",
                         onClick = { onAutoLight(!autoLightEnabled) },
                     )
-                    else -> SettingsItem(
+                    5 -> SettingsItem(
                         label = "max brightness",
                         trailing = if (maxCodeBrightnessEnabled) "on" else "off",
                         onClick = { onMaxCodeBrightness(!maxCodeBrightnessEnabled) },
+                    )
+                    else -> SettingsItem(
+                        label = "demo mode",
+                        trailing = if (demoModeEnabled) "on" else "off",
+                        onClick = { onDemoMode(!demoModeEnabled) },
                     )
                 }
             }

@@ -2,6 +2,20 @@
 
 Notable changes to Paka are documented here.
 
+## 0.12.8 — 2026-07-02
+
+### Added
+
+- Developer demo mode with freshly generated synthetic passes and 2FA accounts.
+- A subtle `Paka · demo` title so temporary data cannot be mistaken for the real store.
+
+### Security
+
+- Demo data exists only in memory: adding, editing, reordering, or deleting it never writes to the encrypted real stores.
+- Backup export and restore are unavailable while demo mode is active.
+- Enabling demo mode clears a Paka-owned real 2FA code from the clipboard.
+- Screenshots of the synthetic 2FA list are allowed in demo mode, while manual 2FA entry, scanning, backups, and the real 2FA list remain protected.
+
 ## 0.12.7 — 2026-07-02
 
 ### Added

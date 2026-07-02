@@ -12,6 +12,7 @@ object Prefs {
     private const val KEY_AUTO_LIGHT = "automatic_camera_light"
     private const val KEY_MAX_CODE_BRIGHTNESS = "maximum_code_brightness"
     private const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
+    private const val KEY_DEMO_MODE = "demo_mode"
 
     const val DEFAULT_TEXT_SIZE = 30f
 
@@ -46,6 +47,12 @@ object Prefs {
 
     fun setMaxCodeBrightness(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_MAX_CODE_BRIGHTNESS, enabled).apply()
+    }
+
+    fun demoMode(context: Context): Boolean = prefs(context).getBoolean(KEY_DEMO_MODE, false)
+
+    fun setDemoMode(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DEMO_MODE, enabled).apply()
     }
 
     fun onboardingComplete(context: Context): Boolean =

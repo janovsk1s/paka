@@ -4,7 +4,7 @@ Paka is an intentionally small, offline card-and-authenticator tool designed for
 Light Phone III. It scans and renders common barcode formats and generates TOTP
 codes without Google Play Services.
 
-Current release: **0.12.6**
+Current release: **0.12.8**
 
 ## Photos
 
@@ -54,6 +54,8 @@ and can engage the camera light automatically. Rendered barcodes are decoded and
 payload-checked before display; a bounded memory cache keeps common passes fast.
 Paka returns to the pass list after leaving the app by default; the hidden
 Developer screen can disable that behavior.
+The same screen can enable an isolated demo mode with freshly generated,
+in-memory passes and 2FA accounts; demo changes never touch the real stores.
 
 ## Building
 
