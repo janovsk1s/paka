@@ -8,15 +8,15 @@ codes without Google Play Services.
 
 - Paka requests camera access only while scanning.
 - Paka does not request internet access and contains no analytics or advertising.
-- Card data stays inside the application sandbox.
-- TOTP secrets are encrypted with AES-256-GCM using a key held by Android Keystore.
+- Pass data and TOTP secrets are encrypted with separate AES-256-GCM keys held
+  by Android Keystore. Existing plaintext pass stores migrate automatically.
 - Android cloud backup and device transfer are disabled.
 - User-created portable backups are encrypted and authenticated offline with an
   AES-256-GCM key derived from the user's passphrase.
 - TOTP codes copied to the clipboard are marked sensitive and cleared after 30 seconds.
 
-Uninstalling Paka permanently removes data that was not exported first. If the
-Android Keystore key is invalidated, on-device encrypted TOTP accounts can only
+Uninstalling Paka permanently removes data that was not exported first. If an
+Android Keystore key is invalidated, on-device encrypted data can only
 be recovered from a user-created encrypted backup. Paka cannot recover a forgotten
 backup passphrase.
 
@@ -33,11 +33,12 @@ payload-checked before display; a bounded memory cache keeps common passes fast.
 ## Building
 
 The project requires JDK 17 and the Android SDK declared by `compileSdk` in the
-app module. A public release must be signed with a protected release key; release
-builds are deliberately not debug-signed.
+app module. Release builds use the local `keystore.properties` configuration;
+that ignored file and its referenced keystore must be backed up together because
+future upgrades require the same signing identity.
 
 ```sh
-./gradlew test lint assembleDebug
+./gradlew test lint assembleDebug assembleRelease
 ```
 
 LightOS SDK integration should use the official Compose design library and

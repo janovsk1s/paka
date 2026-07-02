@@ -1,4 +1,10 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+
+val signingPropertiesFile = rootProject.file("keystore.properties")
+val signingProperties = Properties().apply {
+    if (signingPropertiesFile.exists()) signingPropertiesFile.inputStream().use(::load)
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -14,14 +20,26 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.11.1"
+        versionCode = 27
+        versionName = "0.12.0"
+    }
+
+    signingConfigs {
+        if (signingPropertiesFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(signingProperties.getProperty("storeFile"))
+                storePassword = signingProperties.getProperty("storePassword")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                keyPassword = signingProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

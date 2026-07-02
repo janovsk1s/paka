@@ -23,6 +23,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,7 +59,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -72,6 +73,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
@@ -95,14 +97,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.sin
 
 private enum class Mode { CARDS, CODES }
@@ -113,6 +114,10 @@ private enum class ManageGlyph { RENAME, UP, DOWN, DELETE }
 private sealed interface Entry
 private data class SingleEntry(val card: Card) : Entry
 private data class StackEntry(val name: String, val cards: List<Card>) : Entry
+private sealed interface PendingDuplicate {
+    data class Pass(val candidate: Card, val existingName: String) : PendingDuplicate
+    data class Code(val candidate: OtpAccount, val existingName: String) : PendingDuplicate
+}
 
 private data class ManageRow(val id: String, val name: String)
 private data class RenameTarget(val id: String, val current: String, val isCard: Boolean)
@@ -206,6 +211,7 @@ fun PakaApp() {
     var showBackup by remember { mutableStateOf(false) }
     var manageMode by remember { mutableStateOf<Mode?>(null) }
     var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
+    var pendingDuplicate by remember { mutableStateOf<PendingDuplicate?>(null) }
     var selectedCard by remember { mutableStateOf<Card?>(null) }
     var selectedStack by remember { mutableStateOf<String?>(null) }
     var detailCard by remember { mutableStateOf<Card?>(null) }
@@ -220,7 +226,7 @@ fun PakaApp() {
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
     val homeVisible =
-        !showSettings && !showBackup && manageMode == null && renameTarget == null && !showDev &&
+        !showSettings && !showBackup && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
     val codesVisible = mode == Mode.CODES && homeVisible
@@ -279,8 +285,28 @@ fun PakaApp() {
     }
 
     val updateCard: (Card) -> Boolean = { u -> saveCards(cards.map { if (it.id == u.id) u else it }) }
-    fun addCode(account: OtpAccount): Boolean {
+    fun addCard(card: Card, allowDuplicate: Boolean = false): Boolean {
+        if (!allowDuplicate) {
+            cards.firstOrNull { it.format == card.format && it.data == card.data }?.let { existing ->
+                pendingDuplicate = PendingDuplicate.Pass(card, existing.name)
+                return false
+            }
+        }
+        if (!saveCards(cards + card)) return false
+        manualCard = false
+        pendingScan = null
+        selectedCard = card
+        return true
+    }
+    fun addCode(account: OtpAccount, allowDuplicate: Boolean = false): Boolean {
+        if (!allowDuplicate) {
+            codes.firstOrNull { it.duplicateKey() == account.duplicateKey() }?.let { existing ->
+                pendingDuplicate = PendingDuplicate.Code(account, existing.title())
+                return false
+            }
+        }
         if (!saveCodes(codes + account)) return false
+        manualCode = false
         mode = Mode.CODES
         return true
     }
@@ -302,6 +328,39 @@ fun PakaApp() {
     ProtectSensitiveContent(mode == Mode.CODES || manualCode || showBackup || (scanning && scanMode == ScanMode.CODE))
 
     // ---- routing (topmost overlay wins) ----
+
+    when (val duplicate = pendingDuplicate) {
+        is PendingDuplicate.Pass -> {
+            DuplicateConfirmScreen(
+                kind = "pass",
+                existingName = duplicate.existingName,
+                onConfirm = {
+                    if (addCard(duplicate.candidate, allowDuplicate = true)) pendingDuplicate = null
+                },
+                onBack = {
+                    pendingDuplicate = null
+                    manualCard = false
+                    pendingScan = null
+                },
+            )
+            return
+        }
+        is PendingDuplicate.Code -> {
+            DuplicateConfirmScreen(
+                kind = "code",
+                existingName = duplicate.existingName,
+                onConfirm = {
+                    if (addCode(duplicate.candidate, allowDuplicate = true)) pendingDuplicate = null
+                },
+                onBack = {
+                    pendingDuplicate = null
+                    manualCode = false
+                },
+            )
+            return
+        }
+        null -> Unit
+    }
 
     val rename = renameTarget
     if (rename != null) {
@@ -407,19 +466,14 @@ fun PakaApp() {
 
     if (manualCard) {
         ManualCardScreen(
-            onSave = { card ->
-                if (saveCards(cards + card)) {
-                    manualCard = false
-                    selectedCard = card
-                }
-            },
+            onSave = { card -> addCard(card) },
             onBack = { manualCard = false },
         )
         return
     }
 
     if (manualCode) {
-        ManualCodeScreen(onSave = { if (addCode(it)) manualCode = false }, onBack = { manualCode = false })
+        ManualCodeScreen(onSave = { addCode(it) }, onBack = { manualCode = false })
         return
     }
 
@@ -430,10 +484,7 @@ fun PakaApp() {
             initial = "",
             onSave = { name ->
                 val card = Card(name = name, data = pending.data, format = pending.format)
-                if (saveCards(cards + card)) {
-                    pendingScan = null
-                    selectedCard = card
-                }
+                addCard(card)
             },
             onBack = { pendingScan = null },
         )
@@ -556,7 +607,7 @@ private fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Co
     val state = rememberHapticScrollState()
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(top = topPadding, end = 14.dp, bottom = 8.dp).verticalScroll(state),
+            modifier = Modifier.fillMaxSize().padding(top = topPadding, end = 14.dp, bottom = 8.dp).hardSnapVerticalScroll(state),
             verticalArrangement = Arrangement.spacedBy(spacing),
             content = content,
         )
@@ -566,17 +617,36 @@ private fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Co
 
 @Composable
 private fun rememberHapticScrollState(): ScrollState {
-    val state = rememberScrollState()
+    return rememberScrollState()
+}
+
+/** Follow the finger while dragging, then cut immediately to the nearest viewport boundary. */
+@Composable
+private fun Modifier.hardSnapVerticalScroll(state: ScrollState): Modifier {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    val stepPx = with(LocalDensity.current) { 48.dp.roundToPx().coerceAtLeast(1) }
-    LaunchedEffect(state, stepPx) {
-        snapshotFlow { state.value / stepPx }
-            .distinctUntilChanged()
-            .drop(1)
-            .collect { performPakaHaptic(context, haptics) }
+    var viewportPx by remember { mutableIntStateOf(1) }
+    var settledValue by remember(state) { mutableIntStateOf(state.value) }
+    val flingBehavior = remember(state) {
+        object : FlingBehavior {
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                val page = viewportPx.coerceAtLeast(1)
+                val current = state.value
+                val lower = (current / page) * page
+                val upper = min(lower + page, state.maxValue)
+                val target = listOf(lower, upper, state.maxValue)
+                    .distinct()
+                    .minByOrNull { abs(it - current) }
+                    ?: current
+                scrollBy((target - current).toFloat())
+                if (target != settledValue) performPakaHaptic(context, haptics)
+                settledValue = target
+                return 0f
+            }
+        }
     }
-    return state
+    return onSizeChanged { viewportPx = it.height.coerceAtLeast(1) }
+        .verticalScroll(state, flingBehavior = flingBehavior)
 }
 
 /** Thin white track + thicker white segment, square ends, sized to the visible portion. */
@@ -604,7 +674,7 @@ private const val ITEMS_PER_PAGE = 5
 private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
     val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
     if (pages.isEmpty()) return
-    HardCutPager(pageCount = pages.size) { currentPage ->
+    HardCutPager(pageCount = pages.size) { currentPage, _ ->
         Column(
             modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp),
         ) {
@@ -627,7 +697,8 @@ private fun <T> PagedList(items: List<T>, content: @Composable (T) -> Unit) {
 private fun HardCutPager(
     pageCount: Int,
     modifier: Modifier = Modifier,
-    content: @Composable (Int) -> Unit,
+    indicatorOffset: Dp = 18.dp,
+    content: @Composable (Int, () -> Unit) -> Unit,
 ) {
     if (pageCount <= 0) return
     val context = LocalContext.current
@@ -672,11 +743,12 @@ private fun HardCutPager(
             )
         },
     ) {
-        content(currentPage)
+        content(currentPage) { page = (currentPage + 1) % pageCount }
         if (pageCount > 1) {
             PageIndicator(
                 page = currentPage,
                 pageCount = pageCount,
+                horizontalOffset = indicatorOffset,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -684,8 +756,8 @@ private fun HardCutPager(
 }
 
 @Composable
-private fun PageIndicator(page: Int, pageCount: Int, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.offset(x = 18.dp).fillMaxHeight().width(6.dp)) {
+private fun PageIndicator(page: Int, pageCount: Int, horizontalOffset: Dp, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.offset(x = horizontalOffset).fillMaxHeight().width(6.dp)) {
         val topMargin = 20.dp.toPx()
         val bottomMargin = 6.dp.toPx()
         val trackLength = (size.height - topMargin - bottomMargin).coerceAtLeast(1f)
@@ -765,6 +837,13 @@ private fun formatCode(code: String): String = when (code.length) {
     else -> code
 }
 
+private fun OtpAccount.duplicateKey(): String = listOf(
+    secret.filterNot { it.isWhitespace() || it == '-' }.uppercase(Locale.ROOT),
+    digits.toString(),
+    period.toString(),
+    algorithm.uppercase(Locale.ROOT),
+).joinToString(":")
+
 @Composable
 private fun SettingsScreen(
     onReorder: () -> Unit,
@@ -815,7 +894,7 @@ private fun SettingsItem(label: String, trailing: String? = null, onClick: () ->
         modifier = Modifier.fillMaxWidth().height(72.dp).then(tapModifier(onClick)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = White, fontSize = 36.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
+        Text(label, color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
         if (trailing != null) Text(trailing, color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
     }
 }
@@ -923,14 +1002,14 @@ private fun BackupScreen(
                     Text(
                         "encrypted export",
                         color = White,
-                        fontSize = 36.sp,
+                        fontSize = 30.sp,
                         fontWeight = FontWeight.Normal,
                         modifier = Modifier.fillMaxWidth().then(tapModifier { step = BackupStep.EXPORT_PASSWORD }),
                     )
                     Text(
                         "restore backup",
                         color = White,
-                        fontSize = 36.sp,
+                        fontSize = 30.sp,
                         fontWeight = FontWeight.Normal,
                         modifier = Modifier.fillMaxWidth().then(
                             tapModifier {
@@ -950,7 +1029,7 @@ private fun BackupScreen(
             BackupStep.EXPORT_PASSWORD -> {
                 val canExport = passphrase.length >= 8 && passphrase == confirmation && !busy
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 28.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     Text("Use at least 8 characters. This passphrase cannot be recovered.", color = Grey, fontSize = 16.sp)
@@ -1038,7 +1117,7 @@ private fun BackupScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("replace current data?", color = White, fontSize = 32.sp, fontWeight = FontWeight.Normal)
+                    Text("replace current data?", color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal)
                     Spacer(Modifier.height(24.dp))
                     Text(
                         "${data?.cards?.size ?: 0} passes · ${data?.accounts?.size ?: 0} codes\nCurrent data will be replaced.",
@@ -1127,20 +1206,25 @@ private fun ManageScreen(
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("manage", onBack)
-        ScrollList(topPadding = 20.dp, spacing = 20.dp) {
+        ScrollList(topPadding = 16.dp, spacing = 8.dp) {
             rows.forEachIndexed { index, row ->
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(row.name, color = White, fontSize = 24.sp, fontWeight = FontWeight.Light, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ManageGlyphAction(ManageGlyph.RENAME, "Rename ${row.name}", Modifier.weight(1f)) { onRename(row.id) }
-                        ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.weight(1f), enabled = index > 0) { onUp(row.id) }
-                        ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.weight(1f), enabled = index < rows.lastIndex) { onDown(row.id) }
-                        ManageGlyphAction(ManageGlyph.DELETE, "Delete ${row.name}", Modifier.weight(1f), muted = true) { pendingDelete = row }
-                    }
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(76.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        row.name,
+                        color = White,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ManageGlyphAction(ManageGlyph.RENAME, "Rename ${row.name}", Modifier.width(42.dp)) { onRename(row.id) }
+                    ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(42.dp), enabled = index > 0) { onUp(row.id) }
+                    ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(42.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
+                    ManageGlyphAction(ManageGlyph.DELETE, "Delete ${row.name}", Modifier.width(42.dp), muted = true) { pendingDelete = row }
                 }
             }
         }
@@ -1163,11 +1247,11 @@ private fun ManageGlyphAction(
     }
     Box(
         modifier = modifier
-            .height(52.dp)
+            .height(48.dp)
             .then(if (enabled) tapModifier(onClick, description) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(28.dp)) {
+        Canvas(Modifier.size(24.dp)) {
             val stroke = 2.dp.toPx()
             when (glyph) {
                 ManageGlyph.RENAME -> {
@@ -1199,9 +1283,26 @@ private fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () 
         modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("delete $name?", color = White, fontSize = 34.sp, fontWeight = FontWeight.Normal)
+        Text("delete $name?", color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal)
         Spacer(Modifier.height(44.dp))
         Text("delete", color = White, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier(onConfirm)))
+        Spacer(Modifier.height(28.dp))
+        Text("cancel", color = Grey, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier(onBack)))
+    }
+}
+
+@Composable
+private fun DuplicateConfirmScreen(kind: String, existingName: String, onConfirm: () -> Unit, onBack: () -> Unit) {
+    BackHandler { onBack() }
+    Column(
+        modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("$kind already added", color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal)
+        Spacer(Modifier.height(18.dp))
+        Text("matches $existingName", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+        Spacer(Modifier.height(44.dp))
+        Text("add anyway", color = White, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier(onConfirm)))
         Spacer(Modifier.height(28.dp))
         Text("cancel", color = Grey, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier(onBack)))
     }
@@ -1219,7 +1320,7 @@ private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("card", onBack)
         Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 20.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 20.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             EditField("name", name, { name = it }, "e.g. Billa")
@@ -1265,7 +1366,7 @@ private fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("code", onBack)
         Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberHapticScrollState()).padding(top = 20.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 20.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             EditField("name", issuer, { issuer = it }, "e.g. GitHub")
@@ -1299,7 +1400,7 @@ private fun TextEntryScreen(title: String, initial: String, onSave: (String) -> 
                     value = text,
                     onValueChange = { text = it },
                     singleLine = true,
-                    textStyle = TextStyle(color = White, fontSize = 40.sp, fontWeight = FontWeight.Normal),
+                    textStyle = TextStyle(color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal),
                     cursorBrush = SolidColor(White),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { keyboard?.hide(); onSave(text.trim()) } }),
@@ -1329,7 +1430,7 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onBack: () -> Un
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("details", persistAndBack)
-        HardCutPager(pageCount = 2, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
+        HardCutPager(pageCount = 2, modifier = Modifier.weight(1f).fillMaxWidth()) { page, _ ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(top = 12.dp, end = 14.dp, bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -1425,13 +1526,17 @@ private fun BarcodePanel(
     modifier: Modifier = Modifier,
     preRendered: BarcodeRender? = null,
     usePreRendered: Boolean = false,
+    longPressOnly: Boolean = false,
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
             .background(White)
-            .then(tapLongModifier(onClick = onClick, onLongClick = onLongClick, label = card.name))
+            .then(
+                if (longPressOnly) longPressModifier(onLongClick = onLongClick, label = card.name)
+                else tapLongModifier(onClick = onClick, onLongClick = onLongClick, label = card.name),
+            )
             .padding(8.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -1468,10 +1573,6 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
         return
     }
     KeepScreenBright()
-    var index by remember(name) { mutableIntStateOf(0) }
-    val i = index % cards.size
-    val card = cards[i]
-
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(name, onBack) }
         BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -1492,16 +1593,23 @@ private fun StackScreen(name: String, cards: List<Card>, onLongCurrent: (Card) -
                 launch { uniqueCards.firstOrNull()?.let { render(it) } }
                 launch { uniqueCards.drop(1).forEach { render(it) } }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                BarcodePanel(
-                    card = card,
-                    onClick = { index = (index + 1) % cards.size },
-                    onLongClick = { onLongCurrent(card) },
-                    preRendered = rendered[card.id],
-                    usePreRendered = true,
-                )
-                Spacer(Modifier.height(18.dp))
-                Text("${card.name} · ${i + 1}/${cards.size}", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
+            HardCutPager(pageCount = cards.size, indicatorOffset = (-10).dp) { index, advance ->
+                val card = cards[index]
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    BarcodePanel(
+                        card = card,
+                        onClick = advance,
+                        onLongClick = { onLongCurrent(card) },
+                        preRendered = rendered[card.id],
+                        usePreRendered = true,
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Text("${card.name} · ${index + 1}/${cards.size}", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
+                }
             }
         }
     }
@@ -1513,7 +1621,7 @@ private fun CardScreen(card: Card, onLong: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            BarcodePanel(card = card, onClick = {}, onLongClick = onLong)
+            BarcodePanel(card = card, onClick = {}, onLongClick = onLong, longPressOnly = true)
         }
     }
 }

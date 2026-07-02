@@ -87,6 +87,29 @@ internal fun tapLongModifier(onClick: () -> Unit, onLongClick: () -> Unit, label
     )
 }
 
+/** Long-press interaction whose ordinary tap is intentionally silent. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+@SuppressLint("ModifierFactoryExtensionFunction")
+internal fun longPressModifier(onLongClick: () -> Unit, label: String? = null): Modifier {
+    val interaction = remember { MutableInteractionSource() }
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val semantics = if (label == null) Modifier else Modifier.semantics {
+        contentDescription = label
+        role = Role.Button
+    }
+    return semantics.combinedClickable(
+        interactionSource = interaction,
+        indication = null,
+        onClick = {},
+        onLongClick = {
+            performPakaHaptic(context, haptics, HapticFeedbackType.LongPress)
+            onLongClick()
+        },
+    )
+}
+
 @Composable
 internal fun BackArrow(modifier: Modifier = Modifier, onBack: () -> Unit) {
     Canvas(modifier = modifier.size(48.dp).then(tapModifier(onBack, "Back"))) {
