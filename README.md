@@ -4,6 +4,8 @@ Paka is an intentionally small, offline card-and-authenticator tool designed for
 Light Phone III. It scans and renders common barcode formats and generates TOTP
 codes without Google Play Services.
 
+Current release: **0.12.6**
+
 ## Privacy
 
 - Paka requests camera access only while scanning.
@@ -46,5 +48,15 @@ future upgrades require the same signing identity.
 LightOS SDK integration should use the official Compose design library and
 emulator when those developer-program dependencies are available.
 
-Before publishing to the Tool Library, the project owner should choose and add
-an explicit open-source license.
+## License
+
+Copyright © 2026 Adrians Janovskis ([@janovsk1s](https://github.com/janovsk1s)).
+
+Paka is licensed under [GPL-3.0-only](LICENSE), with the attribution and branding
+terms in [ADDITIONAL_TERMS.md](ADDITIONAL_TERMS.md). Distributed modifications
+must remain open source under GPLv3, disclose their corresponding source, retain
+the required attribution, and identify themselves as modified.
+
+See [NOTICE](NOTICE), [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md), and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for authorship, AI-assistance,
+and dependency information.
