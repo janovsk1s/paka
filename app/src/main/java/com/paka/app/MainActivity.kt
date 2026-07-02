@@ -109,7 +109,7 @@ import kotlin.math.sin
 private enum class Mode { CARDS, CODES }
 private enum class ScanMode { CARD, CODE }
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
-private enum class ManageGlyph { RENAME, UP, DOWN, DELETE }
+private enum class ManageGlyph { UP, DOWN, MORE }
 
 private sealed interface Entry
 private data class SingleEntry(val card: Card) : Entry
@@ -216,6 +216,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
     var mode by remember { mutableStateOf(Mode.CARDS) }
     var showSettings by remember { mutableStateOf(false) }
     var showBackup by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     var manageMode by remember { mutableStateOf<Mode?>(null) }
     var renameTarget by remember { mutableStateOf<RenameTarget?>(null) }
     var pendingDuplicate by remember { mutableStateOf<PendingDuplicate?>(null) }
@@ -234,7 +235,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
     val homeVisible =
-        !showSettings && !showBackup && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
+        !showSettings && !showBackup && !showAbout && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
     val codesVisible = mode == Mode.CODES && homeVisible
@@ -244,6 +245,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
             mode = Mode.CARDS
             showSettings = false
             showBackup = false
+            showAbout = false
             manageMode = null
             renameTarget = null
             pendingDuplicate = null
@@ -444,6 +446,11 @@ fun PakaApp(homeResetSignal: Int = 0) {
         return
     }
 
+    if (showAbout) {
+        AboutScreen(onDev = { showDev = true }, onBack = { showAbout = false })
+        return
+    }
+
     if (showBackup) {
         BackupScreen(
             cards = cards,
@@ -493,7 +500,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
                 vibrationEnabled = enabled
                 Prefs.setVibration(context, enabled)
             },
-            onDev = { showDev = true },
+            onAbout = { showAbout = true },
             onBack = { showSettings = false },
         )
         return
@@ -885,14 +892,12 @@ private fun SettingsScreen(
     onBackup: () -> Unit,
     vibrationEnabled: Boolean,
     onVibration: (Boolean) -> Unit,
-    onDev: () -> Unit,
+    onAbout: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    var aboutTaps by remember { mutableStateOf(0) }
-    var lastTap by remember { mutableStateOf(0L) }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("settings", onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -909,16 +914,57 @@ private fun SettingsScreen(
                                 onVibration(enabled)
                                 if (enabled) performPakaHaptic(context, haptics)
                             }
-                            else -> {
-                                val now = System.currentTimeMillis()
-                                aboutTaps = if (now - lastTap < 600) aboutTaps + 1 else 1
-                                lastTap = now
-                                if (aboutTaps >= 3) { aboutTaps = 0; onDev() }
-                            }
+                            else -> onAbout()
                         }
                     },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
+    var taps by remember { mutableStateOf(0) }
+    var lastTap by remember { mutableStateOf(0L) }
+    val hiddenDeveloperTap = {
+        val now = System.currentTimeMillis()
+        taps = if (now - lastTap < 600) taps + 1 else 1
+        lastTap = now
+        if (taps >= 3) {
+            taps = 0
+            onDev()
+        }
+    }
+    BackHandler { onBack() }
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+        SimpleTopBar("about", onBack)
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 34.dp, end = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(28.dp),
+        ) {
+            Text(
+                "Paka",
+                color = White,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Normal,
+                modifier = Modifier.fillMaxWidth().then(tapModifier(hiddenDeveloperTap)),
+            )
+            Text("Latvian for “package.”", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+            Text(
+                "Saves passes and carries 2FA codes in a light way.",
+                color = White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Normal,
+            )
+            Text(
+                "Long-presses may reveal more options.",
+                color = Grey,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Light,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text("With care, from a Latvian.", color = White, fontSize = 18.sp, fontWeight = FontWeight.Light)
         }
     }
 }
@@ -1235,6 +1281,7 @@ private fun ManageScreen(
     onBack: () -> Unit,
 ) {
     var pendingDelete by remember { mutableStateOf<ManageRow?>(null) }
+    var actionRow by remember { mutableStateOf<ManageRow?>(null) }
     val deleting = pendingDelete
     if (deleting != null) {
         ConfirmDeleteScreen(
@@ -1244,9 +1291,22 @@ private fun ManageScreen(
         )
         return
     }
+    val editing = actionRow
+    if (editing != null) {
+        ManageItemScreen(
+            row = editing,
+            onRename = { onRename(editing.id) },
+            onDelete = {
+                actionRow = null
+                pendingDelete = editing
+            },
+            onBack = { actionRow = null },
+        )
+        return
+    }
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("manage", onBack)
+        SimpleTopBar("reorder", onBack)
         PagedList(rows) { row ->
                 val index = rows.indexOfFirst { it.id == row.id }
                 Row(
@@ -1262,11 +1322,40 @@ private fun ManageScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    ManageGlyphAction(ManageGlyph.RENAME, "Rename ${row.name}", Modifier.width(42.dp)) { onRename(row.id) }
-                    ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(42.dp), enabled = index > 0) { onUp(row.id) }
-                    ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(42.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
-                    ManageGlyphAction(ManageGlyph.DELETE, "Delete ${row.name}", Modifier.width(42.dp), muted = true) { pendingDelete = row }
+                    ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(38.dp), enabled = index > 0) { onUp(row.id) }
+                    ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(38.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
+                    ManageGlyphAction(ManageGlyph.MORE, "Edit ${row.name}", Modifier.width(42.dp)) { actionRow = row }
                 }
+        }
+    }
+}
+
+@Composable
+private fun ManageItemScreen(row: ManageRow, onRename: () -> Unit, onDelete: () -> Unit, onBack: () -> Unit) {
+    BackHandler { onBack() }
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+        SimpleTopBar("edit", onBack)
+        PagedList(listOf(0, 1, 2)) { item ->
+            val label = when (item) {
+                0 -> row.name
+                1 -> "rename"
+                else -> "delete"
+            }
+            Text(
+                text = label,
+                color = if (item == 0) Grey else White,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Normal,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().then(
+                    when (item) {
+                        1 -> tapModifier(onRename)
+                        2 -> tapModifier(onDelete)
+                        else -> Modifier
+                    },
+                ),
+            )
         }
     }
 }
@@ -1277,12 +1366,10 @@ private fun ManageGlyphAction(
     description: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    muted: Boolean = false,
     onClick: () -> Unit,
 ) {
     val color = when {
         !enabled -> Grey.copy(alpha = 0.45f)
-        muted -> Grey
         else -> White
     }
     Box(
@@ -1294,11 +1381,6 @@ private fun ManageGlyphAction(
         Canvas(Modifier.size(24.dp)) {
             val stroke = 2.dp.toPx()
             when (glyph) {
-                ManageGlyph.RENAME -> {
-                    drawLine(color, Offset(size.width * 0.27f, size.height * 0.73f), Offset(size.width * 0.68f, size.height * 0.32f), stroke, StrokeCap.Square)
-                    drawLine(color, Offset(size.width * 0.63f, size.height * 0.27f), Offset(size.width * 0.73f, size.height * 0.37f), stroke, StrokeCap.Square)
-                    drawLine(color, Offset(size.width * 0.23f, size.height * 0.77f), Offset(size.width * 0.35f, size.height * 0.73f), stroke, StrokeCap.Square)
-                }
                 ManageGlyph.UP -> {
                     drawLine(color, Offset(size.width * 0.27f, size.height * 0.59f), Offset(size.width * 0.5f, size.height * 0.36f), stroke, StrokeCap.Square)
                     drawLine(color, Offset(size.width * 0.5f, size.height * 0.36f), Offset(size.width * 0.73f, size.height * 0.59f), stroke, StrokeCap.Square)
@@ -1307,9 +1389,11 @@ private fun ManageGlyphAction(
                     drawLine(color, Offset(size.width * 0.27f, size.height * 0.41f), Offset(size.width * 0.5f, size.height * 0.64f), stroke, StrokeCap.Square)
                     drawLine(color, Offset(size.width * 0.5f, size.height * 0.64f), Offset(size.width * 0.73f, size.height * 0.41f), stroke, StrokeCap.Square)
                 }
-                ManageGlyph.DELETE -> {
-                    drawLine(color, Offset(size.width * 0.31f, size.height * 0.31f), Offset(size.width * 0.69f, size.height * 0.69f), stroke, StrokeCap.Square)
-                    drawLine(color, Offset(size.width * 0.69f, size.height * 0.31f), Offset(size.width * 0.31f, size.height * 0.69f), stroke, StrokeCap.Square)
+                ManageGlyph.MORE -> {
+                    val radius = 1.8.dp.toPx()
+                    drawCircle(color, radius, Offset(size.width * 0.28f, size.height * 0.5f))
+                    drawCircle(color, radius, Offset(size.width * 0.5f, size.height * 0.5f))
+                    drawCircle(color, radius, Offset(size.width * 0.72f, size.height * 0.5f))
                 }
             }
         }
