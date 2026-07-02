@@ -2,7 +2,10 @@ package com.paka.app
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -59,6 +62,10 @@ internal class PdfDocumentSession private constructor(
             val width = (page.width * scale).toInt().coerceAtLeast(1)
             val height = (page.height * scale).toInt().coerceAtLeast(1)
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            // PDF pages conventionally sit on white paper, but many files do
+            // not paint that background themselves. Without this, transparent
+            // page areas disappear into Paka's black canvas.
+            bitmap.eraseColor(Color.WHITE)
             page.render(bitmap, null, Matrix().apply { setScale(scale, scale) }, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             PdfPageBitmap(bitmap, page.width, page.height)
         }
@@ -80,9 +87,19 @@ internal class PdfDocumentSession private constructor(
         require(index in 0 until pageCount)
         renderer.openPage(index).use { page ->
             val bitmap = Bitmap.createBitmap(viewportWidth, viewportHeight, Bitmap.Config.ARGB_8888)
+            val pageScale = baseScale * zoom
+            val pageX = pageLeft + translationX
+            val pageY = pageTop + translationY
+            Canvas(bitmap).drawRect(
+                pageX,
+                pageY,
+                pageX + page.width * pageScale,
+                pageY + page.height * pageScale,
+                Paint().apply { color = Color.WHITE },
+            )
             val matrix = Matrix().apply {
-                setScale(baseScale * zoom, baseScale * zoom)
-                postTranslate(pageLeft + translationX, pageTop + translationY)
+                setScale(pageScale, pageScale)
+                postTranslate(pageX, pageY)
             }
             page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             bitmap

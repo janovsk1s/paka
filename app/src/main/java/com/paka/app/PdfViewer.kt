@@ -188,13 +188,11 @@ private fun PdfZoomPage(
 
     LaunchedEffect(session, pageIndex, viewportWidth, viewportHeight) {
         if (viewportWidth <= 0 || viewportHeight <= 0) return@LaunchedEffect
-        val contentWidth = (viewportWidth - with(density) { 32.dp.roundToPx() }).coerceAtLeast(240)
         val rendered = withContext(Dispatchers.Default) {
             runCatching {
-                // Fit the width so text opens readable; tall pages scroll. The
-                // height cap bounds bitmap memory for extreme pages — the sharp
-                // viewport layer restores full detail once settled.
-                session.renderPage(pageIndex, contentWidth, (viewportHeight * 4).coerceAtLeast(3_000))
+                // Fit the complete page into the full viewer without changing
+                // its aspect ratio. Movement is reserved for the zoomed state.
+                session.renderPage(pageIndex, viewportWidth, viewportHeight)
             }
         }.getOrNull()
         if (rendered == null) {
@@ -203,16 +201,9 @@ private fun PdfZoomPage(
         }
         renderFailed = false
         basePage = rendered
-        val fill = (contentWidth.toFloat() / rendered.bitmap.width).coerceAtLeast(1f)
-        val left = (viewportWidth - rendered.bitmap.width) / 2f
-        val top = (viewportHeight - rendered.bitmap.height) / 2f
-        zoom = fill
-        translationX = (viewportWidth - rendered.bitmap.width * fill) / 2f - left
-        translationY = if (rendered.bitmap.height * fill <= viewportHeight) {
-            (viewportHeight - rendered.bitmap.height * fill) / 2f - top
-        } else {
-            -top // start reading at the top of the page
-        }
+        zoom = 1f
+        translationX = 0f
+        translationY = 0f
         onZoomChanged(false)
     }
 
@@ -227,14 +218,9 @@ private fun PdfZoomPage(
 
     val page = basePage
     val pageLeft = if (page == null) 0f else (viewportWidth - page.bitmap.width) / 2f
-    val pageTop = if (page == null) 0f else (viewportHeight - page.bitmap.height) / 2f
-    // "Default" is fit-to-width; pinching out below it shows the whole page.
-    val contentWidthPx = (viewportWidth - with(density) { 32.dp.roundToPx() }).coerceAtLeast(240)
-    val contentHeightPx = (viewportHeight - with(density) { 32.dp.roundToPx() }).coerceAtLeast(240)
-    val fillWidthZoom = if (page == null) 1f else (contentWidthPx.toFloat() / page.bitmap.width).coerceAtLeast(1f)
-    val minZoom = if (page == null) 1f else minOf(fillWidthZoom, contentHeightPx.toFloat() / page.bitmap.height)
-    val maxZoom = maxOf(8f, fillWidthZoom * 4f)
-
+    // Match the highest content edge used by an opened barcode instead of
+    // vertically floating each PDF according to its page height.
+    val pageTop = 0f
     fun clampX(value: Float, targetZoom: Float): Float {
         val width = (page?.bitmap?.width ?: 0) * targetZoom
         return if (width <= viewportWidth) (viewportWidth - width) / 2f - pageLeft
@@ -242,7 +228,7 @@ private fun PdfZoomPage(
     }
     fun clampY(value: Float, targetZoom: Float): Float {
         val height = (page?.bitmap?.height ?: 0) * targetZoom
-        return if (height <= viewportHeight) (viewportHeight - height) / 2f - pageTop
+        return if (height <= viewportHeight) -pageTop
         else value.coerceIn(viewportHeight - pageTop - height, -pageTop)
     }
 
@@ -273,16 +259,15 @@ private fun PdfZoomPage(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(Black)
             .onSizeChanged {
                 viewportWidth = it.width
                 viewportHeight = it.height
             }
             .pointerInput(page, viewportWidth, viewportHeight) {
                 if (page == null) return@pointerInput
-                // Consume only gestures this page actually handles: a pinch, a pan
-                // while zoomed in, or a vertical scroll through a page taller than
-                // the viewport. At the page's top/bottom edge the drag falls
-                // through to HardCutPager so swiping still changes PDF pages.
+                // At rest the page is locked and drags belong to HardCutPager.
+                // Pinches and one-finger movement are consumed only while zoomed.
                 awaitEachGesture {
                     var handling = false
                     var slopPan = Offset.Zero
@@ -296,28 +281,20 @@ private fun PdfZoomPage(
                         val panChange = event.calculatePan()
                         if (!handling) {
                             slopPan += panChange
-                            val zoomedIn = zoom > fillWidthZoom + 0.05f
-                            val scaledHeight = page.bitmap.height * zoom
-                            val scrollRoom = scaledHeight > viewportHeight && run {
-                                val bottomY = viewportHeight - pageTop - scaledHeight
-                                if (slopPan.y < 0) translationY > bottomY + 0.5f
-                                else translationY < -pageTop - 0.5f
-                            }
                             handling = pointerCount > 1 ||
-                                (zoomedIn && slopPan.getDistance() > viewConfiguration.touchSlop) ||
-                                (scrollRoom && abs(slopPan.y) > viewConfiguration.touchSlop)
+                                (zoom > 1.05f && slopPan.getDistance() > viewConfiguration.touchSlop)
                         }
                         if (handling) {
                             if (zoomChange != 1f || panChange != Offset.Zero) {
                                 val centroid = event.calculateCentroid()
                                 val oldZoom = zoom
-                                val newZoom = (oldZoom * zoomChange).coerceIn(minZoom, maxZoom)
+                                val newZoom = (oldZoom * zoomChange).coerceIn(1f, 8f)
                                 val anchoredX = translationX + panChange.x +
                                     (centroid.x - pageLeft - translationX) * (1f - newZoom / oldZoom)
                                 val anchoredY = translationY + panChange.y +
                                     (centroid.y - pageTop - translationY) * (1f - newZoom / oldZoom)
                                 zoom = newZoom
-                                onZoomChanged(newZoom > fillWidthZoom + 0.05f)
+                                onZoomChanged(newZoom > 1.05f)
                                 translationX = clampX(anchoredX, newZoom)
                                 translationY = clampY(anchoredY, newZoom)
                             }
@@ -334,13 +311,13 @@ private fun PdfZoomPage(
                         onLongPress()
                     },
                     onDoubleTap = { point ->
-                        if (zoom > fillWidthZoom + 0.05f) {
-                            zoom = fillWidthZoom
+                        if (zoom > 1.05f) {
+                            zoom = 1f
                             onZoomChanged(false)
-                            translationX = clampX(0f, fillWidthZoom)
-                            translationY = clampY(-pageTop, fillWidthZoom) // back to the top
+                            translationX = 0f
+                            translationY = 0f
                         } else {
-                            val target = (fillWidthZoom * 2.5f).coerceAtMost(maxZoom)
+                            val target = 3f
                             val anchoredX = translationX + (point.x - pageLeft - translationX) * (1f - target / zoom)
                             val anchoredY = translationY + (point.y - pageTop - translationY) * (1f - target / zoom)
                             zoom = target

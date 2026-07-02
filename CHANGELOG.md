@@ -22,12 +22,15 @@ Notable changes to Paka are documented here.
 
 ### Changed
 
-- PDF pages open fitted to the viewport width and scroll vertically; swiping past the top or bottom edge changes pages.
-- Double-tap zooms 2.5× into the tapped area and returns to the fit-width top view; pinching out below fit-width shows the whole page.
+- PDF pages open edge-to-edge within the viewer while preserving the complete page aspect ratio.
+- The default page is locked in place; free panning starts only after pinch or 3× double-tap zoom.
+- Double-tap returns a zoomed document to its complete-page view.
 - The multi-page indicator sits on a subtle scrim so it stays readable over white page content.
 
 ### Fixed
 
+- Transparent PDF page backgrounds now render as white paper instead of disappearing into Paka's black canvas.
+- PDF pages share a stable top content edge with opened barcode passes instead of being vertically centered by page height.
 - Page swiping works on multi-page PDFs: the zoom layer now consumes only pinches and zoomed-in pans instead of every drag.
 - Closing a PDF pass while a page was still rendering no longer races the renderer teardown.
 - PDF open and render failures show a message instead of crashing the app.
