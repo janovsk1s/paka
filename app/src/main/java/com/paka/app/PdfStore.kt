@@ -9,6 +9,10 @@ import android.os.ParcelFileDescriptor
 import android.system.Os
 import android.system.OsConstants
 import androidx.annotation.RequiresApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
@@ -38,14 +42,16 @@ internal class PdfDocumentSession private constructor(
     private val renderer: PdfRenderer,
 ) : AutoCloseable {
     private val renderMutex = Mutex()
-    val pageCount: Int get() = renderer.pageCount
+    private var rendererClosed = false // guarded by renderMutex
+    val pageCount: Int = renderer.pageCount
 
     suspend fun renderPage(
         index: Int,
         targetWidth: Int,
         targetHeight: Int = Int.MAX_VALUE,
     ): PdfPageBitmap = renderMutex.withLock {
-        require(index in 0 until renderer.pageCount)
+        check(!rendererClosed) { "PDF session is closed" }
+        require(index in 0 until pageCount)
         renderer.openPage(index).use { page ->
             val maxWidth = targetWidth.coerceIn(240, 1_440)
             val maxHeight = targetHeight.coerceAtLeast(1)
@@ -70,7 +76,8 @@ internal class PdfDocumentSession private constructor(
         translationX: Float,
         translationY: Float,
     ): Bitmap = renderMutex.withLock {
-        require(index in 0 until renderer.pageCount)
+        check(!rendererClosed) { "PDF session is closed" }
+        require(index in 0 until pageCount)
         renderer.openPage(index).use { page ->
             val bitmap = Bitmap.createBitmap(viewportWidth, viewportHeight, Bitmap.Config.ARGB_8888)
             val matrix = Matrix().apply {
@@ -82,11 +89,31 @@ internal class PdfDocumentSession private constructor(
         }
     }
 
+    // PdfRenderer is not thread-safe: closing must never run concurrently with a
+    // render. Close inline when the mutex is free; otherwise hand off to a
+    // coroutine that waits behind the in-flight render.
     override fun close() {
-        renderer.close()
+        if (renderMutex.tryLock()) {
+            try {
+                closeRendererLocked()
+            } finally {
+                renderMutex.unlock()
+            }
+        } else {
+            closeScope.launch { renderMutex.withLock { closeRendererLocked() } }
+        }
+    }
+
+    private fun closeRendererLocked() {
+        if (!rendererClosed) {
+            rendererClosed = true
+            renderer.close()
+        }
     }
 
     companion object {
+        private val closeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
         fun fromBytes(bytes: ByteArray): PdfDocumentSession {
             val rawFd = Os.memfd_create("paka-pdf", 0)
             try {

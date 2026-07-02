@@ -659,6 +659,7 @@ private fun LoadedPakaApp(
 
     if (manualCard) {
         ManualCardScreen(
+            pdfEnabled = !demoModeEnabled,
             onSave = { card -> addCard(card) },
             onBack = { manualCard = false },
         )
@@ -1663,7 +1664,7 @@ private fun DuplicateConfirmScreen(kind: String, existingName: String, onConfirm
 }
 
 @Composable
-private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
+private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
@@ -1792,6 +1793,12 @@ private fun ManualCardScreen(onSave: (Card) -> Unit, onBack: () -> Unit) {
                     }
                     ManualCardItem.PdfDocument -> Row(
                         modifier = Modifier.fillMaxWidth().then(tapModifier {
+                            if (!pdfEnabled) {
+                                // Imported blobs live in the real store; a demo card
+                                // cannot reference one without orphaning it later.
+                                Toast.makeText(context, "PDF passes are unavailable in demo mode", Toast.LENGTH_SHORT).show()
+                                return@tapModifier
+                            }
                             format = null
                             pdfError = null
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -2177,23 +2184,32 @@ private fun StackScreen(
         return
     }
     KeepScreenBright(forceMaximumBrightness)
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(name, onBack) }
         BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             val density = LocalDensity.current
             val targetWidthPx = with(density) { (maxWidth - 32.dp).roundToPx() }
+            // Matches PdfDocumentPreview's 420.dp box minus its 8.dp inner padding.
+            val pdfHeightPx = with(density) { 404.dp.roundToPx() }
             val rendered = remember(name, cards, targetWidthPx) { mutableStateMapOf<String, BarcodeRender>() }
 
             LaunchedEffect(cards, targetWidthPx) {
                 val uniqueCards = cards.distinctBy { it.id }
                 suspend fun render(stackCard: Card) {
-                    val barcode = stackCard.barcodeContent
-                    if (barcode == null) {
-                        rendered[stackCard.id] = BarcodeRender(null)
-                        return
-                    }
-                    val bitmap = withContext(Dispatchers.Default) {
-                        Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
+                    val bitmap = when (val content = stackCard.content) {
+                        is PassContent.Barcode -> withContext(Dispatchers.Default) {
+                            Barcodes.generateCached(content.format, content.data, targetWidthPx)
+                        }
+                        is PassContent.Pdf ->
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) null
+                            else withContext(Dispatchers.IO) {
+                                runCatching {
+                                    PdfStore.open(context, content.documentId).use { session ->
+                                        session.renderPage(0, targetWidthPx, pdfHeightPx).bitmap
+                                    }
+                                }.getOrNull()
+                            }
                     }
                     rendered[stackCard.id] = BarcodeRender(bitmap)
                 }
@@ -2209,7 +2225,7 @@ private fun StackScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    when (val content = card.content) {
+                    when (card.content) {
                         is PassContent.Barcode -> BarcodePanel(
                             card = card,
                             onClick = advance,
@@ -2217,12 +2233,16 @@ private fun StackScreen(
                             preRendered = rendered[card.id],
                             usePreRendered = true,
                         )
-                        is PassContent.Pdf -> PdfDocumentPreview(
-                            card = card,
-                            content = content,
-                            onClick = advance,
-                            onLongPress = { onLongCurrent(card) },
-                        )
+                        is PassContent.Pdf -> {
+                            val render = rendered[card.id]
+                            PdfDocumentPreview(
+                                card = card,
+                                render = render?.bitmap,
+                                renderPending = render == null,
+                                onClick = advance,
+                                onLongPress = { onLongCurrent(card) },
+                            )
+                        }
                     }
                     Spacer(Modifier.height(18.dp))
                     Text("${card.name} · ${index + 1}/${cards.size}", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)

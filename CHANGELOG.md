@@ -20,6 +20,15 @@ Notable changes to Paka are documented here.
 - Encrypted backup schema 2 embeds referenced PDFs and restores documents, passes, and 2FA accounts transactionally.
 - Orphaned encrypted PDF blobs are removed only after a healthy pass-store load.
 
+### Fixed
+
+- Page swiping works on multi-page PDFs: the zoom layer now consumes only pinches and zoomed-in pans instead of every drag.
+- Closing a PDF pass while a page was still rendering no longer races the renderer teardown.
+- PDF open and render failures show a message instead of crashing the app.
+- A cancelled PDF open can no longer leak the in-memory document session.
+- Stack previews render a PDF's first page once per visit instead of re-decrypting the document every time it becomes visible.
+- PDF import is blocked in demo mode so real encrypted blobs cannot be orphaned by temporary demo passes.
+
 ## 0.12.9 — 2026-07-02
 
 ### Changed

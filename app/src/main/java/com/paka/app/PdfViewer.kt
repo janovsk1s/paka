@@ -5,8 +5,12 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,11 +28,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -48,37 +54,20 @@ private data class SharpPdfLayer(
     val translationY: Float,
 )
 
+/**
+ * Presentational page-1 preview. Rendering is owned by the caller (StackScreen
+ * pre-renders into its shared map) so revisiting a page never re-decrypts.
+ */
 @Composable
 internal fun PdfDocumentPreview(
     card: Card,
-    content: PassContent.Pdf,
+    render: Bitmap?,
+    renderPending: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-        Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text("PDF requires Android 11+", color = Grey, fontSize = 16.sp)
-        }
-        return
-    }
-    val context = LocalContext.current
     val density = LocalDensity.current
-    var bitmap by remember(content.documentId) { mutableStateOf<Bitmap?>(null) }
-    var previewSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    LaunchedEffect(content.documentId, previewSize) {
-        if (previewSize.width <= 0 || previewSize.height <= 0) return@LaunchedEffect
-        val rendered = withContext(Dispatchers.IO) {
-            PdfStore.open(context, content.documentId).use { session ->
-                session.renderPage(0, previewSize.width, previewSize.height)
-            }
-        }
-        bitmap = rendered.bitmap
-    }
-    val previewBitmap = bitmap
-    DisposableEffect(previewBitmap) {
-        onDispose { previewBitmap?.recycle() }
-    }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -86,24 +75,24 @@ internal fun PdfDocumentPreview(
             .padding(horizontal = 8.dp)
             .background(White)
             .then(tapLongModifier(onClick, onLongPress, card.name))
-            .padding(8.dp)
-            .onSizeChanged { previewSize = it },
+            .padding(8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        val image = bitmap
-        if (image == null) {
-            Text("Rendering…", color = Grey, fontSize = 16.sp)
-        } else {
-            Image(
-                bitmap = image.asImageBitmap(),
+        when {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.R ->
+                Text("PDF passes require Android 11 or newer", color = Grey, fontSize = 16.sp)
+            render != null -> Image(
+                bitmap = render.asImageBitmap(),
                 contentDescription = card.name,
                 filterQuality = FilterQuality.None,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.size(
-                    with(density) { image.width.toDp() },
-                    with(density) { image.height.toDp() },
+                    with(density) { render.width.toDp() },
+                    with(density) { render.height.toDp() },
                 ),
             )
+            renderPending -> Text("Rendering…", color = Grey, fontSize = 16.sp)
+            else -> Text("Couldn't render this PDF", color = Grey, fontSize = 16.sp)
         }
     }
 }
@@ -137,9 +126,12 @@ private fun PdfDocumentViewerApi30(
     LaunchedEffect(content.documentId) {
         var opened: PdfDocumentSession? = null
         try {
-            val result = withContext(Dispatchers.IO) { runCatching { PdfStore.open(context, content.documentId) } }
+            // The holder is assigned inside the IO block so a cancellation that
+            // interrupts withContext after the open cannot leak the session.
+            val result = withContext(Dispatchers.IO) {
+                runCatching { PdfStore.open(context, content.documentId).also { opened = it } }
+            }
             result.onSuccess {
-                opened = it
                 session = it
                 opened = null
             }.onFailure {
@@ -188,6 +180,7 @@ private fun PdfZoomPage(
     var viewportWidth by remember { mutableStateOf(0) }
     var viewportHeight by remember { mutableStateOf(0) }
     var basePage by remember(pageIndex) { mutableStateOf<PdfPageBitmap?>(null) }
+    var renderFailed by remember(pageIndex) { mutableStateOf(false) }
     var sharpLayer by remember(pageIndex) { mutableStateOf<SharpPdfLayer?>(null) }
     var zoom by remember(pageIndex) { mutableFloatStateOf(1f) }
     var translationX by remember(pageIndex) { mutableFloatStateOf(0f) }
@@ -196,12 +189,19 @@ private fun PdfZoomPage(
     LaunchedEffect(session, pageIndex, viewportWidth) {
         if (viewportWidth <= 0) return@LaunchedEffect
         val rendered = withContext(Dispatchers.Default) {
-            session.renderPage(
-                pageIndex,
-                (viewportWidth - with(density) { 32.dp.roundToPx() }).coerceAtLeast(240),
-                (viewportHeight - with(density) { 32.dp.roundToPx() }).coerceAtLeast(240),
-            )
+            runCatching {
+                session.renderPage(
+                    pageIndex,
+                    (viewportWidth - with(density) { 32.dp.roundToPx() }).coerceAtLeast(240),
+                    (viewportHeight - with(density) { 32.dp.roundToPx() }).coerceAtLeast(240),
+                )
+            }
+        }.getOrNull()
+        if (rendered == null) {
+            renderFailed = true
+            return@LaunchedEffect
         }
+        renderFailed = false
         basePage = rendered
         zoom = 1f
         translationX = 0f
@@ -240,18 +240,20 @@ private fun PdfZoomPage(
         }
         delay(140)
         val bitmap = withContext(Dispatchers.Default) {
-            session.renderViewport(
-                index = pageIndex,
-                viewportWidth = viewportWidth,
-                viewportHeight = viewportHeight,
-                baseScale = page.bitmap.width.toFloat() / page.pageWidth,
-                zoom = zoom,
-                pageLeft = pageLeft,
-                pageTop = pageTop,
-                translationX = translationX,
-                translationY = translationY,
-            )
-        }
+            runCatching {
+                session.renderViewport(
+                    index = pageIndex,
+                    viewportWidth = viewportWidth,
+                    viewportHeight = viewportHeight,
+                    baseScale = page.bitmap.width.toFloat() / page.pageWidth,
+                    zoom = zoom,
+                    pageLeft = pageLeft,
+                    pageTop = pageTop,
+                    translationX = translationX,
+                    translationY = translationY,
+                )
+            }
+        }.getOrNull() ?: return@LaunchedEffect
         sharpLayer = SharpPdfLayer(bitmap, zoom, translationX, translationY)
     }
 
@@ -264,15 +266,42 @@ private fun PdfZoomPage(
             }
             .pointerInput(page, viewportWidth, viewportHeight) {
                 if (page == null) return@pointerInput
-                detectTransformGestures { centroid, pan, gestureZoom, _ ->
-                    val oldZoom = zoom
-                    val newZoom = (zoom * gestureZoom).coerceIn(1f, 8f)
-                    val anchoredX = translationX + pan.x + (centroid.x - pageLeft - translationX) * (1f - newZoom / oldZoom)
-                    val anchoredY = translationY + pan.y + (centroid.y - pageTop - translationY) * (1f - newZoom / oldZoom)
-                    zoom = newZoom
-                    onZoomChanged(newZoom > 1.05f)
-                    translationX = clampX(anchoredX, newZoom)
-                    translationY = clampY(anchoredY, newZoom)
+                // Consume only gestures this page actually handles: a pinch, or a
+                // one-finger pan while zoomed in. Unhandled events fall through to
+                // HardCutPager so page swiping keeps working at 1×.
+                awaitEachGesture {
+                    var handling = false
+                    var slopPan = Offset.Zero
+                    awaitFirstDown(requireUnconsumed = false)
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.changes.none { it.pressed }) break
+                        if (!handling && event.changes.any { it.isConsumed }) break
+                        val pointerCount = event.changes.count { it.pressed }
+                        val zoomChange = event.calculateZoom()
+                        val panChange = event.calculatePan()
+                        if (!handling) {
+                            slopPan += panChange
+                            handling = pointerCount > 1 ||
+                                (zoom > 1.05f && slopPan.getDistance() > viewConfiguration.touchSlop)
+                        }
+                        if (handling) {
+                            if (zoomChange != 1f || panChange != Offset.Zero) {
+                                val centroid = event.calculateCentroid()
+                                val oldZoom = zoom
+                                val newZoom = (oldZoom * zoomChange).coerceIn(1f, 8f)
+                                val anchoredX = translationX + panChange.x +
+                                    (centroid.x - pageLeft - translationX) * (1f - newZoom / oldZoom)
+                                val anchoredY = translationY + panChange.y +
+                                    (centroid.y - pageTop - translationY) * (1f - newZoom / oldZoom)
+                                zoom = newZoom
+                                onZoomChanged(newZoom > 1.05f)
+                                translationX = clampX(anchoredX, newZoom)
+                                translationY = clampY(anchoredY, newZoom)
+                            }
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                        }
+                    }
                 }
             }
             .pointerInput(page, viewportWidth, viewportHeight) {
@@ -343,6 +372,8 @@ private fun PdfZoomPage(
                     modifier = Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 12.dp),
                 )
             }
+        } else if (renderFailed) {
+            Text("Couldn't render this PDF", color = Grey, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center))
         } else {
             Text("Rendering…", color = Grey, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center))
         }
