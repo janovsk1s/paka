@@ -11,6 +11,7 @@ object Prefs {
     private const val KEY_RETURN_HOME = "return_home_on_leave"
     private const val KEY_AUTO_LIGHT = "automatic_camera_light"
     private const val KEY_MAX_CODE_BRIGHTNESS = "maximum_code_brightness"
+    private const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
 
     const val DEFAULT_TEXT_SIZE = 30f
 
@@ -45,5 +46,12 @@ object Prefs {
 
     fun setMaxCodeBrightness(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_MAX_CODE_BRIGHTNESS, enabled).apply()
+    }
+
+    fun onboardingComplete(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ONBOARDING_COMPLETE, false)
+
+    fun setOnboardingComplete(context: Context) {
+        prefs(context).edit().putBoolean(KEY_ONBOARDING_COMPLETE, true).apply()
     }
 }

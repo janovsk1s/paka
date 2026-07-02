@@ -234,10 +234,11 @@ fun PakaApp(homeResetSignal: Int = 0) {
     var returnHomeEnabled by remember { mutableStateOf(Prefs.returnHome(context)) }
     var autoLightEnabled by remember { mutableStateOf(Prefs.autoLight(context)) }
     var maxCodeBrightnessEnabled by remember { mutableStateOf(Prefs.maxCodeBrightness(context)) }
+    var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
     val homeVisible =
-        !showSettings && !showBackup && !showAbout && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
+        onboardingComplete && !showSettings && !showBackup && !showAbout && manageMode == null && renameTarget == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
     val codesVisible = mode == Mode.CODES && homeVisible
@@ -358,6 +359,16 @@ fun PakaApp(homeResetSignal: Int = 0) {
     ProtectSensitiveContent(mode == Mode.CODES || manualCode || showBackup || (scanning && scanMode == ScanMode.CODE))
 
     // ---- routing (topmost overlay wins) ----
+
+    if (!onboardingComplete) {
+        OnboardingScreen(
+            onStart = {
+                Prefs.setOnboardingComplete(context)
+                onboardingComplete = true
+            },
+        )
+        return
+    }
 
     when (val duplicate = pendingDuplicate) {
         is PendingDuplicate.Pass -> {
@@ -657,6 +668,47 @@ private fun SimpleTopBar(title: String, onBack: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
         BackArrow(modifier = Modifier.align(Alignment.CenterStart).offset(x = (-30).dp), onBack = onBack)
         Text(title.replaceFirstChar { it.uppercase() }, color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
+    }
+}
+
+@Composable
+private fun OnboardingScreen(onStart: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp),
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
+            Text("Welcome", color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
+        }
+        Column(modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp, end = 14.dp, bottom = 8.dp)) {
+            OnboardingRow(weight = 1f) {
+                Text("Paka", color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal)
+            }
+            OnboardingRow(weight = 1f) {
+                Text("Passes and 2FA codes, carried lightly.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+            }
+            OnboardingRow(weight = 1f) {
+                Text("Tap + to scan. Long-press + to enter manually.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+            }
+            OnboardingRow(weight = 1f) {
+                Text("Swipe between pages. Long-press passes for details. Data stays encrypted on this phone.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+            }
+            OnboardingRow(weight = 1f) {
+                Text(
+                    "start",
+                    color = White,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.fillMaxWidth().then(tapModifier(onStart)),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.OnboardingRow(weight: Float, content: @Composable () -> Unit) {
+    Box(modifier = Modifier.weight(weight).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+        content()
     }
 }
 
@@ -967,13 +1019,24 @@ private fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Column(modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp)) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                    Text(
-                        "Paka",
-                        color = White,
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.Normal,
+                    Row(
                         modifier = Modifier.fillMaxWidth().then(tapModifier(hiddenDeveloperTap)),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Paka",
+                            color = White,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Normal,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "v${BuildConfig.VERSION_NAME}",
+                            color = Grey,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Light,
+                        )
+                    }
                 }
                 Box(Modifier.weight(3f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                     Text(
@@ -984,7 +1047,10 @@ private fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                     )
                 }
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                    Text("With care, from a Latvian.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+                    Column {
+                        Text("From a Latvian in Vienna.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+                        Text("@janovsk1s", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
+                    }
                 }
             }
         }

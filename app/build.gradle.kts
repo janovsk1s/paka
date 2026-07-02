@@ -20,8 +20,8 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 32
-        versionName = "0.12.5"
+        versionCode = 33
+        versionName = "0.12.6"
     }
 
     signingConfigs {
@@ -52,6 +52,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
     lint {
