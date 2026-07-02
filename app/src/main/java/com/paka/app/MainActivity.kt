@@ -232,6 +232,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
     var textSize by remember { mutableStateOf(Prefs.textSize(context)) }
     var vibrationEnabled by remember { mutableStateOf(Prefs.vibration(context)) }
     var returnHomeEnabled by remember { mutableStateOf(Prefs.returnHome(context)) }
+    var autoLightEnabled by remember { mutableStateOf(Prefs.autoLight(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     val scope = rememberCoroutineScope()
     val homeVisible =
@@ -441,6 +442,11 @@ fun PakaApp(homeResetSignal: Int = 0) {
                 returnHomeEnabled = enabled
                 Prefs.setReturnHome(context, enabled)
             },
+            autoLightEnabled = autoLightEnabled,
+            onAutoLight = { enabled ->
+                autoLightEnabled = enabled
+                Prefs.setAutoLight(context, enabled)
+            },
             onBack = { showDev = false },
         )
         return
@@ -493,8 +499,8 @@ fun PakaApp(homeResetSignal: Int = 0) {
 
     if (showSettings) {
         SettingsScreen(
-            onReorder = { showSettings = false; manageMode = mode },
-            onBackup = { showSettings = false; showBackup = true },
+            onReorder = { manageMode = mode },
+            onBackup = { showBackup = true },
             vibrationEnabled = vibrationEnabled,
             onVibration = { enabled ->
                 vibrationEnabled = enabled
@@ -536,6 +542,7 @@ fun PakaApp(homeResetSignal: Int = 0) {
     if (scanning) {
         BackHandler { scanning = false }
         ScanScreen(
+            automaticLightEnabled = autoLightEnabled,
             onScanned = { result ->
                 scanning = false
                 if (scanMode == ScanMode.CODE) {
@@ -949,7 +956,7 @@ private fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                         fontWeight = FontWeight.Normal,
                         modifier = Modifier.fillMaxWidth().then(tapModifier(hiddenDeveloperTap)),
                     )
-                    1 -> Text("Latvian for “package”.", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+                    1 -> Text("Latvian for “package”.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
                     2 -> Text(
                         "Saves passes and carries 2FA codes in a light way.",
                         color = White,
@@ -960,13 +967,13 @@ private fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                     )
                     3 -> Text(
                         "Long-presses may reveal more options.",
-                        color = Grey,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Light,
+                        color = White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    else -> Text("With care, from a Latvian.", color = White, fontSize = 18.sp, fontWeight = FontWeight.Light)
+                    else -> Text("With care, from a Latvian.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
                 }
             }
         }
@@ -1250,6 +1257,8 @@ private fun DevScreen(
     onTextSize: (Float) -> Unit,
     returnHomeEnabled: Boolean,
     onReturnHome: (Boolean) -> Unit,
+    autoLightEnabled: Boolean,
+    onAutoLight: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
@@ -1278,8 +1287,7 @@ private fun DevScreen(
                             modifier = Modifier.weight(1f).then(tapModifier { onTextSize((textSize + 1f).coerceAtMost(64f)) }),
                         )
                     }
-                    2 -> Text("preview", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
-                    3 -> Text(
+                    2 -> Text(
                         "KlimaTicket",
                         color = White,
                         fontSize = textSize.sp,
@@ -1287,10 +1295,15 @@ private fun DevScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    else -> SettingsItem(
+                    3 -> SettingsItem(
                         label = "return home",
                         trailing = if (returnHomeEnabled) "on" else "off",
                         onClick = { onReturnHome(!returnHomeEnabled) },
+                    )
+                    else -> SettingsItem(
+                        label = "auto light",
+                        trailing = if (autoLightEnabled) "on" else "off",
+                        onClick = { onAutoLight(!autoLightEnabled) },
                     )
                 }
             }

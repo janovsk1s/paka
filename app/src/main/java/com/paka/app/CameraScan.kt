@@ -47,7 +47,7 @@ import java.util.concurrent.atomic.AtomicReference
 data class ScanResult(val data: String, val format: PakaFormat)
 
 @Composable
-fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
+fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val lifecycleOwner = context as? LifecycleOwner
@@ -159,6 +159,7 @@ fun ScanScreen(onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
                                                         if (
                                                             hasFlashRef.get() &&
                                                             !torchRef.get() &&
+                                                            automaticLightEnabled &&
                                                             !manualLightOverride.get()
                                                         ) {
                                                             cameraRef.get()?.cameraControl?.enableTorch(true)
