@@ -33,6 +33,9 @@ Notable changes to Paka are documented here.
   per-entry limits, and stable-compatible schema selection.
 - Updated AndroidX, Compose, and CameraX to current stable releases (Compose BOM 2026.03.01, CameraX 1.6.1, core-ktx 1.18.0, lifecycle 2.10.0, activity-compose 1.12.4, ZXing 3.5.4, OkapiBarcode 0.5.6) and regenerated the dependency-verification checksums.
 - Added bounded-import reader tests for exact limits, growth boundaries, short reads, and oversize rejection.
+- MainActivity's screens were extracted verbatim into focused files (list paging, home lists, settings, backup, manual entry, details, pass viewing) with identical behavior and navigation.
+- CI now also runs on pushes to preview/ and fix/ branches, not only main and pull requests.
+- Added F-Droid-compatible fastlane metadata: title, descriptions, screenshots, and a release changelog.
 
 ### Added
 
