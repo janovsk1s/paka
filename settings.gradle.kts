@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Paka"
 include(":app")
+include(":baselineprofile")
