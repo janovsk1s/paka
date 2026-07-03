@@ -2,7 +2,7 @@ name: Android checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, "preview/**", "fix/**"]
   pull_request:
 
 permissions:
