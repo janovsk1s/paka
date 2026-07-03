@@ -8,13 +8,12 @@ val signingProperties = Properties().apply {
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "com.paka.app"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.paka.app"
@@ -70,6 +69,9 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+        // AGP 9 disables resource values by default; the debug and preview
+        // channels rely on them for their side-by-side app names.
+        resValues = true
     }
     lint {
         abortOnError = true
