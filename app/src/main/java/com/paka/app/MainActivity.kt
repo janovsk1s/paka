@@ -135,6 +135,7 @@ private sealed interface ManualCardItem {
     data object Data : ManualCardItem
     data class Format(val format: PakaFormat) : ManualCardItem
     data object PdfDocument : ManualCardItem
+    data object PhotoDocument : ManualCardItem
 }
 
 private enum class ManualCodeItem { NAME, ACCOUNT, SECRET }
@@ -229,6 +230,11 @@ class MainActivity : ComponentActivity() {
         super.onUserLeaveHint()
         if (!externalFlowActive && Prefs.returnHome(this)) homeResetSignal++
     }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        PhotoStore.trimMemory()
+    }
 }
 
 private fun Context.setPakaExternalFlowActive(active: Boolean) {
@@ -258,6 +264,7 @@ fun PakaApp(homeResetSignal: Int = 0, resumeSignal: Int = 0) {
             val cards = CardStore.load(context)
             if (cards.writable) {
                 PdfStore.deleteOrphans(context, cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
+                PhotoStore.deleteOrphans(context, cards.value.photoDocumentIds())
             }
             InitialAppLoad(cards = cards, codes = SecureStore.loadAccounts(context))
         }
@@ -312,6 +319,7 @@ private fun LoadedPakaApp(
     var returnHomeEnabled by remember { mutableStateOf(Prefs.returnHome(context)) }
     var autoLightEnabled by remember { mutableStateOf(Prefs.autoLight(context)) }
     var maxCodeBrightnessEnabled by remember { mutableStateOf(Prefs.maxCodeBrightness(context)) }
+    var pageNumbersEnabled by remember { mutableStateOf(Prefs.pageNumbers(context)) }
     var demoModeEnabled by remember { mutableStateOf(Prefs.demoMode(context)) }
     var demoContent by remember { mutableStateOf(DemoData.create()) }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
@@ -397,7 +405,9 @@ private fun LoadedPakaApp(
         }
         val keptPdfIds = list.mapNotNull { it.pdfContent?.documentId }.toSet()
         val removedPdfIds = cards.mapNotNull { it.pdfContent?.documentId }.toSet() - keptPdfIds
-        val write = StoreWriteCoordinator.saveCards(context, list, removedPdfIds)
+        val keptPhotoIds = list.photoDocumentIds()
+        val removedPhotoIds = cards.photoDocumentIds() - keptPhotoIds
+        val write = StoreWriteCoordinator.saveCards(context, list, removedPdfIds, removedPhotoIds)
         if (write == null) {
             Toast.makeText(context, "Cards could not be queued for saving", Toast.LENGTH_LONG).show()
             return false
@@ -574,6 +584,11 @@ private fun LoadedPakaApp(
                 maxCodeBrightnessEnabled = enabled
                 Prefs.setMaxCodeBrightness(context, enabled)
             },
+            pageNumbersEnabled = pageNumbersEnabled,
+            onPageNumbers = { enabled ->
+                pageNumbersEnabled = enabled
+                Prefs.setPageNumbers(context, enabled)
+            },
             demoModeEnabled = demoModeEnabled,
             onDemoMode = { enabled ->
                 if (enabled) {
@@ -675,7 +690,7 @@ private fun LoadedPakaApp(
 
     if (manualCard) {
         ManualCardScreen(
-            pdfEnabled = !demoModeEnabled,
+            documentImportsEnabled = !demoModeEnabled,
             onSave = { card -> addCard(card) },
             onBack = { manualCard = false },
         )
@@ -764,6 +779,13 @@ private fun LoadedPakaApp(
                 onLong = { detailCard = fresh },
                 onBack = { selectedCard = null },
             )
+            is PassContent.Photos -> PhotoScreen(
+                card = fresh,
+                content = content,
+                forceMaximumBrightness = maxCodeBrightnessEnabled,
+                onLong = { detailCard = fresh },
+                onBack = { selectedCard = null },
+            )
         }
         return
     }
@@ -818,10 +840,13 @@ private fun LoadedPakaApp(
 }
 
 @Composable
-private fun SimpleTopBar(title: String, onBack: () -> Unit) {
+private fun SimpleTopBar(title: String, onBack: () -> Unit, trailing: String? = null) {
     Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
         BackArrow(modifier = Modifier.align(Alignment.CenterStart).offset(x = (-30).dp), onBack = onBack)
         Text(title.replaceFirstChar { it.uppercase() }, color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
+        if (trailing != null) {
+            Text(trailing, color = White, fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterEnd))
+        }
     }
 }
 
@@ -976,6 +1001,7 @@ internal fun HardCutPager(
     indicatorOffset: Dp = 18.dp,
     showIndicator: Boolean = true,
     gesturesEnabled: Boolean = true,
+    onPageChange: ((Int) -> Unit)? = null,
     content: @Composable (Int, () -> Unit) -> Unit,
 ) {
     if (pageCount <= 0) return
@@ -986,6 +1012,9 @@ internal fun HardCutPager(
 
     LaunchedEffect(pageCount) {
         if (page >= pageCount) page = pageCount - 1
+    }
+    LaunchedEffect(currentPage) {
+        onPageChange?.invoke(currentPage)
     }
 
     Box(
@@ -1391,15 +1420,20 @@ private fun BackupScreen(
                             scope.launch {
                                 val result = withContext(Dispatchers.IO) {
                                     val documents = linkedMapOf<String, ByteArray>()
+                                    val photos = linkedMapOf<String, ByteArray>()
                                     try {
                                         runCatching {
                                             cards.mapNotNull { it.pdfContent?.documentId }.distinct().forEach { id ->
                                                 documents[id] = PdfStore.readPlaintext(context, id)
                                             }
-                                            BackupStore.encrypt(cards, accounts, password, documents)
+                                            cards.photoDocumentIds().forEach { id ->
+                                                photos[id] = PhotoStore.readPlaintext(context, id)
+                                            }
+                                            BackupStore.encrypt(cards, accounts, password, documents, photos)
                                         }
                                     } finally {
                                         documents.values.forEach { it.fill(0) }
+                                        photos.values.forEach { it.fill(0) }
                                         password.fill('\u0000')
                                     }
                                 }
@@ -1529,6 +1563,8 @@ private fun DevScreen(
     onAutoLight: (Boolean) -> Unit,
     maxCodeBrightnessEnabled: Boolean,
     onMaxCodeBrightness: (Boolean) -> Unit,
+    pageNumbersEnabled: Boolean,
+    onPageNumbers: (Boolean) -> Unit,
     demoModeEnabled: Boolean,
     onDemoMode: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -1537,7 +1573,7 @@ private fun DevScreen(
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("developer", onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            PagedList(listOf(0, 1, 2, 3, 4, 5, 6)) { item ->
+            PagedList(listOf(0, 1, 2, 3, 4, 5, 6, 7)) { item ->
                 when (item) {
                     0 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("text size", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light, modifier = Modifier.weight(1f))
@@ -1581,6 +1617,11 @@ private fun DevScreen(
                         label = "max brightness",
                         trailing = if (maxCodeBrightnessEnabled) "on" else "off",
                         onClick = { onMaxCodeBrightness(!maxCodeBrightnessEnabled) },
+                    )
+                    6 -> SettingsItem(
+                        label = "page numbers",
+                        trailing = if (pageNumbersEnabled) "on" else "off",
+                        onClick = { onPageNumbers(!pageNumbersEnabled) },
                     )
                     else -> SettingsItem(
                         label = "demo mode",
@@ -1733,13 +1774,15 @@ private fun ReferenceOptionsScreen(
 }
 
 @Composable
-private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack: () -> Unit) {
+private fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var data by remember { mutableStateOf("") }
     var format by remember { mutableStateOf<PakaFormat?>(PakaFormat.QR) }
     var pdfImport by remember { mutableStateOf<PdfImport?>(null) }
+    var photoMode by remember { mutableStateOf(false) }
+    var photoImports by remember { mutableStateOf<List<PhotoImport>>(emptyList()) }
     var pdfChecking by remember { mutableStateOf(false) }
     var pdfError by remember { mutableStateOf<String?>(null) }
     var editingField by remember { mutableStateOf<ManualCardField?>(null) }
@@ -1753,17 +1796,26 @@ private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack
     val validating = format != null && trimmedData.isNotBlank() && basicValidationError == null && renderable == null
     val validationError = basicValidationError ?: if (renderable == false) "Code cannot be rendered exactly" else null
     val canSave = name.isNotBlank() && !pdfChecking && if (format == null) {
-        pdfImport != null && pdfError == null
+        if (photoMode) photoImports.size in 1..2 && pdfError == null else pdfImport != null && pdfError == null
     } else {
         trimmedData.isNotBlank() && validationError == null && renderable == true
     }
     val items = remember {
-        listOf(ManualCardItem.Name, ManualCardItem.Data) +
-            MANUAL_FORMATS.map(ManualCardItem::Format) + ManualCardItem.PdfDocument
+        // QR, PDF, and photo documents share the first page; other formats follow.
+        listOf(
+            ManualCardItem.Name,
+            ManualCardItem.Data,
+            ManualCardItem.Format(PakaFormat.QR),
+            ManualCardItem.PdfDocument,
+            ManualCardItem.PhotoDocument,
+        ) + MANUAL_FORMATS.filterNot { it == PakaFormat.QR }.map(ManualCardItem::Format)
     }
     val discardAndBack = {
         pdfImport?.takeIf { it.created }?.let { orphan ->
             scope.launch(Dispatchers.IO) { PdfStore.delete(context, orphan.documentId) }
+        }
+        photoImports.filter { it.created }.forEach { orphan ->
+            scope.launch(Dispatchers.IO) { PhotoStore.delete(context, orphan.page.documentId) }
         }
         onBack()
     }
@@ -1791,6 +1843,53 @@ private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack
                             else -> error.message ?: "PDF could not be opened"
                         }
                     }
+                }
+            }
+        }
+    }
+
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        context.setPakaExternalFlowActive(false)
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                pdfChecking = true
+                pdfError = null
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val imported = mutableListOf<PhotoImport>()
+                        try {
+                            uris.distinctBy(Uri::toString).take(2).forEach { uri ->
+                                imported += PhotoStore.import(context, uri).getOrThrow()
+                            }
+                            imported.toList()
+                        } catch (error: Throwable) {
+                            imported.filter { it.created }.forEach { PhotoStore.delete(context, it.page.documentId) }
+                            throw error
+                        }
+                    }
+                }
+                pdfChecking = false
+                result.onSuccess { imported ->
+                    val next = if (photoImports.size == 1 && imported.size == 1 &&
+                        photoImports.first().page.documentId != imported.first().page.documentId
+                    ) {
+                        photoImports + imported
+                    } else {
+                        imported
+                    }
+                    val priorCreatedIds = photoImports.filter { it.created }.map { it.page.documentId }.toSet()
+                    val normalized = next.map { importedPhoto ->
+                        if (importedPhoto.page.documentId in priorCreatedIds && !importedPhoto.created) {
+                            importedPhoto.copy(created = true)
+                        } else importedPhoto
+                    }
+                    val keptIds = normalized.map { it.page.documentId }.toSet()
+                    photoImports.filter { it.created && it.page.documentId !in keptIds }.forEach { orphan ->
+                        withContext(Dispatchers.IO) { PhotoStore.delete(context, orphan.page.documentId) }
+                    }
+                    photoImports = normalized
+                }.onFailure { error ->
+                    pdfError = error.message ?: "Photos could not be opened"
                 }
             }
         }
@@ -1830,12 +1929,20 @@ private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack
                     }
                     ManualCardItem.Data -> if (format == null) {
                         SettingsItem(
-                            label = if (pdfChecking) "checking PDF…" else "choose PDF",
-                            trailing = pdfImport?.let { "${it.pageCount}p" },
+                            label = if (pdfChecking) "checking…" else if (photoMode) {
+                                when (photoImports.size) {
+                                    1 -> "add back photo"
+                                    2 -> "change photos"
+                                    else -> "choose photos"
+                                }
+                            } else "choose PDF",
+                            trailing = if (photoMode) photoImports.takeIf { it.isNotEmpty() }?.let { "${it.size}/2" }
+                            else pdfImport?.let { "${it.pageCount}p" },
                             onClick = {
                                 if (!pdfChecking) {
                                     context.setPakaExternalFlowActive(true)
-                                    pdfPicker.launch(arrayOf("application/pdf"))
+                                    if (photoMode) photoPicker.launch(arrayOf("image/*"))
+                                    else pdfPicker.launch(arrayOf("application/pdf"))
                                 }
                             },
                         )
@@ -1862,13 +1969,14 @@ private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack
                     }
                     ManualCardItem.PdfDocument -> Row(
                         modifier = Modifier.fillMaxWidth().then(tapModifier {
-                            if (!pdfEnabled) {
+                            if (!documentImportsEnabled) {
                                 // Imported blobs live in the real store; a demo card
                                 // cannot reference one without orphaning it later.
                                 Toast.makeText(context, "PDF passes are unavailable in demo mode", Toast.LENGTH_SHORT).show()
                                 return@tapModifier
                             }
                             format = null
+                            photoMode = false
                             pdfError = null
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 if (!pdfChecking) {
@@ -1883,12 +1991,37 @@ private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack
                     ) {
                         Text(
                             "PDF document",
-                            color = if (format == null) White else Grey,
+                            color = if (format == null && !photoMode) White else Grey,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Light,
                             modifier = Modifier.weight(1f),
                         )
-                        if (format == null) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
+                        if (format == null && !photoMode) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
+                    }
+                    ManualCardItem.PhotoDocument -> Row(
+                        modifier = Modifier.fillMaxWidth().then(tapModifier {
+                            if (!documentImportsEnabled) {
+                                Toast.makeText(context, "Photo passes are unavailable in demo mode", Toast.LENGTH_SHORT).show()
+                                return@tapModifier
+                            }
+                            format = null
+                            photoMode = true
+                            pdfError = null
+                            if (!pdfChecking) {
+                                context.setPakaExternalFlowActive(true)
+                                photoPicker.launch(arrayOf("image/*"))
+                            }
+                        }),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "photo pass",
+                            color = if (format == null && photoMode) White else Grey,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Light,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (format == null && photoMode) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)
                     }
                 }
             }
@@ -1906,16 +2039,24 @@ private fun ManualCardScreen(pdfEnabled: Boolean, onSave: (Card) -> Unit, onBack
                 if (canSave) tapModifier {
                     val selected = format
                     if (selected == null) {
-                        val imported = checkNotNull(pdfImport)
-                        onSave(
-                            Card(
-                                name = name.trim(),
-                                content = PassContent.Pdf(imported.documentId, imported.pageCount),
-                            ),
-                        )
+                        if (photoMode) {
+                            pdfImport?.takeIf { it.created }?.let { orphan ->
+                                scope.launch(Dispatchers.IO) { PdfStore.delete(context, orphan.documentId) }
+                            }
+                            onSave(Card(name = name.trim(), content = PassContent.Photos(photoImports.map(PhotoImport::page))))
+                        } else {
+                            photoImports.filter { it.created }.forEach { orphan ->
+                                scope.launch(Dispatchers.IO) { PhotoStore.delete(context, orphan.page.documentId) }
+                            }
+                            val imported = checkNotNull(pdfImport)
+                            onSave(Card(name = name.trim(), content = PassContent.Pdf(imported.documentId, imported.pageCount)))
+                        }
                     } else {
                         pdfImport?.takeIf { it.created }?.let { orphan ->
                             scope.launch(Dispatchers.IO) { PdfStore.delete(context, orphan.documentId) }
+                        }
+                        photoImports.filter { it.created }.forEach { orphan ->
+                            scope.launch(Dispatchers.IO) { PhotoStore.delete(context, orphan.page.documentId) }
                         }
                         onSave(Card(name = name.trim(), data = trimmedData, format = selected))
                     }
@@ -2195,19 +2336,27 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                             when (val content = card.content) {
                                 is PassContent.Barcode -> content.format.label()
                                 is PassContent.Pdf -> "PDF · ${content.pageCount} page${if (content.pageCount == 1) "" else "s"}"
+                                is PassContent.Photos -> "photos · ${content.pages.size} side${if (content.pages.size == 1) "" else "s"}"
                             },
                             Modifier.weight(1f),
                         )
-                        LabelValue("added", formatDate(card.createdAt), Modifier.weight(1f))
+                        LabelValue("added", " · ${formatDate(card.createdAt)}", Modifier.weight(1f))
                     }
                 } else if (page == 1) {
                     Column {
-                        FieldLabel("code")
+                        FieldLabel(
+                            when (card.content) {
+                                is PassContent.Barcode -> "code"
+                                is PassContent.Pdf -> "document"
+                                is PassContent.Photos -> "photos"
+                            },
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             when (val content = card.content) {
                                 is PassContent.Barcode -> content.data
                                 is PassContent.Pdf -> "encrypted document · ${content.documentId.take(12)}"
+                                is PassContent.Photos -> "encrypted photos · ${content.pages.joinToString(" · ") { it.documentId.take(8) }}"
                             },
                             color = Grey,
                             fontSize = 13.sp,
@@ -2427,6 +2576,18 @@ private fun StackScreen(
                                     }
                                 }.getOrNull()
                             }
+                        is PassContent.Photos -> withContext(Dispatchers.IO) {
+                            val documentId = content.pages.first().documentId
+                            // Show a quick low-res decode immediately, then replace it
+                            // with the sharp one; keep the quick one if that fails.
+                            val quick = runCatching {
+                                PhotoStore.decode(context, documentId, targetWidthPx / 2, pdfHeightPx / 2)
+                            }.getOrNull()
+                            quick?.let { rendered[stackCard.id] = BarcodeRender(it) }
+                            runCatching {
+                                PhotoStore.decode(context, documentId, targetWidthPx, pdfHeightPx)
+                            }.getOrNull() ?: quick
+                        }
                     }
                     rendered[stackCard.id] = BarcodeRender(bitmap)
                 }
@@ -2442,7 +2603,7 @@ private fun StackScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    when (card.content) {
+                    when (val content = card.content) {
                         is PassContent.Barcode -> BarcodePanel(
                             card = card,
                             onClick = advance,
@@ -2457,6 +2618,41 @@ private fun StackScreen(
                                 render = render?.bitmap,
                                 renderPending = render == null,
                                 onClick = advance,
+                                onLongPress = { onLongCurrent(card) },
+                            )
+                        }
+                        is PassContent.Photos -> {
+                            var side by remember(card.id) { mutableIntStateOf(0) }
+                            var sideRender by remember(card.id) { mutableStateOf<BarcodeRender?>(null) }
+                            LaunchedEffect(card.id, side, targetWidthPx) {
+                                if (side == 0) return@LaunchedEffect
+                                sideRender = null
+                                val documentId = content.pages[side].documentId
+                                sideRender = BarcodeRender(
+                                    withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            PhotoStore.decode(context, documentId, targetWidthPx, pdfHeightPx)
+                                        }.getOrNull()
+                                    },
+                                )
+                            }
+                            val render = if (side == 0) rendered[card.id] else sideRender
+                            PhotoDocumentPreview(
+                                card = card,
+                                page = content.pages[side],
+                                render = render?.bitmap,
+                                renderPending = render == null,
+                                // Tapping steps through the sides first, then on
+                                // to the next card so the stack's tap cycle
+                                // continues past two-sided photo passes.
+                                onClick = {
+                                    if (side < content.pages.size - 1) {
+                                        side += 1
+                                    } else {
+                                        side = 0
+                                        advance()
+                                    }
+                                },
                                 onLongPress = { onLongCurrent(card) },
                             )
                         }
@@ -2489,12 +2685,42 @@ private fun PdfScreen(
     onBack: () -> Unit,
 ) {
     KeepScreenBright(forceMaximumBrightness)
+    val context = LocalContext.current
+    val showPageNumbers = remember { Prefs.pageNumbers(context) }
+    var pageLabel by remember(content.documentId) { mutableStateOf<String?>(null) }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
+            SimpleTopBar(card.name, onBack, trailing = if (showPageNumbers) pageLabel else null)
+        }
         PdfDocumentViewer(
             content = content,
             onLongPress = onLong,
             modifier = Modifier.weight(1f).fillMaxWidth(),
+            onPageChanged = { page, pageCount ->
+                pageLabel = if (pageCount > 1) "${page + 1}/$pageCount" else null
+            },
+        )
+    }
+}
+
+@Composable
+private fun PhotoScreen(
+    card: Card,
+    content: PassContent.Photos,
+    forceMaximumBrightness: Boolean,
+    onLong: () -> Unit,
+    onBack: () -> Unit,
+) {
+    KeepScreenBright(forceMaximumBrightness)
+    val context = LocalContext.current
+    val showPageNumbers = remember { Prefs.pageNumbers(context) }
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
+        PhotoDocumentViewer(
+            content = content,
+            onLongPress = onLong,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            showPageNumbers = showPageNumbers,
         )
     }
 }

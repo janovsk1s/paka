@@ -37,9 +37,9 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".pdfpreview"
-            versionNameSuffix = "-pdf-preview"
-            resValue("string", "app_name", "Paka PDF Test")
+            applicationIdSuffix = ".photopreview"
+            versionNameSuffix = "-photo-preview"
+            resValue("string", "app_name", "Paka Photo Test")
         }
         release {
             isMinifyEnabled = true

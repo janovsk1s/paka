@@ -5,7 +5,18 @@ import java.util.UUID
 sealed interface PassContent {
     data class Barcode(val format: PakaFormat, val data: String) : PassContent
     data class Pdf(val documentId: String, val pageCount: Int) : PassContent
+    data class Photos(val pages: List<PhotoPage>) : PassContent {
+        init {
+            require(pages.size in 1..2) { "A photo pass must contain one or two images" }
+        }
+    }
 }
+
+data class PhotoPage(
+    val documentId: String,
+    val width: Int,
+    val height: Int,
+)
 
 /** A persistable Android document link. The referenced file is not copied or encrypted by Paka. */
 data class PassReference(
@@ -40,3 +51,9 @@ internal val Card.barcodeContent: PassContent.Barcode?
 
 internal val Card.pdfContent: PassContent.Pdf?
     get() = content as? PassContent.Pdf
+
+internal val Card.photoContent: PassContent.Photos?
+    get() = content as? PassContent.Photos
+
+internal fun Iterable<Card>.photoDocumentIds(): Set<String> =
+    flatMap { it.photoContent?.pages.orEmpty() }.mapTo(linkedSetOf(), PhotoPage::documentId)

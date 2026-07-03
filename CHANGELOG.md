@@ -11,6 +11,8 @@ Notable changes to Paka are documented here.
 - New on-device encryption keys prefer StrongBox with a safe fallback and require an unlocked device on Android 15+, where Android's earlier key-loss and authorization bugs are fixed.
 - Gradle dependency verification pins SHA-256 checksums for the complete build graph.
 - CI actions are pinned to immutable commits and the Gradle wrapper is validated before use.
+- Photo imports are capped at 10 MB each and reject unsupported headers, corrupt decodes, excessive dimensions, and decompression-bomb-sized pixel counts.
+- Imported photos are copied into Paka only as AES-256-GCM ciphertext; plaintext exists only while validating, displaying, or creating/restoring an encrypted backup.
 
 ### Reliability
 
@@ -23,6 +25,12 @@ Notable changes to Paka are documented here.
 - Gradle build caching and configuration caching reduce repeat build time.
 - Dependabot watches both Gradle libraries and GitHub Actions for updates.
 - Added tests for atomic replacement, corrupt-primary recovery, corrupt-both preservation, PBKDF iteration headers, and legacy-backup compatibility.
+
+### Added
+
+- Encrypted document-photo passes can store one or two imported images for items such as photo ID fronts/backs or proof of insurance.
+- Photo sides use immediate hard-cut paging and support pinch, pan, and instant double-tap zoom.
+- Imported photo originals use a dedicated Android Keystore key and are included in encrypted portable backups.
 
 ## 0.13.0 — 2026-07-02
 

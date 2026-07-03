@@ -102,6 +102,7 @@ internal fun PdfDocumentViewer(
     content: PassContent.Pdf,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
+    onPageChanged: (page: Int, pageCount: Int) -> Unit = { _, _ -> },
 ) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -109,7 +110,7 @@ internal fun PdfDocumentViewer(
         }
         return
     }
-    PdfDocumentViewerApi30(content, onLongPress, modifier)
+    PdfDocumentViewerApi30(content, onLongPress, modifier, onPageChanged)
 }
 
 @RequiresApi(30)
@@ -118,6 +119,7 @@ private fun PdfDocumentViewerApi30(
     content: PassContent.Pdf,
     onLongPress: () -> Unit,
     modifier: Modifier,
+    onPageChanged: (page: Int, pageCount: Int) -> Unit,
 ) {
     val context = LocalContext.current
     var session by remember(content.documentId) { mutableStateOf<PdfDocumentSession?>(null) }
@@ -149,13 +151,17 @@ private fun PdfDocumentViewerApi30(
     val document = session
     var pageZoomed by remember(content.documentId) { mutableStateOf(false) }
     when {
-        document != null -> HardCutPager(
-            pageCount = minOf(content.pageCount, document.pageCount),
-            modifier = modifier,
-            showIndicator = content.pageCount > 1,
-            gesturesEnabled = !pageZoomed,
-        ) { page, _ ->
-            PdfZoomPage(document, page, onLongPress) { pageZoomed = it }
+        document != null -> {
+            val pageCount = minOf(content.pageCount, document.pageCount)
+            HardCutPager(
+                pageCount = pageCount,
+                modifier = modifier,
+                showIndicator = content.pageCount > 1,
+                gesturesEnabled = !pageZoomed,
+                onPageChange = { onPageChanged(it, pageCount) },
+            ) { page, _ ->
+                PdfZoomPage(document, page, onLongPress) { pageZoomed = it }
+            }
         }
         error != null -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(checkNotNull(error), color = Grey, fontSize = 16.sp)
@@ -278,9 +284,12 @@ private fun PdfZoomPage(
                     awaitFirstDown(requireUnconsumed = false)
                     while (true) {
                         val event = awaitPointerEvent()
-                        if (event.changes.none { it.pressed }) break
-                        if (!handling && event.changes.any { it.isConsumed }) break
                         val pointerCount = event.changes.count { it.pressed }
+                        if (pointerCount == 0) break
+                        // A second finger reclaims the gesture even after the
+                        // pager consumed the first finger's drag, so a pinch
+                        // never dead-locks until all fingers lift.
+                        if (!handling && pointerCount <= 1 && event.changes.any { it.isConsumed }) break
                         val zoomChange = event.calculateZoom()
                         val panChange = event.calculatePan()
                         if (!handling) {
@@ -365,18 +374,6 @@ private fun PdfZoomPage(
                     filterQuality = FilterQuality.None,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier.fillMaxSize(),
-                )
-            }
-            if (session.pageCount > 1) {
-                Text(
-                    "${pageIndex + 1}/${session.pageCount}",
-                    color = White,
-                    fontSize = 14.sp,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 24.dp, bottom = 8.dp)
-                        .background(Black.copy(alpha = 0.6f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
         } else if (renderFailed) {

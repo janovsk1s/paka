@@ -14,7 +14,7 @@ internal object CardStore {
     private const val FILE = "cards.enc"
     private const val LEGACY_FILE = "cards.json"
     private const val TRANSFORM = "AES/GCM/NoPadding"
-    private const val SCHEMA = 4
+    private const val SCHEMA = 5
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'C'.code.toByte(), 1)
     private val AAD = "paka-cards-v1".toByteArray(Charsets.UTF_8)
 
@@ -124,6 +124,18 @@ internal object CardStore {
                     .put("type", "pdf")
                     .put("documentId", content.documentId)
                     .put("pageCount", content.pageCount)
+                is PassContent.Photos -> item
+                    .put("type", "photos")
+                    .put("pages", JSONArray().also { pages ->
+                        content.pages.forEach { page ->
+                            pages.put(
+                                JSONObject()
+                                    .put("documentId", page.documentId)
+                                    .put("width", page.width)
+                                    .put("height", page.height),
+                            )
+                        }
+                    })
             }
             array.put(item)
         }
@@ -155,6 +167,21 @@ internal object CardStore {
                         require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
                     },
                     pageCount = item.getInt("pageCount").also { require(it in 1..1_000) { "Invalid PDF page count" } },
+                )
+                "photos" -> PassContent.Photos(
+                    pages = item.getJSONArray("pages").let { pages ->
+                        require(pages.length() in 1..2) { "Invalid photo count" }
+                        (0 until pages.length()).map { pageIndex ->
+                            val page = pages.getJSONObject(pageIndex)
+                            PhotoPage(
+                                documentId = page.getString("documentId").also {
+                                    require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }
+                                },
+                                width = page.getInt("width").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
+                                height = page.getInt("height").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
+                            )
+                        }
+                    },
                 )
                 else -> error("Unsupported pass type")
             }

@@ -99,6 +99,20 @@ barcode is not sufficient: scanners must receive the exact original payload.
   copied, encrypted, or placed in portable backups. Keep that boundary explicit
   in Details and backup UI.
 
+## Document-photo pass invariants
+
+- One- and two-sided document photos are a distinct `PassContent.Photos` type;
+  they are not external `PassReference` links and are not disguised barcodes.
+- Import at most two images per pass. Enforce the 10 MB per-image limit, decoded
+  dimension and pixel-count caps, and a successful bounded decode before save.
+- Persist only AES-256-GCM ciphertext under the dedicated photo Keystore key.
+  Never write a plaintext image cache.
+- Front/back changes are immediate hard-cut pages. Pinch/pan transform the
+  bounded decoded bitmap and double-tap zoom remains immediate.
+- Photo originals are part of encrypted portable backups, transactional restore,
+  pass deletion, and healthy-store-only orphan cleanup. External references
+  remain outside that boundary.
+
 ## Security and privacy invariants
 
 - Paka has no internet permission, analytics, advertising, accounts, or cloud
@@ -169,6 +183,8 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
   `PdfRenderer` sessions, validation, and page rendering.
 - `app/src/main/java/com/paka/app/PdfViewer.kt` — fitted pages, hard-cut paging,
   GPU gestures, and sharp settled viewport layers.
+- `app/src/main/java/com/paka/app/PhotoStore.kt` and `PhotoViewer.kt` — encrypted
+  document-photo originals, bounded decode, front/back paging, and zoom.
 - `app/src/main/java/com/paka/app/BackupStore.kt` — encrypted portable backups.
 - `app/src/main/java/com/paka/app/Totp.kt` — URI parsing and RFC 6238 generation.
 - `app/src/main/java/com/paka/app/DemoData.kt` — synthetic in-memory demo data.
@@ -209,6 +225,9 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 On `feature/pdf-passes`, the debug variant deliberately uses the
 `com.paka.app.pdfpreview` application ID and “Paka PDF Test” label. Keep feature
 testing isolated from the owner's real encrypted Paka installation.
+
+On `feature/encrypted-document-photos`, the corresponding isolated debug ID is
+`com.paka.app.photopreview` and the label is “Paka Photo Test.”
 
 When a proposed improvement conflicts with this document, pause and explain the
 trade-off. The owner’s explicit instruction wins; otherwise preserve Paka’s core:

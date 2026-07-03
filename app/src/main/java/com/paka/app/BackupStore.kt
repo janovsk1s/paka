@@ -16,15 +16,20 @@ internal data class BackupData(
     val cards: List<Card>,
     val accounts: List<OtpAccount>,
     val documents: Map<String, ByteArray> = emptyMap(),
+    val photos: Map<String, ByteArray> = emptyMap(),
 ) {
-    fun clearDocuments() = documents.values.forEach { it.fill(0) }
+    fun clearDocuments() {
+        documents.values.forEach { it.fill(0) }
+        photos.values.forEach { it.fill(0) }
+    }
 }
 
 /** Portable, passphrase-encrypted backup containing both Paka data stores. */
 internal object BackupStore {
-    const val MAX_BACKUP_BYTES = 32 * 1024 * 1024
+    const val MAX_BACKUP_BYTES = 80 * 1024 * 1024
     private const val MAX_PDF_TOTAL_BYTES = 20 * 1024 * 1024
-    private const val SCHEMA = 2
+    private const val MAX_PHOTO_TOTAL_BYTES = 32 * 1024 * 1024
+    private const val SCHEMA = 3
     private const val MAX_ITEMS = 10_000
     private const val MAX_TEXT = 1_000_000
 
@@ -33,8 +38,9 @@ internal object BackupStore {
         accounts: List<OtpAccount>,
         passphrase: CharArray,
         documents: Map<String, ByteArray> = emptyMap(),
+        photos: Map<String, ByteArray> = emptyMap(),
     ): ByteArray {
-        val payload = serialize(cards, accounts, documents).toByteArray(Charsets.UTF_8)
+        val payload = serialize(cards, accounts, documents, photos).toByteArray(Charsets.UTF_8)
         require(payload.size <= MAX_BACKUP_BYTES) { "Backup is too large" }
         return try {
             BackupCrypto.encrypt(payload, passphrase)
@@ -54,7 +60,12 @@ internal object BackupStore {
         }
     }
 
-    private fun serialize(cards: List<Card>, accounts: List<OtpAccount>, documents: Map<String, ByteArray>): String {
+    private fun serialize(
+        cards: List<Card>,
+        accounts: List<OtpAccount>,
+        documents: Map<String, ByteArray>,
+        photos: Map<String, ByteArray>,
+    ): String {
         val cardArray = JSONArray()
         cards.forEach { card ->
             val item = JSONObject()
@@ -72,6 +83,18 @@ internal object BackupStore {
                     .put("type", "pdf")
                     .put("documentId", content.documentId)
                     .put("pageCount", content.pageCount)
+                is PassContent.Photos -> item
+                    .put("type", "photos")
+                    .put("pages", JSONArray().also { pages ->
+                        content.pages.forEach { page ->
+                            pages.put(
+                                JSONObject()
+                                    .put("documentId", page.documentId)
+                                    .put("width", page.width)
+                                    .put("height", page.height),
+                            )
+                        }
+                    })
             }
             cardArray.put(item)
         }
@@ -101,11 +124,22 @@ internal object BackupStore {
                     .put("data", Base64.getEncoder().encodeToString(bytes)),
             )
         }
+        val referencedPhotos = cards.photoDocumentIds()
+        require(photos.keys == referencedPhotos) { "Backup is missing photo data" }
+        require(photos.values.sumOf { it.size.toLong() } <= MAX_PHOTO_TOTAL_BYTES) { "Photo backup data is too large" }
+        val photoArray = JSONArray()
+        photos.forEach { (id, bytes) ->
+            require(bytes.size <= PhotoStore.MAX_PHOTO_BYTES && photoDocumentId(bytes) == id && PhotoStore.hasSupportedHeader(bytes)) {
+                "Invalid photo backup data"
+            }
+            photoArray.put(JSONObject().put("id", id).put("data", Base64.getEncoder().encodeToString(bytes)))
+        }
         return JSONObject()
             .put("schema", SCHEMA)
             .put("cards", cardArray)
             .put("accounts", accountArray)
             .put("documents", documentArray)
+            .put("photos", photoArray)
             .toString()
     }
 
@@ -132,6 +166,21 @@ internal object BackupStore {
                         require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
                     },
                     pageCount = item.getInt("pageCount").also { require(it in 1..1_000) { "Invalid PDF page count" } },
+                )
+                "photos" -> PassContent.Photos(
+                    pages = item.getJSONArray("pages").let { pages ->
+                        require(pages.length() in 1..2) { "Invalid photo count" }
+                        (0 until pages.length()).map { pageIndex ->
+                            val page = pages.getJSONObject(pageIndex)
+                            PhotoPage(
+                                documentId = limited(page.getString("documentId")).also {
+                                    require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }
+                                },
+                                width = page.getInt("width").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
+                                height = page.getInt("height").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
+                            )
+                        }
+                    },
                 )
                 else -> error("Unsupported pass type")
             }
@@ -160,6 +209,7 @@ internal object BackupStore {
             ).also { require(Totp.validationError(it) == null) { "Invalid 2FA entry" } }
         }
         val documents = linkedMapOf<String, ByteArray>()
+        val photos = linkedMapOf<String, ByteArray>()
         try {
             if (schema >= 2) {
                 val documentArray = root.optJSONArray("documents") ?: JSONArray()
@@ -178,12 +228,35 @@ internal object BackupStore {
                     documents[id] = bytes
                 }
             }
+            if (schema >= 3) {
+                val photoArray = root.optJSONArray("photos") ?: JSONArray()
+                require(photoArray.length() <= MAX_ITEMS) { "Backup has too many photos" }
+                var totalPhotoBytes = 0L
+                for (index in 0 until photoArray.length()) {
+                    val item = photoArray.getJSONObject(index)
+                    val id = limited(item.getString("id"))
+                    require(id.matches(Regex("[0-9a-f]{64}")) && id !in photos) { "Invalid photo backup entry" }
+                    val encoded = item.getString("data")
+                    require(encoded.length <= ((PhotoStore.MAX_PHOTO_BYTES + 2L) / 3L * 4L + 4L).toInt()) {
+                        "Photo backup entry is too large"
+                    }
+                    val bytes = Base64.getDecoder().decode(encoded)
+                    require(bytes.size <= PhotoStore.MAX_PHOTO_BYTES && photoDocumentId(bytes) == id && PhotoStore.hasSupportedHeader(bytes)) {
+                        "Invalid photo backup entry"
+                    }
+                    totalPhotoBytes += bytes.size
+                    require(totalPhotoBytes <= MAX_PHOTO_TOTAL_BYTES) { "Photo backup data is too large" }
+                    photos[id] = bytes
+                }
+            }
             require(cards.map { it.id }.toSet().size == cards.size) { "Duplicate pass identifiers" }
             require(accounts.map { it.id }.toSet().size == accounts.size) { "Duplicate 2FA identifiers" }
             require(cards.mapNotNull { it.pdfContent?.documentId }.toSet() == documents.keys) { "Backup is missing PDF data" }
-            return BackupData(cards, accounts, documents)
+            require(cards.photoDocumentIds() == photos.keys) { "Backup is missing photo data" }
+            return BackupData(cards, accounts, documents, photos)
         } catch (error: Throwable) {
             documents.values.forEach { it.fill(0) }
+            photos.values.forEach { it.fill(0) }
             throw error
         }
     }
