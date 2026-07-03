@@ -28,9 +28,13 @@ Notable changes to Paka are documented here.
 
 ### Added
 
-- Encrypted document-photo passes can store one or two imported images for items such as photo ID fronts/backs or proof of insurance.
-- Photo sides use immediate hard-cut paging and support pinch, pan, and instant double-tap zoom.
+- Encrypted photo passes can store one or two imported images for items such as photo ID fronts/backs or proof of insurance.
 - Imported photo originals use a dedicated Android Keystore key and are included in encrypted portable backups.
+- Viewing decodes a pre-scaled encrypted display copy through an in-memory cache, so photo passes open and flip sides without a visible delay.
+- A tap flips a two-sided photo pass over; pinch zooms with finger-anchored panning and a double tap returns the fitted view.
+- Stacks show photo passes at their natural aspect ratio and weave both sides into the existing tap cycle before moving to the next pass.
+- Photo passes show page numbers below the photo and PDF passes in the top bar, with a developer-options toggle to hide both.
+- The manual add screen lists QR, PDF document, and photo pass together on its first page.
 
 ## 0.13.0 — 2026-07-02
 

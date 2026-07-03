@@ -50,6 +50,17 @@ android {
                 "proguard-rules.pro",
             )
         }
+        // Shareable preview channel: minified like release so the APK stays
+        // release-sized, but debug-signed under a suffixed id so it installs
+        // alongside the real app without the release keystore.
+        create("preview") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".photopreview"
+            versionNameSuffix = "-photo-preview"
+            resValue("string", "app_name", "Paka Photo Test")
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
     }
 
     compileOptions {
