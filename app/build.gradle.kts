@@ -73,6 +73,12 @@ android {
         // channels rely on them for their side-by-side app names.
         resValues = true
     }
+    testOptions {
+        unitTests {
+            // Robolectric drives the store recovery tests.
+            isIncludeAndroidResources = true
+        }
+    }
     lint {
         abortOnError = true
         checkReleaseBuilds = true
@@ -108,4 +114,6 @@ dependencies {
     implementation(libs.camera.view)
 
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

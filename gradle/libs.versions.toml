@@ -10,6 +10,8 @@ zxing = "3.5.4"
 zxingCpp = "3.0.2"
 okapi = "0.5.6"
 junit = "4.13.2"
+robolectric = "4.16.1"
+androidxTestCore = "1.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -28,6 +30,8 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" 
 zxing-cpp = { group = "io.github.zxing-cpp", name = "android", version.ref = "zxingCpp" }
 okapibarcode = { group = "uk.org.okapibarcode", name = "okapibarcode", version.ref = "okapi" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

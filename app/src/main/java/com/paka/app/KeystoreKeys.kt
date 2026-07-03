@@ -13,8 +13,14 @@ import javax.crypto.SecretKey
 internal object KeystoreKeys {
     private const val KEYSTORE = "AndroidKeyStore"
 
+    // Robolectric's JVM has no AndroidKeyStore provider. Unit tests install an
+    // ephemeral software key factory here; production code never sets this.
+    @Volatile
+    internal var keyFactoryForTests: ((String) -> SecretKey)? = null
+
     @Synchronized
     fun getOrCreateAes256(alias: String): SecretKey {
+        keyFactoryForTests?.let { return it(alias) }
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
 
