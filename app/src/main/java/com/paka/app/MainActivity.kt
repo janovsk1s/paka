@@ -98,6 +98,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -978,11 +979,15 @@ private const val ITEMS_PER_PAGE = 5
 private fun <T> PagedList(
     items: List<T>,
     endPadding: Dp = 14.dp,
+    onPageChange: ((List<T>) -> Unit)? = null,
     content: @Composable (T) -> Unit,
 ) {
     val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
     if (pages.isEmpty()) return
-    HardCutPager(pageCount = pages.size) { currentPage, _ ->
+    HardCutPager(
+        pageCount = pages.size,
+        onPageChange = onPageChange?.let { report -> { page -> report(pages[page]) } },
+    ) { currentPage, _ ->
         Column(
             modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = endPadding, bottom = 8.dp),
         ) {
@@ -1096,7 +1101,28 @@ private fun PageIndicator(page: Int, pageCount: Int, horizontalOffset: Dp, modif
 
 @Composable
 private fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card) -> Unit, onOpenStack: (String) -> Unit) {
-    PagedList(entries) { entry ->
+    val context = LocalContext.current
+    var visibleEntries by remember { mutableStateOf<List<Entry>>(emptyList()) }
+    // Warm the session cache for photo passes on the visible page (and each
+    // page scrolled to) so their first open is as instant as a reopen. The
+    // quick dimensions match the viewer's so the cache keys line up.
+    LaunchedEffect(visibleEntries) {
+        val photoPages = visibleEntries.filterIsInstance<SingleEntry>()
+            .mapNotNull { it.card.photoContent }
+            .flatMap { it.pages }
+            .distinctBy { it.documentId }
+        if (photoPages.isEmpty()) return@LaunchedEffect
+        val metrics = context.resources.displayMetrics
+        withContext(Dispatchers.IO) {
+            photoPages.forEach { page ->
+                if (!isActive) return@withContext
+                runCatching {
+                    PhotoStore.decode(context, page.documentId, metrics.widthPixels / 2, metrics.heightPixels / 2)
+                }
+            }
+        }
+    }
+    PagedList(entries, onPageChange = { visibleEntries = it }) { entry ->
         when (entry) {
             is SingleEntry -> Text(
                 text = entry.card.name,
