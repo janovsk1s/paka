@@ -1357,13 +1357,24 @@ private fun BackupScreen(
             }
 
             BackupStep.EXPORT_PASSWORD -> {
-                val canExport = passphrase.length >= 8 && passphrase == confirmation && !busy
+                val canExport = passphrase.length >= BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH &&
+                    passphrase == confirmation && !busy
                 Column(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    Text("Use at least 8 characters. This passphrase cannot be recovered.", color = Grey, fontSize = 16.sp)
-                    EditField("passphrase", passphrase, { passphrase = it }, "8+ characters", visualTransformation = PasswordVisualTransformation())
+                    Text(
+                        "Use at least ${BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH} characters. This passphrase cannot be recovered.",
+                        color = Grey,
+                        fontSize = 16.sp,
+                    )
+                    EditField(
+                        "passphrase",
+                        passphrase,
+                        { passphrase = it },
+                        "${BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH}+ characters",
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
                     EditField("repeat", confirmation, { confirmation = it }, "repeat passphrase", visualTransformation = PasswordVisualTransformation())
                     if (confirmation.isNotEmpty() && passphrase != confirmation) {
                         Text("passphrases do not match", color = Grey, fontSize = 14.sp)

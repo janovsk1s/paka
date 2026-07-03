@@ -2,6 +2,28 @@
 
 Notable changes to Paka are documented here.
 
+## 0.13.1 — Unreleased
+
+### Security
+
+- New portable backups use 600,000 PBKDF2-HMAC-SHA256 rounds; existing 210,000-round backups remain restorable.
+- New backup passphrases require at least 12 characters, while restore continues accepting older 8-character passphrases.
+- New on-device encryption keys prefer StrongBox with a safe fallback and require an unlocked device on Android 15+, where Android's earlier key-loss and authorization bugs are fixed.
+- Gradle dependency verification pins SHA-256 checksums for the complete build graph.
+- CI actions are pinned to immutable commits and the Gradle wrapper is validated before use.
+
+### Reliability
+
+- Atomic store replacement now flushes the replacement directory after rename and flushes the previous-generation backup file.
+- Pass, 2FA, and PDF recovery share one tested primary/backup selection path without modifying corrupt evidence.
+- CI now builds the minified release variant in addition to debug, tests, and lint.
+
+### Development
+
+- Gradle build caching and configuration caching reduce repeat build time.
+- Dependabot watches both Gradle libraries and GitHub Actions for updates.
+- Added tests for atomic replacement, corrupt-primary recovery, corrupt-both preservation, PBKDF iteration headers, and legacy-backup compatibility.
+
 ## 0.13.0 — 2026-07-02
 
 ### Added

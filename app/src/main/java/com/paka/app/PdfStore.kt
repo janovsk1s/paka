@@ -19,14 +19,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.security.KeyStore
 import java.security.MessageDigest
 import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 
 internal data class PdfImport(
     val documentId: String,
@@ -161,7 +157,6 @@ internal object PdfStore {
     private const val DIRECTORY = "pdfs"
     private const val SUFFIX = ".pdf.enc"
     private const val KEY_ALIAS = "paka_pdf_key"
-    private const val KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), 1)
 
@@ -270,8 +265,7 @@ internal object PdfStore {
     }
 
     private fun decryptFile(file: File, documentId: String): ByteArray {
-        fun decrypt(candidate: File): ByteArray {
-            val blob = AtomicStore.readBytes(candidate)
+        fun decrypt(blob: ByteArray): ByteArray {
             require(blob.size > MAGIC.size + 12 + 16) { "Encrypted PDF is truncated" }
             require(blob.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)) { "Unsupported PDF version" }
             val cipher = Cipher.getInstance(TRANSFORM)
@@ -283,31 +277,14 @@ internal object PdfStore {
             cipher.updateAAD(aad(documentId))
             return cipher.doFinal(blob, MAGIC.size + 12, blob.size - MAGIC.size - 12)
         }
-        runCatching { return decrypt(file) }
-        val backup = AtomicStore.backupFile(file)
-        if (backup.exists()) runCatching { return decrypt(backup) }
-        error("PDF could not be decrypted")
+        return AtomicStore.readWithBackup(file, ::decrypt).getOrElse {
+            throw IllegalStateException("PDF could not be decrypted", it)
+        }.value
     }
 
     private fun aad(documentId: String) = "paka-pdf-v1:$documentId".toByteArray(Charsets.UTF_8)
 
-    private fun secretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE).run {
-            init(
-                KeyGenParameterSpec.Builder(
-                    KEY_ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-                )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .build(),
-            )
-            generateKey()
-        }
-    }
+    private fun secretKey(): SecretKey = KeystoreKeys.getOrCreateAes256(KEY_ALIAS)
 }
 
 internal fun pdfDocumentId(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")

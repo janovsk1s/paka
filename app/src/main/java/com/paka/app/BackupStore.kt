@@ -197,8 +197,9 @@ internal object BackupStore {
 
 /** Versioned authenticated encryption container: magic, rounds, salt, IV, ciphertext+tag. */
 internal object BackupCrypto {
+    const val MIN_NEW_PASSPHRASE_LENGTH = 12
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'A'.code.toByte(), 'K'.code.toByte(), 'A'.code.toByte(), 'B'.code.toByte(), 1)
-    private const val ITERATIONS = 210_000
+    private const val ITERATIONS = 600_000
     private const val MIN_ITERATIONS = 100_000
     private const val MAX_ITERATIONS = 1_000_000
     private const val SALT_BYTES = 16
@@ -208,7 +209,9 @@ internal object BackupCrypto {
     private const val HEADER_BYTES = 6 + 4 + SALT_BYTES + IV_BYTES
 
     fun encrypt(plaintext: ByteArray, passphrase: CharArray): ByteArray {
-        require(passphrase.size >= 8) { "Passphrase must be at least 8 characters" }
+        require(passphrase.size >= MIN_NEW_PASSPHRASE_LENGTH) {
+            "Passphrase must be at least $MIN_NEW_PASSPHRASE_LENGTH characters"
+        }
         val salt = ByteArray(SALT_BYTES).also(SecureRandom()::nextBytes)
         val iv = ByteArray(IV_BYTES).also(SecureRandom()::nextBytes)
         val rounds = ByteBuffer.allocate(4).putInt(ITERATIONS).array()

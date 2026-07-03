@@ -1,14 +1,10 @@
 package com.paka.app
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.security.KeyStore
 import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
@@ -17,7 +13,6 @@ internal object CardStore {
     private const val KEY_ALIAS = "paka_card_key"
     private const val FILE = "cards.enc"
     private const val LEGACY_FILE = "cards.json"
-    private const val KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"
     private const val SCHEMA = 4
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'C'.code.toByte(), 1)
@@ -49,15 +44,11 @@ internal object CardStore {
     }
 
     private fun loadEncrypted(file: File): LoadOutcome<List<Card>> {
-        runCatching { return LoadOutcome(decrypt(AtomicStore.readBytes(file))) }
-        val backup = AtomicStore.backupFile(file)
-        if (backup.exists()) {
-            runCatching {
-                return LoadOutcome(
-                    value = decrypt(AtomicStore.readBytes(backup)),
-                    warning = "Passes were recovered from the previous encrypted backup.",
-                )
-            }
+        AtomicStore.readWithBackup(file, ::decrypt).getOrNull()?.let { recovered ->
+            return LoadOutcome(
+                value = recovered.value,
+                warning = if (recovered.fromBackup) "Passes were recovered from the previous encrypted backup." else null,
+            )
         }
         return LoadOutcome(
             value = emptyList(),
@@ -67,15 +58,11 @@ internal object CardStore {
     }
 
     private fun loadLegacy(file: File): LoadOutcome<List<Card>> {
-        if (file.exists()) runCatching { return LoadOutcome(parse(AtomicStore.readBytes(file).toString(Charsets.UTF_8))) }
-        val backup = AtomicStore.backupFile(file)
-        if (backup.exists()) {
-            runCatching {
-                return LoadOutcome(
-                    value = parse(AtomicStore.readBytes(backup).toString(Charsets.UTF_8)),
-                    warning = "Passes were recovered from the previous plaintext backup.",
-                )
-            }
+        AtomicStore.readWithBackup(file) { parse(it.toString(Charsets.UTF_8)) }.getOrNull()?.let { recovered ->
+            return LoadOutcome(
+                value = recovered.value,
+                warning = if (recovered.fromBackup) "Passes were recovered from the previous plaintext backup." else null,
+            )
         }
         return LoadOutcome(
             value = emptyList(),
@@ -113,23 +100,7 @@ internal object CardStore {
         }
     }
 
-    private fun secretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE).run {
-            init(
-                KeyGenParameterSpec.Builder(
-                    KEY_ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-                )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .build(),
-            )
-            generateKey()
-        }
-    }
+    private fun secretKey(): SecretKey = KeystoreKeys.getOrCreateAes256(KEY_ALIAS)
 
     private fun serialize(cards: List<Card>): String {
         val array = JSONArray()
