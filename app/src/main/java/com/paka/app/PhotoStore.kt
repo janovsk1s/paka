@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
+import android.util.LruCache
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -50,15 +51,70 @@ internal object PhotoStore {
         }
     }
 
+    // Decoded display bitmaps for the current session, so opening a pass and
+    // flipping sides never repeats Keystore decryption and image decoding.
+    // Cleared when Paka leaves the foreground or the system trims memory.
+    private val memoryCache = object : LruCache<String, Bitmap>(
+        (Runtime.getRuntime().maxMemory() / 4).coerceAtMost(96L * 1024 * 1024).toInt(),
+    ) {
+        // Computed instead of byteCount, which hardware bitmaps do not report.
+        override fun sizeOf(key: String, value: Bitmap) = value.width * value.height * 4
+    }
+
+    private fun cacheKey(documentId: String, width: Int, height: Int) = "$documentId:${width}x$height"
+
     fun decode(context: Context, documentId: String, targetWidth: Int, targetHeight: Int): Bitmap {
+        val key = cacheKey(documentId, targetWidth, targetHeight)
+        memoryCache.get(key)?.takeIf { !it.isRecycled }?.let { return it }
         val bytes = displayPlaintext(context, documentId)
         return try {
             // Hardware bitmaps live in GPU memory, keeping pinch-zoom smooth.
             decodeBytes(bytes, targetWidth, targetHeight, allowHardware = true)
-                .second
+                .second.also { memoryCache.put(key, it) }
         } finally {
             bytes.fill(0)
         }
+    }
+
+    /**
+     * Delivers a quick low-resolution bitmap and then the sharp one from a
+     * single decrypt of the display copy, caching both for the session.
+     * A cached sharp bitmap short-circuits everything.
+     */
+    fun decodeProgressive(
+        context: Context,
+        documentId: String,
+        quickWidth: Int,
+        quickHeight: Int,
+        fullWidth: Int,
+        fullHeight: Int,
+        onDecoded: (Bitmap) -> Unit,
+    ) {
+        val fullKey = cacheKey(documentId, fullWidth, fullHeight)
+        memoryCache.get(fullKey)?.takeIf { !it.isRecycled }?.let {
+            onDecoded(it)
+            return
+        }
+        val quickKey = cacheKey(documentId, quickWidth, quickHeight)
+        val cachedQuick = memoryCache.get(quickKey)?.takeIf { !it.isRecycled }
+        cachedQuick?.let(onDecoded)
+        val bytes = displayPlaintext(context, documentId)
+        try {
+            if (cachedQuick == null) {
+                val quick = decodeBytes(bytes, quickWidth, quickHeight, allowHardware = true).second
+                memoryCache.put(quickKey, quick)
+                onDecoded(quick)
+            }
+            val full = decodeBytes(bytes, fullWidth, fullHeight, allowHardware = true).second
+            memoryCache.put(fullKey, full)
+            onDecoded(full)
+        } finally {
+            bytes.fill(0)
+        }
+    }
+
+    fun trimMemory() {
+        memoryCache.evictAll()
     }
 
     fun delete(context: Context, documentId: String) {
@@ -66,6 +122,9 @@ internal object PhotoStore {
         AtomicStore.backupFile(documentFile(context, documentId)).delete()
         displayFile(context, documentId).delete()
         AtomicStore.backupFile(displayFile(context, documentId)).delete()
+        memoryCache.snapshot().keys
+            .filter { it.startsWith("$documentId:") }
+            .forEach { memoryCache.remove(it) }
     }
 
     fun deleteOrphans(context: Context, referencedIds: Set<String>) {

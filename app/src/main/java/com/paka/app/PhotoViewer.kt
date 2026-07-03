@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -46,7 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlin.math.min
@@ -103,38 +101,31 @@ internal fun PhotoDocumentViewer(
     var pageZoomed by remember(content.pages) { mutableStateOf(false) }
     val bitmaps = remember(content.pages) { mutableStateMapOf<String, Bitmap>() }
     val failures = remember(content.pages) { mutableStateMapOf<String, Boolean>() }
-    val ownedBitmaps = remember(content.pages) { mutableListOf<Bitmap>() }
-
-    DisposableEffect(content.pages) {
-        onDispose {
-            ownedBitmaps.distinctBy(System::identityHashCode).forEach { if (!it.isRecycled) it.recycle() }
-            ownedBitmaps.clear()
-            bitmaps.clear()
-            failures.clear()
-        }
-    }
 
     LaunchedEffect(content.pages) {
-        suspend fun decodePass(targetWidth: Int, targetHeight: Int) {
+        // Each side is decrypted once, showing a quick decode immediately and
+        // a sharp one right after; PhotoStore's session cache owns the bitmaps
+        // so reopening and flipping never repeats the work. Display metrics
+        // avoid waiting for layout.
+        val metrics = context.resources.displayMetrics
+        withContext(Dispatchers.IO) {
             content.pages.forEach { page ->
-                if (!currentCoroutineContext().isActive) return
-                val result = withContext(Dispatchers.IO) {
-                    runCatching { PhotoStore.decode(context, page.documentId, targetWidth, targetHeight) }
-                }
-                result
-                    .onSuccess { decoded ->
+                if (!isActive) return@withContext
+                runCatching {
+                    PhotoStore.decodeProgressive(
+                        context = context,
+                        documentId = page.documentId,
+                        quickWidth = metrics.widthPixels / 2,
+                        quickHeight = metrics.heightPixels / 2,
+                        fullWidth = (metrics.widthPixels * 2).coerceAtMost(2_400),
+                        fullHeight = (metrics.heightPixels * 2).coerceAtMost(2_400),
+                    ) { decoded ->
                         failures.remove(page.documentId)
-                        ownedBitmaps += decoded
                         bitmaps[page.documentId] = decoded
                     }
-                    .onFailure { failures[page.documentId] = true }
+                }.onFailure { failures[page.documentId] = true }
             }
         }
-        // Quick pass so every side opens near-instantly, then a sharp pass at
-        // full viewing resolution. Display metrics avoid waiting for layout.
-        val metrics = context.resources.displayMetrics
-        decodePass(metrics.widthPixels / 2, metrics.heightPixels / 2)
-        decodePass((metrics.widthPixels * 2).coerceAtMost(2_400), (metrics.heightPixels * 2).coerceAtMost(2_400))
     }
 
     HardCutPager(

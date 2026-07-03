@@ -232,6 +232,16 @@ class MainActivity : ComponentActivity() {
         if (!externalFlowActive && Prefs.returnHome(this)) homeResetSignal++
     }
 
+    override fun onStop() {
+        super.onStop()
+        // Decoded photo bitmaps live only while Paka is in the foreground.
+        PhotoStore.trimMemory()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        PhotoStore.trimMemory()
+    }
 }
 
 private fun Context.setPakaExternalFlowActive(active: Boolean) {

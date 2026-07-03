@@ -33,7 +33,7 @@ Notable changes to Paka are documented here.
 
 - Encrypted photo passes can store one or two imported images for items such as photo ID fronts/backs or proof of insurance.
 - Imported photo originals use a dedicated Android Keystore key and are included in encrypted portable backups.
-- Viewing prefetches both sides from pre-scaled encrypted display copies, then releases the decrypted bitmaps when the viewer closes.
+- Viewing prefetches both sides from pre-scaled encrypted display copies into a session cache, so opening a pass and flipping sides is immediate; decoded photos are released when Paka leaves the foreground or memory runs low.
 - A fitted photo flips sides on an immediate tap; pinch zooms with finger-anchored panning, while PDF double-tap zoom remains unchanged.
 - Stacks prefetch both photo sides, show them at their natural aspect ratio, and weave them into the existing tap cycle before moving to the next pass.
 - Photo passes show page numbers below the photo and PDF passes in the top bar, with a developer-options toggle to hide both.

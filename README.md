@@ -40,8 +40,8 @@ intentional design principles described by the LightOS Developer Program.
 - Imported document photos use a separate Android Keystore key. One or two
   sides are copied into Paka as encrypted originals and included in encrypted
   portable backups. Each photo also keeps a pre-scaled display copy, encrypted
-  under the same key; viewing decodes only this copy and releases the decrypted
-  pixels when the viewer closes.
+  under the same key; viewing decodes only this copy, and decoded photos are
+  released when Paka leaves the foreground or the system trims memory.
 - Up to two optional file references in pass Details are external links. Paka stores only
   the link metadata in its encrypted pass database; the referenced file itself
   is not copied, encrypted, or included in Paka backups.
