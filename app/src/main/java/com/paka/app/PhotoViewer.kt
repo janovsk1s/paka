@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlin.math.min
@@ -101,15 +103,30 @@ internal fun PhotoDocumentViewer(
     var pageZoomed by remember(content.pages) { mutableStateOf(false) }
     val bitmaps = remember(content.pages) { mutableStateMapOf<String, Bitmap>() }
     val failures = remember(content.pages) { mutableStateMapOf<String, Boolean>() }
+    val ownedBitmaps = remember(content.pages) { mutableListOf<Bitmap>() }
+
+    DisposableEffect(content.pages) {
+        onDispose {
+            ownedBitmaps.distinctBy(System::identityHashCode).forEach { if (!it.isRecycled) it.recycle() }
+            ownedBitmaps.clear()
+            bitmaps.clear()
+            failures.clear()
+        }
+    }
 
     LaunchedEffect(content.pages) {
-        // Bitmaps are owned by PhotoStore's memory cache, so nothing here is
-        // recycled: reopening a pass or flipping sides reuses them instantly.
-        suspend fun decodePass(targetWidth: Int, targetHeight: Int) = withContext(Dispatchers.IO) {
+        suspend fun decodePass(targetWidth: Int, targetHeight: Int) {
             content.pages.forEach { page ->
-                if (!isActive) return@withContext
-                runCatching { PhotoStore.decode(context, page.documentId, targetWidth, targetHeight) }
-                    .onSuccess { bitmaps[page.documentId] = it }
+                if (!currentCoroutineContext().isActive) return
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { PhotoStore.decode(context, page.documentId, targetWidth, targetHeight) }
+                }
+                result
+                    .onSuccess { decoded ->
+                        failures.remove(page.documentId)
+                        ownedBitmaps += decoded
+                        bitmaps[page.documentId] = decoded
+                    }
                     .onFailure { failures[page.documentId] = true }
             }
         }
@@ -237,9 +254,9 @@ private fun PhotoZoomPage(
             }
             .pointerInput(page.documentId, hasBitmap, viewportWidth, viewportHeight) {
                 if (!hasBitmap) return@pointerInput
-                // No onDoubleTap detector: taps must fire immediately so cycling
-                // between sides feels instant. Zooming in is pinch-only; while
-                // zoomed, two quick taps (timed manually) reset to the fit view.
+                // At fitted size a tap must fire immediately to flip sides, so
+                // this deliberately has no Compose double/triple-tap detector.
+                // Zoom-in is pinch-only. While zoomed, two quick taps reset.
                 var lastTapMillis = 0L
                 detectTapGestures(
                     onTap = {

@@ -65,6 +65,9 @@ and can engage the camera light automatically. Rendered barcodes are decoded and
 payload-checked before display; a bounded memory cache keeps common passes fast.
 PDF pages open at a fitted overview, support pinch and instant double-tap zoom,
 and rerender the settled viewport for sharp text without giant zoom bitmaps.
+Photo passes prefetch one or two sides from encrypted display copies; a fitted
+photo flips sides immediately when tapped, while zoom-in is pinch-only so the
+tap never waits on a double/triple-tap detector. PDF double-tap zoom is unchanged.
 Paka returns to the pass list after leaving the app by default; the hidden
 Developer screen can disable that behavior.
 The same screen can enable an isolated demo mode with freshly generated,

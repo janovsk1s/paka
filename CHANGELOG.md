@@ -25,16 +25,23 @@ Notable changes to Paka are documented here.
 - Gradle build caching and configuration caching reduce repeat build time.
 - Dependabot watches both Gradle libraries and GitHub Actions for updates.
 - Added tests for atomic replacement, corrupt-primary recovery, corrupt-both preservation, PBKDF iteration headers, and legacy-backup compatibility.
+- Added compact-backup payload tests for round trips, truncation, trailing data,
+  per-entry limits, and stable-compatible schema selection.
 
 ### Added
 
 - Encrypted photo passes can store one or two imported images for items such as photo ID fronts/backs or proof of insurance.
 - Imported photo originals use a dedicated Android Keystore key and are included in encrypted portable backups.
-- Viewing decodes a pre-scaled encrypted display copy through an in-memory cache, so photo passes open and flip sides without a visible delay.
-- A tap flips a two-sided photo pass over; pinch zooms with finger-anchored panning and a double tap returns the fitted view.
-- Stacks show photo passes at their natural aspect ratio and weave both sides into the existing tap cycle before moving to the next pass.
+- Viewing prefetches both sides from pre-scaled encrypted display copies, then releases the decrypted bitmaps when the viewer closes.
+- A fitted photo flips sides on an immediate tap; pinch zooms with finger-anchored panning, while PDF double-tap zoom remains unchanged.
+- Stacks prefetch both photo sides, show them at their natural aspect ratio, and weave them into the existing tap cycle before moving to the next pass.
 - Photo passes show page numbers below the photo and PDF passes in the top bar, with a developer-options toggle to hide both.
 - The manual add screen lists QR, PDF document, and photo pass together on its first page.
+- Photo-containing backups use a compact binary payload instead of Base64-expanded JSON; barcode-only and PDF-only backups retain stable-compatible schemas.
+
+### Changed
+
+- Backup passphrase entry uses the same focused full-screen text editor as manual entry, with masked values on the export and unlock forms; passphrases are saved exactly as typed.
 
 ## 0.13.0 — 2026-07-02
 

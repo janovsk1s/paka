@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
-import android.util.LruCache
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -36,15 +35,6 @@ internal object PhotoStore {
     private const val TRANSFORM = "AES/GCM/NoPadding"
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'I'.code.toByte(), 1)
 
-    // Decoded display bitmaps, so reopening a pass and flipping between its
-    // sides never repeats the decrypt+decode work while the app is alive.
-    private val memoryCache = object : LruCache<String, Bitmap>(
-        (Runtime.getRuntime().maxMemory() / 4).coerceAtMost(96L * 1024 * 1024).toInt(),
-    ) {
-        // Computed instead of byteCount, which hardware bitmaps do not report.
-        override fun sizeOf(key: String, value: Bitmap) = value.width * value.height * 4
-    }
-
     fun import(context: Context, uri: Uri): Result<PhotoImport> = runCatching {
         val bytes = readUri(context, uri)
         try {
@@ -61,20 +51,14 @@ internal object PhotoStore {
     }
 
     fun decode(context: Context, documentId: String, targetWidth: Int, targetHeight: Int): Bitmap {
-        val key = "$documentId:${targetWidth}x$targetHeight"
-        memoryCache.get(key)?.let { if (!it.isRecycled) return it }
         val bytes = displayPlaintext(context, documentId)
         return try {
             // Hardware bitmaps live in GPU memory, keeping pinch-zoom smooth.
             decodeBytes(bytes, targetWidth, targetHeight, allowHardware = true)
-                .second.also { memoryCache.put(key, it) }
+                .second
         } finally {
             bytes.fill(0)
         }
-    }
-
-    fun trimMemory() {
-        memoryCache.evictAll()
     }
 
     fun delete(context: Context, documentId: String) {
@@ -82,9 +66,6 @@ internal object PhotoStore {
         AtomicStore.backupFile(documentFile(context, documentId)).delete()
         displayFile(context, documentId).delete()
         AtomicStore.backupFile(displayFile(context, documentId)).delete()
-        memoryCache.snapshot().keys
-            .filter { it.startsWith("$documentId:") }
-            .forEach { memoryCache.remove(it) }
     }
 
     fun deleteOrphans(context: Context, referencedIds: Set<String>) {

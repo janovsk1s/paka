@@ -107,11 +107,19 @@ barcode is not sufficient: scanners must receive the exact original payload.
   dimension and pixel-count caps, and a successful bounded decode before save.
 - Persist only AES-256-GCM ciphertext under the dedicated photo Keystore key.
   Never write a plaintext image cache.
-- Front/back changes are immediate hard-cut pages. Pinch/pan transform the
-  bounded decoded bitmap and double-tap zoom remains immediate.
+- Decoded photo bitmaps are viewer-scoped, prefetched front/back, and released
+  when that viewer or stack closes. Do not retain identity photos globally for
+  faster reopening.
+- Front/back changes are immediate hard-cut pages and a fitted photo cycles
+  sides on an immediate single tap. Do not add a double/triple-tap zoom-in
+  detector that delays or collides with that action; photo zoom-in is pinch-only.
+  PDF double-tap zoom remains unchanged.
 - Photo originals are part of encrypted portable backups, transactional restore,
   pass deletion, and healthy-store-only orphan cleanup. External references
   remain outside that boundary.
+- Photo-containing portable backups use the compact authenticated binary payload.
+  Continue restoring legacy JSON schema 3, and keep schema 1/2 exports for
+  photo-free rollback to stable Paka versions.
 
 ## Security and privacy invariants
 

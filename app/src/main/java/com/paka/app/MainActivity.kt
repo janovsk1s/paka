@@ -112,6 +112,7 @@ import kotlin.math.sin
 private enum class Mode { CARDS, CODES }
 private enum class ScanMode { CARD, CODE }
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
+private enum class BackupField { PASSPHRASE, REPEAT }
 private enum class ManageGlyph { UP, DOWN }
 
 private sealed interface Entry
@@ -231,10 +232,6 @@ class MainActivity : ComponentActivity() {
         if (!externalFlowActive && Prefs.returnHome(this)) homeResetSignal++
     }
 
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        PhotoStore.trimMemory()
-    }
 }
 
 private fun Context.setPakaExternalFlowActive(active: Boolean) {
@@ -1274,6 +1271,7 @@ private fun BackupScreen(
     var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
     var unlocked by remember { mutableStateOf<BackupData?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var editingField by remember { mutableStateOf<BackupField?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -1336,6 +1334,7 @@ private fun BackupScreen(
         passphrase = ""
         confirmation = ""
         busy = false
+        editingField = null
         step = BackupStep.MENU
     }
 
@@ -1343,6 +1342,22 @@ private fun BackupScreen(
         if (step == BackupStep.MENU) onBack() else resetToMenu()
     }
     BackHandler { goBack() }
+
+    editingField?.let { field ->
+        TextEntryScreen(
+            title = if (field == BackupField.PASSPHRASE) "passphrase" else "repeat",
+            initial = if (field == BackupField.PASSPHRASE) passphrase else confirmation,
+            onSave = { value ->
+                if (field == BackupField.PASSPHRASE) passphrase = value else confirmation = value
+                editingField = null
+            },
+            onBack = { editingField = null },
+            visualTransformation = PasswordVisualTransformation(),
+            allowBlank = true,
+            trimOnSave = false,
+        )
+        return
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar(
@@ -1397,14 +1412,14 @@ private fun BackupScreen(
                         color = Grey,
                         fontSize = 16.sp,
                     )
-                    EditField(
+                    ManualEntryRow(
                         "passphrase",
-                        passphrase,
-                        { passphrase = it },
+                        "•".repeat(passphrase.length),
                         "${BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH}+ characters",
-                        visualTransformation = PasswordVisualTransformation(),
-                    )
-                    EditField("repeat", confirmation, { confirmation = it }, "repeat passphrase", visualTransformation = PasswordVisualTransformation())
+                    ) { editingField = BackupField.PASSPHRASE }
+                    ManualEntryRow("repeat", "•".repeat(confirmation.length), "repeat passphrase") {
+                        editingField = BackupField.REPEAT
+                    }
                     if (confirmation.isNotEmpty() && passphrase != confirmation) {
                         Text("passphrases do not match", color = Grey, fontSize = 14.sp)
                     }
@@ -1443,8 +1458,10 @@ private fun BackupScreen(
                                     val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                                     context.setPakaExternalFlowActive(true)
                                     exportLauncher.launch("paka-$stamp.paka")
-                                }.onFailure {
-                                    Toast.makeText(context, "backup could not be encrypted", Toast.LENGTH_LONG).show()
+                                }.onFailure { error ->
+                                    val message = error.message?.takeIf { it.contains("too large", ignoreCase = true) }
+                                        ?: "backup could not be encrypted"
+                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                 }
                             }
                         } else Modifier,
@@ -1459,7 +1476,9 @@ private fun BackupScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     Text("Enter the passphrase used when this backup was created.", color = Grey, fontSize = 16.sp)
-                    EditField("passphrase", passphrase, { passphrase = it }, "backup passphrase", visualTransformation = PasswordVisualTransformation())
+                    ManualEntryRow("passphrase", "•".repeat(passphrase.length), "backup passphrase") {
+                        editingField = BackupField.PASSPHRASE
+                    }
                 }
                 Text(
                     if (busy) "unlocking…" else "unlock backup",
@@ -2146,9 +2165,12 @@ private fun TextEntryScreen(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     allowBlank: Boolean = false,
     singleLine: Boolean = true,
+    // Passphrases keep their exact characters; names and notes are trimmed.
+    trimOnSave: Boolean = true,
 ) {
     var text by remember { mutableStateOf(initial) }
     val canSave = allowBlank || text.isNotBlank()
+    val savedText = { if (trimOnSave) text.trim() else text }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     BackHandler { onBack() }
@@ -2166,7 +2188,7 @@ private fun TextEntryScreen(
                     textStyle = TextStyle(color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal),
                     cursorBrush = SolidColor(White),
                     keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default),
-                    keyboardActions = KeyboardActions(onDone = { if (canSave) { keyboard?.hide(); onSave(text.trim()) } }),
+                    keyboardActions = KeyboardActions(onDone = { if (canSave) { keyboard?.hide(); onSave(savedText()) } }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(if (singleLine) Modifier else Modifier.height(180.dp))
@@ -2183,7 +2205,7 @@ private fun TextEntryScreen(
             modifier = Modifier.padding(vertical = 18.dp).then(
                 if (canSave) tapModifier {
                     keyboard?.hide()
-                    onSave(text.trim())
+                    onSave(savedText())
                 } else Modifier,
             ),
         )
@@ -2340,7 +2362,7 @@ private fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> 
                             },
                             Modifier.weight(1f),
                         )
-                        LabelValue("added", " · ${formatDate(card.createdAt)}", Modifier.weight(1f))
+                        LabelValue("added", formatDate(card.createdAt), Modifier.weight(1f))
                     }
                 } else if (page == 1) {
                     Column {
@@ -2460,36 +2482,6 @@ private fun ReferenceEntryRow(label: String, reference: PassReference?, onClick:
 }
 
 @Composable
-private fun EditField(
-    label: String,
-    value: String,
-    onChange: (String) -> Unit,
-    placeholder: String,
-    singleLine: Boolean = true,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    fontSize: TextUnit = 20.sp,
-) {
-    Column {
-        FieldLabel(label)
-        Spacer(Modifier.height(6.dp))
-        Box {
-            if (value.isEmpty()) Text(placeholder, color = Grey, fontSize = fontSize, fontWeight = FontWeight.Light)
-            BasicTextField(
-                value = value,
-                onValueChange = onChange,
-                singleLine = singleLine,
-                visualTransformation = visualTransformation,
-                textStyle = TextStyle(color = White, fontSize = fontSize, fontWeight = FontWeight.Light),
-                cursorBrush = SolidColor(White),
-                modifier = Modifier.fillMaxWidth().then(if (singleLine) Modifier else Modifier.height(120.dp)),
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey))
-    }
-}
-
-@Composable
 private fun BarcodePanel(
     card: Card,
     onClick: () -> Unit,
@@ -2559,10 +2551,32 @@ private fun StackScreen(
             // Matches PdfDocumentPreview's 420.dp box minus its 8.dp inner padding.
             val pdfHeightPx = with(density) { 404.dp.roundToPx() }
             val rendered = remember(name, cards, targetWidthPx) { mutableStateMapOf<String, BarcodeRender>() }
+            val photoRenders = remember(name, cards, targetWidthPx) { mutableStateMapOf<String, BarcodeRender>() }
+            DisposableEffect(photoRenders) {
+                onDispose {
+                    photoRenders.values.mapNotNull(BarcodeRender::bitmap)
+                        .distinctBy(System::identityHashCode)
+                        .forEach { if (!it.isRecycled) it.recycle() }
+                    photoRenders.clear()
+                }
+            }
 
             LaunchedEffect(cards, targetWidthPx) {
                 val uniqueCards = cards.distinctBy { it.id }
                 suspend fun render(stackCard: Card) {
+                    val photoContent = stackCard.photoContent
+                    if (photoContent != null) {
+                        photoContent.pages.forEach { page ->
+                            val key = "${stackCard.id}:${page.documentId}"
+                            val bitmap = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    PhotoStore.decode(context, page.documentId, targetWidthPx, pdfHeightPx)
+                                }.getOrNull()
+                            }
+                            photoRenders[key] = BarcodeRender(bitmap)
+                        }
+                        return
+                    }
                     val bitmap = when (val content = stackCard.content) {
                         is PassContent.Barcode -> withContext(Dispatchers.Default) {
                             Barcodes.generateCached(content.format, content.data, targetWidthPx)
@@ -2576,18 +2590,7 @@ private fun StackScreen(
                                     }
                                 }.getOrNull()
                             }
-                        is PassContent.Photos -> withContext(Dispatchers.IO) {
-                            val documentId = content.pages.first().documentId
-                            // Show a quick low-res decode immediately, then replace it
-                            // with the sharp one; keep the quick one if that fails.
-                            val quick = runCatching {
-                                PhotoStore.decode(context, documentId, targetWidthPx / 2, pdfHeightPx / 2)
-                            }.getOrNull()
-                            quick?.let { rendered[stackCard.id] = BarcodeRender(it) }
-                            runCatching {
-                                PhotoStore.decode(context, documentId, targetWidthPx, pdfHeightPx)
-                            }.getOrNull() ?: quick
-                        }
+                        is PassContent.Photos -> error("Photo content was handled above")
                     }
                     rendered[stackCard.id] = BarcodeRender(bitmap)
                 }
@@ -2623,25 +2626,13 @@ private fun StackScreen(
                         }
                         is PassContent.Photos -> {
                             var side by remember(card.id) { mutableIntStateOf(0) }
-                            var sideRender by remember(card.id) { mutableStateOf<BarcodeRender?>(null) }
-                            LaunchedEffect(card.id, side, targetWidthPx) {
-                                if (side == 0) return@LaunchedEffect
-                                sideRender = null
-                                val documentId = content.pages[side].documentId
-                                sideRender = BarcodeRender(
-                                    withContext(Dispatchers.IO) {
-                                        runCatching {
-                                            PhotoStore.decode(context, documentId, targetWidthPx, pdfHeightPx)
-                                        }.getOrNull()
-                                    },
-                                )
-                            }
-                            val render = if (side == 0) rendered[card.id] else sideRender
+                            val renderKey = "${card.id}:${content.pages[side].documentId}"
+                            val render = photoRenders[renderKey]
                             PhotoDocumentPreview(
                                 card = card,
                                 page = content.pages[side],
                                 render = render?.bitmap,
-                                renderPending = render == null,
+                                renderPending = renderKey !in photoRenders,
                                 // Tapping steps through the sides first, then on
                                 // to the next card so the stack's tap cycle
                                 // continues past two-sided photo passes.
