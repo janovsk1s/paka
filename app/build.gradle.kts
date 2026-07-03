@@ -21,7 +21,7 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 43
+        versionCode = 44
         versionName = "0.14.0"
     }
 
