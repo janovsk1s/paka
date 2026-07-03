@@ -14,6 +14,8 @@ Notable changes to Paka are documented here.
 - Photo imports are capped at 10 MB each and reject unsupported headers, corrupt decodes, excessive dimensions, and decompression-bomb-sized pixel counts.
 - Imported photos are copied into Paka only as AES-256-GCM ciphertext; plaintext exists only while validating, displaying, or creating/restoring an encrypted backup.
 - Photo files use envelope encryption: a random data key encrypts the bytes in-process while the hardware Keystore key only wraps that data key, so StrongBox-backed devices decrypt photos quickly; existing files migrate on first read.
+- 2FA stores from before the versioned layout are re-encrypted with the authenticated format on first load instead of waiting for the next edit.
+- PDF and photo imports read into bounded buffers whose every intermediate copy is zeroed, including on failure; the photo display-copy compression buffer is zeroed as well.
 
 ### Reliability
 
@@ -29,6 +31,8 @@ Notable changes to Paka are documented here.
 - Added tests for atomic replacement, corrupt-primary recovery, corrupt-both preservation, PBKDF iteration headers, and legacy-backup compatibility.
 - Added compact-backup payload tests for round trips, truncation, trailing data,
   per-entry limits, and stable-compatible schema selection.
+- Updated AndroidX, Compose, and CameraX to current stable releases (Compose BOM 2026.03.01, CameraX 1.6.1, core-ktx 1.18.0, lifecycle 2.10.0, activity-compose 1.12.4, ZXing 3.5.4, OkapiBarcode 0.5.6) and regenerated the dependency-verification checksums.
+- Added bounded-import reader tests for exact limits, growth boundaries, short reads, and oversize rejection.
 
 ### Added
 
