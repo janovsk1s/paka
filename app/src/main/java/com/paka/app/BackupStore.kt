@@ -17,6 +17,7 @@ internal data class BackupData(
     val accounts: List<OtpAccount>,
     val documents: Map<String, ByteArray> = emptyMap(),
     val photos: Map<String, ByteArray> = emptyMap(),
+    val skippedPasses: Int = 0,
 ) {
     fun clearDocuments() {
         documents.values.forEach { it.fill(0) }
@@ -179,11 +180,11 @@ internal object BackupStore {
         return try {
             val root = JSONObject(String(binary.metadata, Charsets.UTF_8))
             val schema = root.getInt("schema")
-            require(schema == 3) { "Unsupported binary backup metadata" }
-            val (cards, accounts) = parseEntries(root, schema)
-            validateBlobMaps(cards, binary.documents, binary.photos)
+            require(schema >= 3) { "Unsupported binary backup metadata" }
+            val entries = parseEntries(root, schema)
+            val (documents, photos) = alignBlobMaps(entries.cards, binary.documents, binary.photos)
             binary.metadata.fill(0)
-            BackupData(cards, accounts, binary.documents, binary.photos)
+            BackupData(entries.cards, entries.accounts, documents, photos, entries.skippedPasses)
         } catch (error: Throwable) {
             binary.clear()
             throw error
@@ -193,8 +194,8 @@ internal object BackupStore {
     private fun parseLegacy(json: String): BackupData {
         val root = JSONObject(json)
         val schema = root.getInt("schema")
-        require(schema in 1..SCHEMA) { "Unsupported backup version" }
-        val (cards, accounts) = parseEntries(root, schema)
+        require(schema >= 1) { "Unsupported backup version" }
+        val entries = parseEntries(root, schema)
         val documents = linkedMapOf<String, ByteArray>()
         val photos = linkedMapOf<String, ByteArray>()
         try {
@@ -212,8 +213,8 @@ internal object BackupStore {
                 MAX_PHOTO_TOTAL_BYTES,
                 "photo",
             ) { id, bytes -> photoDocumentId(bytes) == id && PhotoStore.hasSupportedHeader(bytes) }
-            validateBlobMaps(cards, documents, photos)
-            return BackupData(cards, accounts, documents, photos)
+            val (alignedDocuments, alignedPhotos) = alignBlobMaps(entries.cards, documents, photos)
+            return BackupData(entries.cards, entries.accounts, alignedDocuments, alignedPhotos, entries.skippedPasses)
         } catch (error: Throwable) {
             documents.values.forEach { it.fill(0) }
             photos.values.forEach { it.fill(0) }
@@ -221,12 +222,19 @@ internal object BackupStore {
         }
     }
 
-    private fun parseEntries(root: JSONObject, schema: Int): Pair<List<Card>, List<OtpAccount>> {
+    private data class ParsedEntries(
+        val cards: List<Card>,
+        val accounts: List<OtpAccount>,
+        val skippedPasses: Int,
+    )
+
+    private fun parseEntries(root: JSONObject, schema: Int): ParsedEntries {
         val cardArray = root.getJSONArray("cards")
         val accountArray = root.getJSONArray("accounts")
         require(cardArray.length() <= MAX_ITEMS && accountArray.length() <= MAX_ITEMS) { "Backup has too many entries" }
 
-        val cards = (0 until cardArray.length()).map { index ->
+        var skippedPasses = 0
+        val cards = (0 until cardArray.length()).mapNotNull { index ->
             val item = cardArray.getJSONObject(index)
             val name = limited(item.getString("name"))
             val id = limited(item.getString("id"))
@@ -257,7 +265,12 @@ internal object BackupStore {
                         }
                     },
                 )
-                else -> error("Unsupported pass type")
+                else -> {
+                    // Passes from a newer Paka are skipped (and reported) so
+                    // the rest of the backup still restores on this version.
+                    skippedPasses += 1
+                    return@mapNotNull null
+                }
             }
             Card(
                 name = name,
@@ -285,7 +298,7 @@ internal object BackupStore {
         }
         require(cards.map { it.id }.toSet().size == cards.size) { "Duplicate pass identifiers" }
         require(accounts.map { it.id }.toSet().size == accounts.size) { "Duplicate 2FA identifiers" }
-        return cards to accounts
+        return ParsedEntries(cards, accounts, skippedPasses)
     }
 
     private fun readLegacyBlobs(
@@ -312,11 +325,15 @@ internal object BackupStore {
         }
     }
 
-    private fun validateBlobMaps(
+    /**
+     * Validates blob content, requires every referenced blob to be present,
+     * and zeroes then drops blobs referenced only by skipped newer passes.
+     */
+    private fun alignBlobMaps(
         cards: List<Card>,
         documents: Map<String, ByteArray>,
         photos: Map<String, ByteArray>,
-    ) {
+    ): Pair<Map<String, ByteArray>, Map<String, ByteArray>> {
         documents.forEach { (id, bytes) ->
             require(bytes.size <= PdfStore.MAX_PDF_BYTES && pdfDocumentId(bytes) == id) { "Invalid PDF backup data" }
         }
@@ -325,8 +342,13 @@ internal object BackupStore {
                 "Invalid photo backup data"
             }
         }
-        require(cards.mapNotNull { it.pdfContent?.documentId }.toSet() == documents.keys) { "Backup is missing PDF data" }
-        require(cards.photoDocumentIds() == photos.keys) { "Backup is missing photo data" }
+        val referencedDocuments = cards.mapNotNull { it.pdfContent?.documentId }.toSet()
+        require(documents.keys.containsAll(referencedDocuments)) { "Backup is missing PDF data" }
+        val referencedPhotos = cards.photoDocumentIds()
+        require(photos.keys.containsAll(referencedPhotos)) { "Backup is missing photo data" }
+        documents.forEach { (id, bytes) -> if (id !in referencedDocuments) bytes.fill(0) }
+        photos.forEach { (id, bytes) -> if (id !in referencedPhotos) bytes.fill(0) }
+        return documents.filterKeys { it in referencedDocuments } to photos.filterKeys { it in referencedPhotos }
     }
 
     private fun limited(value: String): String {

@@ -2,7 +2,7 @@
 
 Notable changes to Paka are documented here.
 
-## 0.13.1 — Unreleased
+## 0.14.0 — Unreleased
 
 ### Security
 
@@ -16,6 +16,7 @@ Notable changes to Paka are documented here.
 
 ### Reliability
 
+- Restore skips pass types from newer Paka versions and reports how many will be dropped, instead of rejecting the whole backup.
 - Atomic store replacement now flushes the replacement directory after rename and flushes the previous-generation backup file.
 - Pass, 2FA, and PDF recovery share one tested primary/backup selection path without modifying corrupt evidence.
 - CI now builds the minified release variant in addition to debug, tests, and lint.
@@ -42,6 +43,7 @@ Notable changes to Paka are documented here.
 ### Changed
 
 - Backup passphrase entry uses the same focused full-screen text editor as manual entry, with masked values on the export and unlock forms; passphrases are saved exactly as typed.
+- Exporting a backup that contains photo passes notes that restoring requires Paka 0.14 or newer.
 
 ## 0.13.0 — 2026-07-02
 

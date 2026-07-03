@@ -1412,6 +1412,13 @@ private fun BackupScreen(
                         color = Grey,
                         fontSize = 16.sp,
                     )
+                    if (cards.any { it.content is PassContent.Photos }) {
+                        Text(
+                            "This backup contains photo passes and can only be restored by Paka 0.14 or newer.",
+                            color = Grey,
+                            fontSize = 16.sp,
+                        )
+                    }
                     ManualEntryRow(
                         "passphrase",
                         "•".repeat(passphrase.length),
@@ -1522,7 +1529,14 @@ private fun BackupScreen(
                     Text("replace current data?", color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal)
                     Spacer(Modifier.height(24.dp))
                     Text(
-                        "${data?.cards?.size ?: 0} passes · ${data?.accounts?.size ?: 0} codes\nCurrent data will be replaced.",
+                        buildString {
+                            append("${data?.cards?.size ?: 0} passes · ${data?.accounts?.size ?: 0} codes")
+                            val skipped = data?.skippedPasses ?: 0
+                            if (skipped > 0) {
+                                append("\n$skipped ${if (skipped == 1) "pass needs" else "passes need"} a newer Paka and will be dropped.")
+                            }
+                            append("\nCurrent data will be replaced.")
+                        },
                         color = Grey,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Light,
