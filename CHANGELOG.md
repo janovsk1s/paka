@@ -13,6 +13,7 @@ Notable changes to Paka are documented here.
 - CI actions are pinned to immutable commits and the Gradle wrapper is validated before use.
 - Photo imports are capped at 10 MB each and reject unsupported headers, corrupt decodes, excessive dimensions, and decompression-bomb-sized pixel counts.
 - Imported photos are copied into Paka only as AES-256-GCM ciphertext; plaintext exists only while validating, displaying, or creating/restoring an encrypted backup.
+- Photo files use envelope encryption: a random data key encrypts the bytes in-process while the hardware Keystore key only wraps that data key, so StrongBox-backed devices decrypt photos quickly; existing files migrate on first read.
 
 ### Reliability
 

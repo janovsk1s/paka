@@ -37,11 +37,13 @@ intentional design principles described by the LightOS Developer Program.
 - Imported PDFs use their own Android Keystore key. Their encrypted copies are
   stored privately; viewing decrypts them into anonymous RAM through `memfd`,
   never a plaintext file. PDF passes require Android 11 or newer.
-- Imported document photos use a separate Android Keystore key. One or two
-  sides are copied into Paka as encrypted originals and included in encrypted
-  portable backups. Each photo also keeps a pre-scaled display copy, encrypted
-  under the same key; viewing decodes only this copy, and decoded photos are
-  released when Paka leaves the foreground or the system trims memory.
+- Imported document photos are encrypted with a dedicated random data key that
+  is itself wrapped by a hardware-backed Android Keystore key, so bulk
+  decryption stays fast while the master key never leaves the hardware. One or
+  two sides are copied into Paka as encrypted originals and included in
+  encrypted portable backups. Each photo also keeps a pre-scaled display copy,
+  encrypted the same way; viewing decodes only this copy, and decoded photos
+  are released when Paka leaves the foreground or the system trims memory.
 - Up to two optional file references in pass Details are external links. Paka stores only
   the link metadata in its encrypted pass database; the referenced file itself
   is not copied, encrypted, or included in Paka backups.
