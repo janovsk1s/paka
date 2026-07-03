@@ -208,14 +208,24 @@ internal object PhotoStore {
         }
     }
 
+    // Exposes the inherited buffer so compressed plaintext can be zeroed after
+    // the caller takes its copy.
+    private class ZeroableOutputStream : ByteArrayOutputStream() {
+        fun zero() = buf.fill(0)
+    }
+
     private fun buildDisplayBytes(original: ByteArray): ByteArray {
         val bitmap = decodeBytes(original, DISPLAY_MAX_DIMENSION, DISPLAY_MAX_DIMENSION).second
         return try {
-            val output = ByteArrayOutputStream()
-            check(bitmap.compress(Bitmap.CompressFormat.JPEG, DISPLAY_JPEG_QUALITY, output)) {
-                "Photo could not be prepared for display"
+            val output = ZeroableOutputStream()
+            try {
+                check(bitmap.compress(Bitmap.CompressFormat.JPEG, DISPLAY_JPEG_QUALITY, output)) {
+                    "Photo could not be prepared for display"
+                }
+                output.toByteArray()
+            } finally {
+                output.zero()
             }
-            output.toByteArray()
         } finally {
             bitmap.recycle()
         }
@@ -288,25 +298,13 @@ internal object PhotoStore {
         return (bounds.outWidth to bounds.outHeight) to bitmap
     }
 
-    private fun readUri(context: Context, uri: Uri): ByteArray {
-        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
-            if (descriptor.length >= 0) require(descriptor.length <= MAX_PHOTO_BYTES) { "Photo is larger than 10 MB" }
-        }
-        val input = context.contentResolver.openInputStream(uri) ?: error("Photo could not be opened")
-        return input.use {
-            val output = ByteArrayOutputStream()
-            val buffer = ByteArray(16 * 1024)
-            var total = 0
-            while (true) {
-                val count = it.read(buffer)
-                if (count < 0) break
-                total += count
-                require(total <= MAX_PHOTO_BYTES) { "Photo is larger than 10 MB" }
-                output.write(buffer, 0, count)
-            }
-            output.toByteArray()
-        }
-    }
+    private fun readUri(context: Context, uri: Uri): ByteArray = UriBytes.read(
+        context,
+        uri,
+        MAX_PHOTO_BYTES,
+        tooLarge = "Photo is larger than 10 MB",
+        unreadable = "Photo could not be opened",
+    )
 
     private fun documentFile(context: Context, documentId: String): File {
         require(documentId.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }

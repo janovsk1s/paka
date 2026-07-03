@@ -216,25 +216,13 @@ internal object PdfStore {
         encryptToFile(documentFile(context, documentId), documentId, bytes)
     }
 
-    private fun readUri(context: Context, uri: Uri): ByteArray {
-        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
-            if (descriptor.length >= 0) require(descriptor.length <= MAX_PDF_BYTES) { "PDF is larger than 10 MB" }
-        }
-        val input = context.contentResolver.openInputStream(uri) ?: error("PDF could not be opened")
-        return input.use {
-            val output = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(16 * 1024)
-            var total = 0
-            while (true) {
-                val count = it.read(buffer)
-                if (count < 0) break
-                total += count
-                require(total <= MAX_PDF_BYTES) { "PDF is larger than 10 MB" }
-                output.write(buffer, 0, count)
-            }
-            output.toByteArray()
-        }
-    }
+    private fun readUri(context: Context, uri: Uri): ByteArray = UriBytes.read(
+        context,
+        uri,
+        MAX_PDF_BYTES,
+        tooLarge = "PDF is larger than 10 MB",
+        unreadable = "PDF could not be opened",
+    )
 
     private fun hasPdfHeader(bytes: ByteArray): Boolean {
         val limit = minOf(bytes.size, 1_024)

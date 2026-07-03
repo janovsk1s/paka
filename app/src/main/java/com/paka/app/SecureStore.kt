@@ -28,8 +28,13 @@ internal object SecureStore {
         if (!file.exists()) return LoadOutcome(emptyList())
 
         AtomicStore.readWithBackup(file, ::decrypt).getOrNull()?.let { recovered ->
+            // A pre-versioned store carries no AAD binding. Re-encrypt it in the
+            // current layout now instead of waiting for the next user edit.
+            if (!recovered.value.versioned && !recovered.fromBackup) {
+                saveAccounts(context, recovered.value.accounts)
+            }
             return LoadOutcome(
-                value = recovered.value,
+                value = recovered.value.accounts,
                 warning = if (recovered.fromBackup) "2FA accounts were recovered from the previous backup." else null,
             )
         }
@@ -40,7 +45,9 @@ internal object SecureStore {
         )
     }
 
-    private fun decrypt(blob: ByteArray): List<OtpAccount> {
+    private data class DecodedStore(val accounts: List<OtpAccount>, val versioned: Boolean)
+
+    private fun decrypt(blob: ByteArray): DecodedStore {
         require(blob.size > 28) { "Encrypted store is truncated" }
         val versioned = blob.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)
         val ivOffset = if (versioned) MAGIC.size else 0
@@ -49,7 +56,7 @@ internal object SecureStore {
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
         if (versioned) cipher.updateAAD(AAD)
-        return parse(String(cipher.doFinal(cipherText), Charsets.UTF_8))
+        return DecodedStore(parse(String(cipher.doFinal(cipherText), Charsets.UTF_8)), versioned)
     }
 
     fun saveAccounts(context: Context, accounts: List<OtpAccount>): Result<Unit> =
