@@ -9,6 +9,7 @@ val signingProperties = Properties().apply {
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.detekt)
 }
 
 android {
@@ -83,6 +84,11 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
     }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    baseline = file("detekt-baseline.xml")
 }
 
 kotlin {
