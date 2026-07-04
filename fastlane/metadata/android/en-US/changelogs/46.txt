@@ -1,0 +1,1 @@
+Take document photos directly inside Paka: captures go straight into the encrypted store with no gallery entry or temporary file, metadata stripped. Passes inside a stack can now be reordered from the pass details, next to the stack field.
