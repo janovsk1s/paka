@@ -1,0 +1,1 @@
+Encrypted photo passes with a fast tap-through viewer, stronger backup key derivation (600k PBKDF2 rounds), StrongBox-backed keys where available, crash-durable store replacement, zeroed import buffers, and updated AndroidX/Compose/CameraX dependencies.

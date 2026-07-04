@@ -2,6 +2,63 @@
 
 Notable changes to Paka are documented here.
 
+## 0.14.0 — 2026-07-04
+
+### Security
+
+- New portable backups use 600,000 PBKDF2-HMAC-SHA256 rounds; existing 210,000-round backups remain restorable.
+- New backup passphrases require at least 12 characters, while restore continues accepting older 8-character passphrases.
+- New on-device encryption keys prefer StrongBox with a safe fallback and require an unlocked device on Android 15+, where Android's earlier key-loss and authorization bugs are fixed.
+- Gradle dependency verification pins SHA-256 checksums for the complete build graph.
+- CI actions are pinned to immutable commits and the Gradle wrapper is validated before use.
+- Photo imports are capped at 10 MB each and reject unsupported headers, corrupt decodes, excessive dimensions, and decompression-bomb-sized pixel counts.
+- Imported photos are copied into Paka only as AES-256-GCM ciphertext; plaintext exists only while validating, displaying, or creating/restoring an encrypted backup.
+- Photo files use envelope encryption: a random data key encrypts the bytes in-process while the hardware Keystore key only wraps that data key, so StrongBox-backed devices decrypt photos quickly; existing files migrate on first read.
+- 2FA stores from before the versioned layout are re-encrypted with the authenticated format on first load instead of waiting for the next edit.
+- PDF and photo imports read into bounded buffers whose every intermediate copy is zeroed, including on failure; the photo display-copy compression buffer is zeroed as well.
+
+### Reliability
+
+- Restore skips pass types from newer Paka versions and reports how many will be dropped, instead of rejecting the whole backup.
+- Atomic store replacement now flushes the replacement directory after rename and flushes the previous-generation backup file.
+- Pass, 2FA, and PDF recovery share one tested primary/backup selection path without modifying corrupt evidence.
+- CI now builds the minified release variant in addition to debug, tests, and lint.
+
+### Development
+
+- Gradle build caching and configuration caching reduce repeat build time.
+- Dependabot watches both Gradle libraries and GitHub Actions for updates.
+- Added tests for atomic replacement, corrupt-primary recovery, corrupt-both preservation, PBKDF iteration headers, and legacy-backup compatibility.
+- Added compact-backup payload tests for round trips, truncation, trailing data,
+  per-entry limits, and stable-compatible schema selection.
+- Updated AndroidX, Compose, and CameraX to current stable releases (Compose BOM 2026.03.01, CameraX 1.6.1, core-ktx 1.18.0, lifecycle 2.10.0, activity-compose 1.12.4, ZXing 3.5.4, OkapiBarcode 0.5.6) and regenerated the dependency-verification checksums.
+- Added bounded-import reader tests for exact limits, growth boundaries, short reads, and oversize rejection.
+- MainActivity's screens were extracted verbatim into focused files (list paging, home lists, settings, backup, manual entry, details, pass viewing) with identical behavior and navigation.
+- The toolchain moved to Gradle 9.6.1, AGP 9.2.1 with built-in Kotlin, and compileSdk 37; targetSdk stays 36 so runtime behavior is unchanged.
+- Robolectric now tests the recovery paths end to end: legacy plaintext pass migration, corrupt-primary recovery, immediate re-encryption of pre-versioned 2FA stores, and restore success/rollback in the write coordinator.
+- detekt runs in CI against a recorded baseline, so only newly introduced findings fail the build.
+- A tagged-release workflow runs the full check suite for v* tags, uploads the unsigned release APK, and opens a draft GitHub release; signing stays local.
+- CI now also runs on pushes to preview/ and fix/ branches, not only main and pull requests.
+- Added F-Droid-compatible fastlane metadata: title, descriptions, screenshots, and a release changelog.
+
+### Added
+
+- Encrypted photo passes can store one or two imported images for items such as photo ID fronts/backs or proof of insurance.
+- Imported photo originals use a dedicated Android Keystore key and are included in encrypted portable backups.
+- Viewing prefetches both sides from pre-scaled encrypted display copies into a session cache, so opening a pass and flipping sides is immediate; decoded photos are released when Paka leaves the foreground or memory runs low.
+- The pass list quietly pre-decodes photo passes on the visible page as it appears, so even their first open of a session is immediate.
+- A fitted photo flips sides on an immediate tap; pinch zooms with finger-anchored panning, while PDF double-tap zoom remains unchanged.
+- Stacks prefetch both photo sides, show them at their natural aspect ratio, and weave them into the existing tap cycle before moving to the next pass.
+- Photo passes show page numbers below the photo and PDF passes in the top bar, with a developer-options toggle to hide both.
+- The manual add screen lists QR, PDF document, and photo pass together on its first page.
+- Photo-containing backups use a compact binary payload instead of Base64-expanded JSON; barcode-only and PDF-only backups retain stable-compatible schemas.
+
+### Changed
+
+- Backup passphrase entry uses the same focused full-screen text editor as manual entry, with masked values on the export and unlock forms; passphrases are saved exactly as typed.
+- Exporting a backup that contains photo passes notes that restoring requires Paka 0.14 or newer.
+- A pass opened on its own now shows its barcode at the same height as when it is part of a stack.
+
 ## 0.13.0 — 2026-07-02
 
 ### Added

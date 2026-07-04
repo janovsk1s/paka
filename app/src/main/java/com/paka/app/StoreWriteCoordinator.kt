@@ -29,6 +29,7 @@ internal object StoreWriteCoordinator {
             val context: Context,
             val value: List<Card>,
             val deletePdfIds: Set<String>,
+            val deletePhotoIds: Set<String>,
             val generation: Long,
             val completion: CompletableDeferred<StoreWriteStatus>,
         ) : CardTask
@@ -75,12 +76,14 @@ internal object StoreWriteCoordinator {
         context: Context,
         value: List<Card>,
         deletePdfIds: Set<String> = emptySet(),
+        deletePhotoIds: Set<String> = emptySet(),
     ): Deferred<StoreWriteStatus>? {
         val completion = CompletableDeferred<StoreWriteStatus>()
         val task = CardTask.Write(
             context = context.applicationContext,
             value = value,
             deletePdfIds = deletePdfIds,
+            deletePhotoIds = deletePhotoIds,
             generation = cardGeneration.get(),
             completion = completion,
         )
@@ -147,12 +150,17 @@ internal object StoreWriteCoordinator {
     ): RestoreOutcome {
         val oldIds = oldCards.mapNotNull { it.pdfContent?.documentId }.toSet()
         val restoredIds = restored.cards.mapNotNull { it.pdfContent?.documentId }.toSet()
+        val oldPhotoIds = oldCards.photoDocumentIds()
+        val restoredPhotoIds = restored.cards.photoDocumentIds()
         val oldDocuments = linkedMapOf<String, ByteArray>()
+        val oldPhotos = linkedMapOf<String, ByteArray>()
         val oldLoaded = runCatching {
             oldIds.forEach { id -> oldDocuments[id] = PdfStore.readPlaintext(context, id) }
+            oldPhotoIds.forEach { id -> oldPhotos[id] = PhotoStore.readPlaintext(context, id) }
         }.isSuccess
         if (!oldLoaded) {
             oldDocuments.values.forEach { it.fill(0) }
+            oldPhotos.values.forEach { it.fill(0) }
             return RestoreOutcome.FAILED_ROLLED_BACK
         }
 
@@ -162,12 +170,17 @@ internal object StoreWriteCoordinator {
                 if (runCatching { PdfStore.writePlaintext(context, id, bytes) }.isFailure) success = false
             }
             (restoredIds - oldIds).forEach { PdfStore.delete(context, it) }
+            oldPhotos.forEach { (id, bytes) ->
+                if (runCatching { PhotoStore.writePlaintext(context, id, bytes) }.isFailure) success = false
+            }
+            (restoredPhotoIds - oldPhotoIds).forEach { PhotoStore.delete(context, it) }
             return success
         }
 
         return try {
             val documentsSaved = runCatching {
                 restored.documents.forEach { (id, bytes) -> PdfStore.writePlaintext(context, id, bytes) }
+                restored.photos.forEach { (id, bytes) -> PhotoStore.writePlaintext(context, id, bytes) }
             }.isSuccess
             if (!documentsSaved) {
                 if (rollbackDocuments()) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
@@ -175,6 +188,7 @@ internal object StoreWriteCoordinator {
                 if (rollbackDocuments()) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
             } else if (CardStore.save(context, restored.cards).isSuccess) {
                 PdfStore.deleteOrphans(context, restoredIds)
+                PhotoStore.deleteOrphans(context, restoredPhotoIds)
                 RestoreOutcome.SUCCESS
             } else {
                 val codesRolledBack = SecureStore.saveAccounts(context, oldCodes).isSuccess
@@ -183,6 +197,7 @@ internal object StoreWriteCoordinator {
             }
         } finally {
             oldDocuments.values.forEach { it.fill(0) }
+            oldPhotos.values.forEach { it.fill(0) }
         }
     }
 
@@ -199,6 +214,7 @@ internal object StoreWriteCoordinator {
             task.generation != cardGeneration.get() || result == null -> StoreWriteStatus.SUPERSEDED
             result.isSuccess -> {
                 task.deletePdfIds.forEach { PdfStore.delete(task.context, it) }
+                task.deletePhotoIds.forEach { PhotoStore.delete(task.context, it) }
                 StoreWriteStatus.SAVED
             }
             else -> {

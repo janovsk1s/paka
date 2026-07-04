@@ -8,20 +8,21 @@ val signingProperties = Properties().apply {
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
     namespace = "com.paka.app"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 37
-        versionName = "0.13.0"
+        versionCode = 45
+        versionName = "0.14.0"
     }
 
     signingConfigs {
@@ -37,9 +38,9 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".pdfpreview"
-            versionNameSuffix = "-pdf-preview"
-            resValue("string", "app_name", "Paka PDF Test")
+            applicationIdSuffix = ".photopreview"
+            versionNameSuffix = "-photo-preview"
+            resValue("string", "app_name", "Paka Photo Test")
         }
         release {
             isMinifyEnabled = true
@@ -50,6 +51,17 @@ android {
                 "proguard-rules.pro",
             )
         }
+        // Shareable preview channel: minified like release so the APK stays
+        // release-sized, but debug-signed under a suffixed id so it installs
+        // alongside the real app without the release keystore.
+        create("preview") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".photopreview"
+            versionNameSuffix = "-photo-preview"
+            resValue("string", "app_name", "Paka Photo Test")
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
     }
 
     compileOptions {
@@ -59,11 +71,25 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+        // AGP 9 disables resource values by default; the debug and preview
+        // channels rely on them for their side-by-side app names.
+        resValues = true
+    }
+    testOptions {
+        unitTests {
+            // Robolectric drives the store recovery tests.
+            isIncludeAndroidResources = true
+        }
     }
     lint {
         abortOnError = true
         checkReleaseBuilds = true
     }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    baseline = file("detekt-baseline.xml")
 }
 
 kotlin {
@@ -94,5 +120,12 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
 
+    // Installs the merged baseline profile on sideloaded APKs, where no
+    // app store delivers ahead-of-time compilation profiles.
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
+
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

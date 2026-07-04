@@ -1,0 +1,400 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:CameraScan.kt$hasFlashRef.get() &amp;&amp; !torchRef.get() &amp;&amp; automaticLightEnabled &amp;&amp; !manualLightOverride.get()</ID>
+    <ID>ComplexCondition:PdfStore.kt$PdfStore$bytes[index] == '%'.code.toByte() &amp;&amp; bytes[index + 1] == 'P'.code.toByte() &amp;&amp; bytes[index + 2] == 'D'.code.toByte() &amp;&amp; bytes[index + 3] == 'F'.code.toByte() &amp;&amp; bytes[index + 4] == '-'.code.toByte()</ID>
+    <ID>ComplexCondition:PdfViewer.kt$page == null || viewportWidth &lt;= 0 || viewportHeight &lt;= 0 || zoom &lt;= 1.05f</ID>
+    <ID>ComplexCondition:PdfViewer.kt$sharp != null &amp;&amp; abs(sharp.zoom - zoom) &lt; 0.001f &amp;&amp; abs(sharp.translationX - translationX) &lt; 0.5f &amp;&amp; abs(sharp.translationY - translationY) &lt; 0.5f</ID>
+    <ID>ComplexCondition:PhotoStore.kt$PhotoStore$bytes.size &gt;= 3 &amp;&amp; bytes[0] == 0xff.toByte() &amp;&amp; bytes[1] == 0xd8.toByte() &amp;&amp; bytes[2] == 0xff.toByte()</ID>
+    <ID>CyclomaticComplexMethod:BackupScreens.kt$@Composable internal fun BackupScreen( cards: List&lt;Card&gt;, accounts: List&lt;OtpAccount&gt;, onRestore: suspend (BackupData) -&gt; Boolean, onBack: () -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:BackupStore.kt$BackupStore$private fun parseEntries(root: JSONObject, schema: Int): ParsedEntries</ID>
+    <ID>CyclomaticComplexMethod:BackupStore.kt$BackupStore$private fun serialize( cards: List&lt;Card&gt;, accounts: List&lt;OtpAccount&gt;, documents: Map&lt;String, ByteArray&gt;, photos: Map&lt;String, ByteArray&gt;, ): ByteArray</ID>
+    <ID>CyclomaticComplexMethod:BarcodePayloadVerifier.kt$BarcodePayloadVerifier$private fun possibleFormats(format: PakaFormat): List&lt;BarcodeFormat&gt;</ID>
+    <ID>CyclomaticComplexMethod:Barcodes.kt$Barcodes$fun validationError(format: PakaFormat, data: String): String?</ID>
+    <ID>CyclomaticComplexMethod:Barcodes.kt$private fun BarcodeFormat.paka(): PakaFormat</ID>
+    <ID>CyclomaticComplexMethod:Barcodes.kt$private fun PakaFormat.zxing(): BarcodeFormat?</ID>
+    <ID>CyclomaticComplexMethod:CameraScan.kt$@Composable fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>CyclomaticComplexMethod:CameraScan.kt$private fun mapFormat(f: BarcodeReader.Format): PakaFormat?</ID>
+    <ID>CyclomaticComplexMethod:CardStore.kt$CardStore$private fun parse(json: String): List&lt;Card&gt;</ID>
+    <ID>CyclomaticComplexMethod:DetailScreens.kt$@Composable internal fun CardDetail(card: Card, onUpdate: (Card) -&gt; Boolean, onDelete: () -&gt; Boolean, onBack: () -&gt; Unit)</ID>
+    <ID>CyclomaticComplexMethod:EntryScreens.kt$@Composable internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>CyclomaticComplexMethod:EntryScreens.kt$@Composable internal fun ManualCodeScreen(onSave: (OtpAccount) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>CyclomaticComplexMethod:EntryScreens.kt$internal fun PakaFormat.label(): String</ID>
+    <ID>CyclomaticComplexMethod:MainActivity.kt$@Composable private fun LoadedPakaApp( homeResetSignal: Int, resumeSignal: Int, cardLoad: LoadOutcome&lt;List&lt;Card&gt;&gt;, codeLoad: LoadOutcome&lt;List&lt;OtpAccount&gt;&gt;, )</ID>
+    <ID>CyclomaticComplexMethod:PassScreens.kt$@Composable internal fun StackScreen( name: String, cards: List&lt;Card&gt;, forceMaximumBrightness: Boolean, onLongCurrent: (Card) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:PdfViewer.kt$@RequiresApi(30) @Composable private fun PdfZoomPage( session: PdfDocumentSession, pageIndex: Int, onLongPress: () -&gt; Unit, onZoomChanged: (Boolean) -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:PhotoStore.kt$PhotoStore$internal fun hasSupportedHeader(bytes: ByteArray): Boolean</ID>
+    <ID>CyclomaticComplexMethod:PhotoViewer.kt$@Composable private fun PhotoZoomPage( page: PhotoPage, pageIndex: Int, bitmap: Bitmap?, failed: Boolean, label: String?, onCycle: (() -&gt; Unit)?, onLongPress: () -&gt; Unit, onZoomChanged: (Boolean) -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:StoreWriteCoordinator.kt$StoreWriteCoordinator$private fun performRestore( context: Context, oldCards: List&lt;Card&gt;, oldCodes: List&lt;OtpAccount&gt;, restored: BackupData, ): RestoreOutcome</ID>
+    <ID>FunctionNaming:BackupScreens.kt$@Composable internal fun BackupScreen( cards: List&lt;Card&gt;, accounts: List&lt;OtpAccount&gt;, onRestore: suspend (BackupData) -&gt; Boolean, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:CameraScan.kt$@Composable fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraScan.kt$@Composable private fun ScanGuide()</ID>
+    <ID>FunctionNaming:DetailScreens.kt$@Composable internal fun CardDetail(card: Card, onUpdate: (Card) -&gt; Boolean, onDelete: () -&gt; Boolean, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:DetailScreens.kt$@Composable internal fun DuplicateConfirmScreen(kind: String, existingName: String, onConfirm: () -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:DetailScreens.kt$@Composable private fun ConfirmDeleteScreen(name: String, onConfirm: () -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:DetailScreens.kt$@Composable private fun ReferenceOptionsScreen( name: String, onOpen: () -&gt; Unit, onReplace: () -&gt; Unit, onRemove: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:EntryScreens.kt$@Composable internal fun FieldLabel(text: String)</ID>
+    <ID>FunctionNaming:EntryScreens.kt$@Composable internal fun LabelValue(label: String, value: String, modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:EntryScreens.kt$@Composable internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:EntryScreens.kt$@Composable internal fun ManualCodeScreen(onSave: (OtpAccount) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:EntryScreens.kt$@Composable internal fun ManualEntryRow(label: String, value: String, placeholder: String, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:EntryScreens.kt$@Composable internal fun ReferenceEntryRow(label: String, reference: PassReference?, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:EntryScreens.kt$@Composable internal fun TextEntryScreen( title: String, initial: String, onSave: (String) -&gt; Unit, onBack: () -&gt; Unit, visualTransformation: VisualTransformation = VisualTransformation.None, allowBlank: Boolean = false, singleLine: Boolean = true, // Passphrases keep their exact characters; names and notes are trimmed. trimOnSave: Boolean = true, )</ID>
+    <ID>FunctionNaming:HomeLists.kt$@Composable internal fun CardsList(entries: List&lt;Entry&gt;, textSize: Float, onOpenCard: (Card) -&gt; Unit, onOpenStack: (String) -&gt; Unit)</ID>
+    <ID>FunctionNaming:HomeLists.kt$@Composable internal fun CodesList(accounts: List&lt;OtpAccount&gt;, nowMs: Long, textSize: Float, onCopy: (String) -&gt; Unit)</ID>
+    <ID>FunctionNaming:ListUi.kt$@Composable internal fun &lt;T&gt; PagedList( items: List&lt;T&gt;, endPadding: Dp = 14.dp, onPageChange: ((List&lt;T&gt;) -&gt; Unit)? = null, content: @Composable (T) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:ListUi.kt$@Composable internal fun EmptyHint(text: String)</ID>
+    <ID>FunctionNaming:ListUi.kt$@Composable internal fun HardCutPager( pageCount: Int, modifier: Modifier = Modifier, indicatorOffset: Dp = 18.dp, showIndicator: Boolean = true, gesturesEnabled: Boolean = true, onPageChange: ((Int) -&gt; Unit)? = null, content: @Composable (Int, () -&gt; Unit) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:ListUi.kt$@Composable internal fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Composable ColumnScope.() -&gt; Unit)</ID>
+    <ID>FunctionNaming:ListUi.kt$@Composable internal fun SimpleTopBar(title: String, onBack: () -&gt; Unit, trailing: String? = null)</ID>
+    <ID>FunctionNaming:ListUi.kt$@Composable private fun PageIndicator(page: Int, pageCount: Int, horizontalOffset: Dp, modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:ListUi.kt$@Composable private fun VerticalScrollbar(state: ScrollState, modifier: Modifier)</ID>
+    <ID>FunctionNaming:MainActivity.kt$@Composable fun PakaApp(homeResetSignal: Int = 0, resumeSignal: Int = 0)</ID>
+    <ID>FunctionNaming:MainActivity.kt$@Composable private fun BottomBar(mode: Mode, onSettings: () -&gt; Unit, onAdd: () -&gt; Unit, onAddLong: () -&gt; Unit, onToggleMode: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:MainActivity.kt$@Composable private fun ColumnScope.OnboardingRow(weight: Float, content: @Composable () -&gt; Unit)</ID>
+    <ID>FunctionNaming:MainActivity.kt$@Composable private fun LoadedPakaApp( homeResetSignal: Int, resumeSignal: Int, cardLoad: LoadOutcome&lt;List&lt;Card&gt;&gt;, codeLoad: LoadOutcome&lt;List&lt;OtpAccount&gt;&gt;, )</ID>
+    <ID>FunctionNaming:MainActivity.kt$@Composable private fun OnboardingScreen(onStart: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:PassScreens.kt$@Composable internal fun CardScreen(card: Card, forceMaximumBrightness: Boolean, onLong: () -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:PassScreens.kt$@Composable internal fun PdfScreen( card: Card, content: PassContent.Pdf, forceMaximumBrightness: Boolean, onLong: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:PassScreens.kt$@Composable internal fun PhotoScreen( card: Card, content: PassContent.Photos, forceMaximumBrightness: Boolean, onLong: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:PassScreens.kt$@Composable internal fun ProtectSensitiveContent(enabled: Boolean)</ID>
+    <ID>FunctionNaming:PassScreens.kt$@Composable internal fun StackScreen( name: String, cards: List&lt;Card&gt;, forceMaximumBrightness: Boolean, onLongCurrent: (Card) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:PassScreens.kt$@Composable private fun BarcodePanel( card: Card, onClick: () -&gt; Unit, onLongClick: () -&gt; Unit, modifier: Modifier = Modifier, preRendered: BarcodeRender? = null, usePreRendered: Boolean = false, longPressOnly: Boolean = false, )</ID>
+    <ID>FunctionNaming:PassScreens.kt$@Composable private fun KeepScreenBright(forceMaximumBrightness: Boolean)</ID>
+    <ID>FunctionNaming:PdfViewer.kt$@Composable internal fun PdfDocumentPreview( card: Card, render: Bitmap?, renderPending: Boolean, onClick: () -&gt; Unit, onLongPress: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:PdfViewer.kt$@Composable internal fun PdfDocumentViewer( content: PassContent.Pdf, onLongPress: () -&gt; Unit, modifier: Modifier = Modifier, onPageChanged: (page: Int, pageCount: Int) -&gt; Unit = { _, _ -&gt; }, )</ID>
+    <ID>FunctionNaming:PdfViewer.kt$@RequiresApi(30) @Composable private fun PdfDocumentViewerApi30( content: PassContent.Pdf, onLongPress: () -&gt; Unit, modifier: Modifier, onPageChanged: (page: Int, pageCount: Int) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:PdfViewer.kt$@RequiresApi(30) @Composable private fun PdfZoomPage( session: PdfDocumentSession, pageIndex: Int, onLongPress: () -&gt; Unit, onZoomChanged: (Boolean) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:PhotoViewer.kt$@Composable internal fun PhotoDocumentPreview( card: Card, page: PhotoPage, render: Bitmap?, renderPending: Boolean, onClick: () -&gt; Unit, onLongPress: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>FunctionNaming:PhotoViewer.kt$@Composable internal fun PhotoDocumentViewer( content: PassContent.Photos, onLongPress: () -&gt; Unit, modifier: Modifier = Modifier, showPageNumbers: Boolean = true, )</ID>
+    <ID>FunctionNaming:PhotoViewer.kt$@Composable private fun PhotoZoomPage( page: PhotoPage, pageIndex: Int, bitmap: Bitmap?, failed: Boolean, label: String?, onCycle: (() -&gt; Unit)?, onLongPress: () -&gt; Unit, onZoomChanged: (Boolean) -&gt; Unit, )</ID>
+    <ID>FunctionNaming:SettingsScreens.kt$@Composable internal fun AboutScreen(onDev: () -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:SettingsScreens.kt$@Composable internal fun DevScreen( textSize: Float, onTextSize: (Float) -&gt; Unit, returnHomeEnabled: Boolean, onReturnHome: (Boolean) -&gt; Unit, autoLightEnabled: Boolean, onAutoLight: (Boolean) -&gt; Unit, maxCodeBrightnessEnabled: Boolean, onMaxCodeBrightness: (Boolean) -&gt; Unit, pageNumbersEnabled: Boolean, onPageNumbers: (Boolean) -&gt; Unit, demoModeEnabled: Boolean, onDemoMode: (Boolean) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:SettingsScreens.kt$@Composable internal fun ManageScreen( rows: List&lt;ManageRow&gt;, onUp: (String) -&gt; Unit, onDown: (String) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:SettingsScreens.kt$@Composable internal fun SettingsItem(label: String, trailing: String? = null, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:SettingsScreens.kt$@Composable internal fun SettingsScreen( onReorder: () -&gt; Unit, onBackup: () -&gt; Unit, vibrationEnabled: Boolean, onVibration: (Boolean) -&gt; Unit, onAbout: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:SettingsScreens.kt$@Composable private fun ManageGlyphAction( glyph: ManageGlyph, description: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:Ui.kt$@Composable internal fun BackArrow(modifier: Modifier = Modifier, onBack: () -&gt; Unit)</ID>
+    <ID>LongMethod:BackupScreens.kt$@Composable internal fun BackupScreen( cards: List&lt;Card&gt;, accounts: List&lt;OtpAccount&gt;, onRestore: suspend (BackupData) -&gt; Boolean, onBack: () -&gt; Unit, )</ID>
+    <ID>LongMethod:BackupStore.kt$BackupStore$private fun parseEntries(root: JSONObject, schema: Int): ParsedEntries</ID>
+    <ID>LongMethod:BackupStore.kt$BackupStore$private fun serialize( cards: List&lt;Card&gt;, accounts: List&lt;OtpAccount&gt;, documents: Map&lt;String, ByteArray&gt;, photos: Map&lt;String, ByteArray&gt;, ): ByteArray</ID>
+    <ID>LongMethod:CameraScan.kt$@Composable fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>LongMethod:CardStore.kt$CardStore$private fun parse(json: String): List&lt;Card&gt;</ID>
+    <ID>LongMethod:DetailScreens.kt$@Composable internal fun CardDetail(card: Card, onUpdate: (Card) -&gt; Boolean, onDelete: () -&gt; Boolean, onBack: () -&gt; Unit)</ID>
+    <ID>LongMethod:EntryScreens.kt$@Composable internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>LongMethod:EntryScreens.kt$@Composable internal fun ManualCodeScreen(onSave: (OtpAccount) -&gt; Unit, onBack: () -&gt; Unit)</ID>
+    <ID>LongMethod:MainActivity.kt$@Composable private fun LoadedPakaApp( homeResetSignal: Int, resumeSignal: Int, cardLoad: LoadOutcome&lt;List&lt;Card&gt;&gt;, codeLoad: LoadOutcome&lt;List&lt;OtpAccount&gt;&gt;, )</ID>
+    <ID>LongMethod:PassScreens.kt$@Composable internal fun StackScreen( name: String, cards: List&lt;Card&gt;, forceMaximumBrightness: Boolean, onLongCurrent: (Card) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>LongMethod:PdfViewer.kt$@RequiresApi(30) @Composable private fun PdfZoomPage( session: PdfDocumentSession, pageIndex: Int, onLongPress: () -&gt; Unit, onZoomChanged: (Boolean) -&gt; Unit, )</ID>
+    <ID>LongMethod:PhotoViewer.kt$@Composable private fun PhotoZoomPage( page: PhotoPage, pageIndex: Int, bitmap: Bitmap?, failed: Boolean, label: String?, onCycle: (() -&gt; Unit)?, onLongPress: () -&gt; Unit, onZoomChanged: (Boolean) -&gt; Unit, )</ID>
+    <ID>LongMethod:SettingsScreens.kt$@Composable internal fun DevScreen( textSize: Float, onTextSize: (Float) -&gt; Unit, returnHomeEnabled: Boolean, onReturnHome: (Boolean) -&gt; Unit, autoLightEnabled: Boolean, onAutoLight: (Boolean) -&gt; Unit, maxCodeBrightnessEnabled: Boolean, onMaxCodeBrightness: (Boolean) -&gt; Unit, pageNumbersEnabled: Boolean, onPageNumbers: (Boolean) -&gt; Unit, demoModeEnabled: Boolean, onDemoMode: (Boolean) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:BackupPayloadCodec.kt$BackupPayloadCodec$( bytes: ByteArray, maxBytes: Int, maxDocumentBytes: Int, maxPhotoBytes: Int, maxDocumentTotalBytes: Int, maxPhotoTotalBytes: Int, )</ID>
+    <ID>LongParameterList:BackupStore.kt$BackupStore$( array: JSONArray, destination: MutableMap&lt;String, ByteArray&gt;, maxEntryBytes: Int, maxTotalBytes: Int, label: String, validator: (String, ByteArray) -&gt; Boolean, )</ID>
+    <ID>LongParameterList:EntryScreens.kt$( title: String, initial: String, onSave: (String) -&gt; Unit, onBack: () -&gt; Unit, visualTransformation: VisualTransformation = VisualTransformation.None, allowBlank: Boolean = false, singleLine: Boolean = true, // Passphrases keep their exact characters; names and notes are trimmed. trimOnSave: Boolean = true, )</ID>
+    <ID>LongParameterList:ListUi.kt$( pageCount: Int, modifier: Modifier = Modifier, indicatorOffset: Dp = 18.dp, showIndicator: Boolean = true, gesturesEnabled: Boolean = true, onPageChange: ((Int) -&gt; Unit)? = null, content: @Composable (Int, () -&gt; Unit) -&gt; Unit, )</ID>
+    <ID>LongParameterList:PassScreens.kt$( card: Card, onClick: () -&gt; Unit, onLongClick: () -&gt; Unit, modifier: Modifier = Modifier, preRendered: BarcodeRender? = null, usePreRendered: Boolean = false, longPressOnly: Boolean = false, )</ID>
+    <ID>LongParameterList:PdfStore.kt$PdfDocumentSession$( index: Int, viewportWidth: Int, viewportHeight: Int, baseScale: Float, zoom: Float, pageLeft: Float, pageTop: Float, translationX: Float, translationY: Float, )</ID>
+    <ID>LongParameterList:PdfViewer.kt$( card: Card, render: Bitmap?, renderPending: Boolean, onClick: () -&gt; Unit, onLongPress: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:PhotoStore.kt$PhotoStore$( context: Context, documentId: String, quickWidth: Int, quickHeight: Int, fullWidth: Int, fullHeight: Int, onDecoded: (Bitmap) -&gt; Unit, )</ID>
+    <ID>LongParameterList:PhotoViewer.kt$( card: Card, page: PhotoPage, render: Bitmap?, renderPending: Boolean, onClick: () -&gt; Unit, onLongPress: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:PhotoViewer.kt$( page: PhotoPage, pageIndex: Int, bitmap: Bitmap?, failed: Boolean, label: String?, onCycle: (() -&gt; Unit)?, onLongPress: () -&gt; Unit, onZoomChanged: (Boolean) -&gt; Unit, )</ID>
+    <ID>LongParameterList:SettingsScreens.kt$( onReorder: () -&gt; Unit, onBackup: () -&gt; Unit, vibrationEnabled: Boolean, onVibration: (Boolean) -&gt; Unit, onAbout: () -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:SettingsScreens.kt$( textSize: Float, onTextSize: (Float) -&gt; Unit, returnHomeEnabled: Boolean, onReturnHome: (Boolean) -&gt; Unit, autoLightEnabled: Boolean, onAutoLight: (Boolean) -&gt; Unit, maxCodeBrightnessEnabled: Boolean, onMaxCodeBrightness: (Boolean) -&gt; Unit, pageNumbersEnabled: Boolean, onPageNumbers: (Boolean) -&gt; Unit, demoModeEnabled: Boolean, onDemoMode: (Boolean) -&gt; Unit, onBack: () -&gt; Unit, )</ID>
+    <ID>LoopWithTooManyJumpStatements:PdfViewer.kt$while</ID>
+    <ID>LoopWithTooManyJumpStatements:PhotoViewer.kt$while</ID>
+    <ID>MagicNumber:BackupPayloadCodec.kt$BackupPayloadCodec$4</ID>
+    <ID>MagicNumber:BackupScreens.kt$1024</ID>
+    <ID>MagicNumber:BackupScreens.kt$8</ID>
+    <ID>MagicNumber:BackupStore.kt$BackupCrypto$4</ID>
+    <ID>MagicNumber:BackupStore.kt$BackupCrypto$8</ID>
+    <ID>MagicNumber:BackupStore.kt$BackupStore$1_000</ID>
+    <ID>MagicNumber:BackupStore.kt$BackupStore$3</ID>
+    <ID>MagicNumber:BackupStore.kt$BackupStore$3L</ID>
+    <ID>MagicNumber:BackupStore.kt$BackupStore$4L</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$0.30f</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$0.42f</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$10</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$11</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$12</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$13</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$1440</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$180</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$240</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$4</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$7</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes$8</ID>
+    <ID>MagicNumber:Barcodes.kt$Barcodes.&lt;no name provided&gt;$1024</ID>
+    <ID>MagicNumber:CameraScan.kt$0.14f</ID>
+    <ID>MagicNumber:CameraScan.kt$0.70f</ID>
+    <ID>MagicNumber:CameraScan.kt$0xFF</ID>
+    <ID>MagicNumber:CameraScan.kt$1280</ID>
+    <ID>MagicNumber:CameraScan.kt$255</ID>
+    <ID>MagicNumber:CameraScan.kt$3</ID>
+    <ID>MagicNumber:CameraScan.kt$36</ID>
+    <ID>MagicNumber:CameraScan.kt$48</ID>
+    <ID>MagicNumber:CameraScan.kt$6</ID>
+    <ID>MagicNumber:CameraScan.kt$720</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$1024</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$12</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$128</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$16</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$1_000</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$256</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$512</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$8</ID>
+    <ID>MagicNumber:CardStore.kt$CardStore$8_192</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$0xff</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$10</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$12</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$14</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$16</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$18</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$20</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$31</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$4</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$5</ID>
+    <ID>MagicNumber:DemoData.kt$DemoData$8</ID>
+    <ID>MagicNumber:DetailScreens.kt$12</ID>
+    <ID>MagicNumber:DetailScreens.kt$256</ID>
+    <ID>MagicNumber:DetailScreens.kt$512</ID>
+    <ID>MagicNumber:DetailScreens.kt$8</ID>
+    <ID>MagicNumber:EntryScreens.kt$120</ID>
+    <ID>MagicNumber:EntryScreens.kt$16</ID>
+    <ID>MagicNumber:EntryScreens.kt$320</ID>
+    <ID>MagicNumber:HomeLists.kt$3</ID>
+    <ID>MagicNumber:HomeLists.kt$4</ID>
+    <ID>MagicNumber:HomeLists.kt$6</ID>
+    <ID>MagicNumber:HomeLists.kt$7</ID>
+    <ID>MagicNumber:HomeLists.kt$8</ID>
+    <ID>MagicNumber:KeystoreKeys.kt$KeystoreKeys$256</ID>
+    <ID>MagicNumber:KeystoreKeys.kt$KeystoreKeys$35</ID>
+    <ID>MagicNumber:MainActivity.kt$0.03f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.055f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.06f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.085f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.10f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.12f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.18f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.24f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.27f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.30f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.40f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.485f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.575f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.5f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.66f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.73f</ID>
+    <ID>MagicNumber:MainActivity.kt$0.76f</ID>
+    <ID>MagicNumber:MainActivity.kt$1000</ID>
+    <ID>MagicNumber:MainActivity.kt$150</ID>
+    <ID>MagicNumber:MainActivity.kt$150.0</ID>
+    <ID>MagicNumber:MainActivity.kt$250</ID>
+    <ID>MagicNumber:MainActivity.kt$30.0</ID>
+    <ID>MagicNumber:MainActivity.kt$45f</ID>
+    <ID>MagicNumber:MainActivity.kt$6</ID>
+    <ID>MagicNumber:MainActivity.kt$8</ID>
+    <ID>MagicNumber:MainActivity.kt$90.0</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfDocumentSession$1_440</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfDocumentSession$240</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfDocumentSession$30</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$12</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$128</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$16</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$1_000</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$1_024</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$3</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$30</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$320</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$4</ID>
+    <ID>MagicNumber:PdfStore.kt$PdfStore$5</ID>
+    <ID>MagicNumber:PdfViewer.kt$0.001f</ID>
+    <ID>MagicNumber:PdfViewer.kt$0.5f</ID>
+    <ID>MagicNumber:PdfViewer.kt$1.05f</ID>
+    <ID>MagicNumber:PdfViewer.kt$140</ID>
+    <ID>MagicNumber:PdfViewer.kt$30</ID>
+    <ID>MagicNumber:PdfViewer.kt$8f</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$0x0a</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$0x1a</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$0x47</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$0x4e</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$0x50</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$12</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$128</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$16</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$3</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$32</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$4</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$8</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore$96</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore.&lt;no name provided&gt;$1024</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore.&lt;no name provided&gt;$4</ID>
+    <ID>MagicNumber:PhotoStore.kt$PhotoStore.&lt;no name provided&gt;$96L</ID>
+    <ID>MagicNumber:PhotoViewer.kt$1.05f</ID>
+    <ID>MagicNumber:PhotoViewer.kt$2_400</ID>
+    <ID>MagicNumber:PhotoViewer.kt$6f</ID>
+    <ID>MagicNumber:SecureStore.kt$SecureStore$12</ID>
+    <ID>MagicNumber:SecureStore.kt$SecureStore$128</ID>
+    <ID>MagicNumber:SecureStore.kt$SecureStore$28</ID>
+    <ID>MagicNumber:SecureStore.kt$SecureStore$30</ID>
+    <ID>MagicNumber:SecureStore.kt$SecureStore$6</ID>
+    <ID>MagicNumber:SettingsScreens.kt$0.27f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$0.36f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$0.41f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$0.59f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$0.5f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$0.64f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$0.73f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$16f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$3</ID>
+    <ID>MagicNumber:SettingsScreens.kt$3f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$4</ID>
+    <ID>MagicNumber:SettingsScreens.kt$5</ID>
+    <ID>MagicNumber:SettingsScreens.kt$6</ID>
+    <ID>MagicNumber:SettingsScreens.kt$600</ID>
+    <ID>MagicNumber:SettingsScreens.kt$64f</ID>
+    <ID>MagicNumber:SettingsScreens.kt$7</ID>
+    <ID>MagicNumber:Totp.kt$Totp$0x7f</ID>
+    <ID>MagicNumber:Totp.kt$Totp$0xff</ID>
+    <ID>MagicNumber:Totp.kt$Totp$10</ID>
+    <ID>MagicNumber:Totp.kt$Totp$1000L</ID>
+    <ID>MagicNumber:Totp.kt$Totp$16</ID>
+    <ID>MagicNumber:Totp.kt$Totp$24</ID>
+    <ID>MagicNumber:Totp.kt$Totp$3</ID>
+    <ID>MagicNumber:Totp.kt$Totp$300</ID>
+    <ID>MagicNumber:Totp.kt$Totp$5</ID>
+    <ID>MagicNumber:Totp.kt$Totp$6</ID>
+    <ID>MagicNumber:Totp.kt$Totp$7</ID>
+    <ID>MagicNumber:Totp.kt$Totp$8</ID>
+    <ID>MagicNumber:Ui.kt$0.31f</ID>
+    <ID>MagicNumber:Ui.kt$0.41f</ID>
+    <ID>MagicNumber:Ui.kt$0.59f</ID>
+    <ID>MagicNumber:Ui.kt$0.5f</ID>
+    <ID>MagicNumber:Ui.kt$0.69f</ID>
+    <ID>MagicNumber:Ui.kt$0xFF000000</ID>
+    <ID>MagicNumber:Ui.kt$0xFF888888</ID>
+    <ID>MagicNumber:Ui.kt$0xFFFFFFFF</ID>
+    <ID>MagicNumber:UriBytes.kt$UriBytes$1024</ID>
+    <ID>MagicNumber:UriBytes.kt$UriBytes$64</ID>
+    <ID>MatchingDeclarationName:CameraScan.kt$ScanResult</ID>
+    <ID>MaxLineLength:BackupCryptoTest.kt$BackupCryptoTest$val magic = byteArrayOf('P'.code.toByte(), 'A'.code.toByte(), 'K'.code.toByte(), 'A'.code.toByte(), 'B'.code.toByte(), 1)</ID>
+    <ID>MaxLineLength:BackupPayloadCodec.kt$BackupPayloadCodec$require(length in 0..maxEntryBytes &amp;&amp; length &lt;= input.available()) { "Backup blob is too large or truncated" }</ID>
+    <ID>MaxLineLength:BackupPayloadCodec.kt$BackupPayloadCodec$require(metadataLength in 0..MAX_METADATA_BYTES &amp;&amp; metadataLength &lt;= input.available()) { "Invalid backup metadata" }</ID>
+    <ID>MaxLineLength:BackupScreens.kt$"Backups are encrypted offline and contain all passes and 2FA secrets. External file references are not included."</ID>
+    <ID>MaxLineLength:BackupScreens.kt$"Use at least ${BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH} characters. This passphrase cannot be recovered."</ID>
+    <ID>MaxLineLength:BackupScreens.kt$Column</ID>
+    <ID>MaxLineLength:BackupScreens.kt$Text("cancel", color = Grey, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier { resetToMenu() }))</ID>
+    <ID>MaxLineLength:BackupScreens.kt$Toast.makeText(context, "incorrect passphrase or invalid backup", Toast.LENGTH_LONG).show()</ID>
+    <ID>MaxLineLength:BackupScreens.kt$append("\n$skipped ${if (skipped == 1) "pass needs" else "passes need"} a newer Paka and will be dropped.")</ID>
+    <ID>MaxLineLength:BackupScreens.kt$modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp).hardSnapVerticalScroll(rememberHapticScrollState())</ID>
+    <ID>MaxLineLength:BackupStore.kt$BackupCrypto$private val MAGIC = byteArrayOf('P'.code.toByte(), 'A'.code.toByte(), 'K'.code.toByte(), 'A'.code.toByte(), 'B'.code.toByte(), 1)</ID>
+    <ID>MaxLineLength:BackupStore.kt$BackupStore$require</ID>
+    <ID>MaxLineLength:BackupStore.kt$BackupStore$require(encoded.length &lt;= ((maxEntryBytes + 2L) / 3L * 4L + 4L).toInt()) { "$label backup entry is too large" }</ID>
+    <ID>MaxLineLength:BarcodePayloadVerifierTest.kt$BarcodePayloadVerifierTest$Sample</ID>
+    <ID>MaxLineLength:Barcodes.kt$Barcodes$PakaFormat.CODABAR</ID>
+    <ID>MaxLineLength:Barcodes.kt$Barcodes$PakaFormat.CODE39</ID>
+    <ID>MaxLineLength:Barcodes.kt$Barcodes$canvas.drawRect(left, top, left + (r.width * modulePx).toFloat(), top + (r.height * modulePx).toFloat(), paint)</ID>
+    <ID>MaxLineLength:CameraScan.kt$if</ID>
+    <ID>MaxLineLength:CameraScan.kt$reader.read(image).firstOrNull { it.text != null || it.bytes != null }</ID>
+    <ID>MaxLineLength:CardStore.kt$CardStore$warning = "Passes were read but could not be encrypted. Plaintext was preserved and editing is disabled."</ID>
+    <ID>MaxLineLength:CardStore.kt$CardStore$warning = if (recovered.fromBackup) "Passes were recovered from the previous encrypted backup." else null</ID>
+    <ID>MaxLineLength:CardStore.kt$CardStore$warning = if (recovered.fromBackup) "Passes were recovered from the previous plaintext backup." else null</ID>
+    <ID>MaxLineLength:CardStore.kt$CardStore$warning = listOfNotNull(legacyLoad.warning, "Passes were migrated to encrypted storage.").joinToString(" ")</ID>
+    <ID>MaxLineLength:DetailScreens.kt$"Select up to two files at once. References stay external and are not encrypted or backed up by Paka."</ID>
+    <ID>MaxLineLength:DetailScreens.kt$Text("add anyway", color = White, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier(onConfirm)))</ID>
+    <ID>MaxLineLength:DetailScreens.kt$if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }, references = references))) onBack()</ID>
+    <ID>MaxLineLength:DetailScreens.kt$is PassContent.Pdf -&gt; "PDF · ${content.pageCount} page${if (content.pageCount == 1) "" else "s"}"</ID>
+    <ID>MaxLineLength:DetailScreens.kt$is PassContent.Photos -&gt; "encrypted photos · ${content.pages.joinToString(" · ") { it.documentId.take(8) }}"</ID>
+    <ID>MaxLineLength:DetailScreens.kt$is PassContent.Photos -&gt; "photos · ${content.pages.size} side${if (content.pages.size == 1) "" else "s"}"</ID>
+    <ID>MaxLineLength:DetailScreens.kt$val</ID>
+    <ID>MaxLineLength:EntryScreens.kt$Column</ID>
+    <ID>MaxLineLength:EntryScreens.kt$Toast.makeText(context, "PDF passes are unavailable in demo mode", Toast.LENGTH_SHORT).show()</ID>
+    <ID>MaxLineLength:EntryScreens.kt$Toast.makeText(context, "Photo passes are unavailable in demo mode", Toast.LENGTH_SHORT).show()</ID>
+    <ID>MaxLineLength:EntryScreens.kt$if (f == format) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)</ID>
+    <ID>MaxLineLength:EntryScreens.kt$if (format == null &amp;&amp; !photoMode) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)</ID>
+    <ID>MaxLineLength:EntryScreens.kt$if (format == null &amp;&amp; photoMode) Text("selected", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)</ID>
+    <ID>MaxLineLength:EntryScreens.kt$keyboardActions = KeyboardActions(onDone = { if (canSave) { keyboard?.hide(); onSave(savedText()) } })</ID>
+    <ID>MaxLineLength:EntryScreens.kt$keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default)</ID>
+    <ID>MaxLineLength:EntryScreens.kt$modifier = Modifier.padding(vertical = 18.dp).then(if (canSave) tapModifier { onSave(draft) } else Modifier)</ID>
+    <ID>MaxLineLength:EntryScreens.kt$onSave(Card(name = name.trim(), content = PassContent.Pdf(imported.documentId, imported.pageCount)))</ID>
+    <ID>MaxLineLength:EntryScreens.kt$onSave(Card(name = name.trim(), content = PassContent.Photos(photoImports.map(PhotoImport::page))))</ID>
+    <ID>MaxLineLength:EntryScreens.kt$visualTransformation = if (item == ManualCodeItem.SECRET) PasswordVisualTransformation() else VisualTransformation.None</ID>
+    <ID>MaxLineLength:HomeLists.kt$Row</ID>
+    <ID>MaxLineLength:HomeLists.kt$Text(entry.name, color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))</ID>
+    <ID>MaxLineLength:HomeLists.kt$Text(formatCode(code), color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp, modifier = Modifier.weight(1f))</ID>
+    <ID>MaxLineLength:HomeLists.kt$internal</ID>
+    <ID>MaxLineLength:ListUi.kt$drawRect(White.copy(alpha = 0.3f), topLeft = Offset(centerX - 0.5.dp.toPx(), margin), size = Size(1.dp.toPx(), trackLen))</ID>
+    <ID>MaxLineLength:ListUi.kt$modifier = Modifier.fillMaxSize().padding(top = topPadding, end = 14.dp, bottom = 8.dp).hardSnapVerticalScroll(state)</ID>
+    <ID>MaxLineLength:MainActivity.kt$Box</ID>
+    <ID>MaxLineLength:MainActivity.kt$Canvas</ID>
+    <ID>MaxLineLength:MainActivity.kt$Canvas(modifier = Modifier.size(48.dp).then(tapLongModifier(onClick = onAdd, onLongClick = onAddLong, label = "Add"))) { drawPlus() }</ID>
+    <ID>MaxLineLength:MainActivity.kt$Text("Passes and 2FA codes, carried lightly.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)</ID>
+    <ID>MaxLineLength:MainActivity.kt$Text("Swipe between pages. Open a pass, then long-press it for details. Data stays encrypted on this phone.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)</ID>
+    <ID>MaxLineLength:MainActivity.kt$Text("Tap + to scan. Long-press + to enter manually.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)</ID>
+    <ID>MaxLineLength:MainActivity.kt$Text(if (demoModeEnabled) "Paka · demo" else "Paka", color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)</ID>
+    <ID>MaxLineLength:MainActivity.kt$Toast.makeText(context, "Restore was interrupted; reopen Paka to verify data", Toast.LENGTH_LONG).show()</ID>
+    <ID>MaxLineLength:MainActivity.kt$fun bar(x: Float, w: Float)</ID>
+    <ID>MaxLineLength:MainActivity.kt$if</ID>
+    <ID>MaxLineLength:MainActivity.kt$onboardingComplete &amp;&amp; !showSettings &amp;&amp; !showBackup &amp;&amp; !showAbout &amp;&amp; manageMode == null &amp;&amp; pendingDuplicate == null &amp;&amp; !showDev</ID>
+    <ID>MaxLineLength:MainActivity.kt$private</ID>
+    <ID>MaxLineLength:PassScreens.kt$Text("${card.name} · ${index + 1}/${cards.size}", color = Grey, fontSize = 14.sp, fontWeight = FontWeight.Light)</ID>
+    <ID>MaxLineLength:PassScreens.kt$var render by remember(card.id, barcode.data, barcode.format, targetWidthPx) { mutableStateOf&lt;BarcodeRender?&gt;(null) }</ID>
+    <ID>MaxLineLength:PdfStore.kt$PdfDocumentSession$page.render(bitmap, null, Matrix().apply { setScale(scale, scale) }, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)</ID>
+    <ID>MaxLineLength:PdfViewer.kt$Text("Couldn't render this PDF", color = Grey, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center))</ID>
+    <ID>MaxLineLength:PhotoStore.kt$PhotoStore$if (bytes.size &gt;= 3 &amp;&amp; bytes[0] == 0xff.toByte() &amp;&amp; bytes[1] == 0xd8.toByte() &amp;&amp; bytes[2] == 0xff.toByte()) return true</ID>
+    <ID>MaxLineLength:PhotoStore.kt$PhotoStore$if (bytes.size &gt;= 8 &amp;&amp; bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))) return true</ID>
+    <ID>MaxLineLength:PhotoStore.kt$PhotoStore$require(bounds.outWidth &lt;= MAX_DIMENSION &amp;&amp; bounds.outHeight &lt;= MAX_DIMENSION) { "Photo dimensions are unsupported" }</ID>
+    <ID>MaxLineLength:PhotoStore.kt$PhotoStore$val</ID>
+    <ID>MaxLineLength:PhotoViewer.kt$Text("Couldn't open this photo", color = Grey, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center))</ID>
+    <ID>MaxLineLength:PhotoViewer.kt$val fittedWidth = if (viewportWidth &lt;= 0 || viewportHeight &lt;= 0) 0f else min(viewportWidth.toFloat(), viewportHeight * aspect)</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$"Latvian for “package”. Saves passes and carries 2FA codes in a light way. Long-presses may reveal more options."</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(48.dp), enabled = index &lt; rows.lastIndex) { onDown(row.id) }</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(48.dp), enabled = index &gt; 0) { onUp(row.id) }</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$Text("From a Latvian in Vienna.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$Text("text size", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light, modifier = Modifier.weight(1f))</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$drawLine(color, Offset(size.width * 0.27f, size.height * 0.41f), Offset(size.width * 0.5f, size.height * 0.64f), stroke, StrokeCap.Square)</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$drawLine(color, Offset(size.width * 0.27f, size.height * 0.59f), Offset(size.width * 0.5f, size.height * 0.36f), stroke, StrokeCap.Square)</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$drawLine(color, Offset(size.width * 0.5f, size.height * 0.36f), Offset(size.width * 0.73f, size.height * 0.59f), stroke, StrokeCap.Square)</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$drawLine(color, Offset(size.width * 0.5f, size.height * 0.64f), Offset(size.width * 0.73f, size.height * 0.41f), stroke, StrokeCap.Square)</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$modifier = Modifier.weight(1f).then(tapModifier { onTextSize((textSize + 1f).coerceAtMost(64f)) })</ID>
+    <ID>MaxLineLength:SettingsScreens.kt$modifier = Modifier.weight(1f).then(tapModifier { onTextSize((textSize - 1f).coerceAtLeast(16f)) })</ID>
+    <ID>MaxLineLength:StoreWriteCoordinator.kt$StoreWriteCoordinator$if (codesRolledBack &amp;&amp; documentsRolledBack) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL</ID>
+    <ID>MaxLineLength:StoreWriteCoordinatorRestoreTest.kt$StoreWriteCoordinatorRestoreTest$accounts = listOf(OtpAccount(issuer = "Mastodon", account = "new", secret = "JBSWY3DPEHPK3PXP", id = "code-new"))</ID>
+    <ID>MaxLineLength:Totp.kt$Totp$if (!uri.scheme.equals("otpauth", ignoreCase = true) || !uri.host.equals("totp", ignoreCase = true)) return null</ID>
+    <ID>MaxLineLength:TotpTest.kt$TotpTest$OtpAccount("RFC", "", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA=", 8, 30, "SHA512")</ID>
+    <ID>MaxLineLength:Ui.kt$drawLine(White, Offset(s * 0.41f, s * 0.5f), Offset(s * 0.59f, s * 0.69f), strokeWidth = s * 0.055f, cap = StrokeCap.Round)</ID>
+    <ID>MaxLineLength:Ui.kt$drawLine(White, Offset(s * 0.59f, s * 0.31f), Offset(s * 0.41f, s * 0.5f), strokeWidth = s * 0.055f, cap = StrokeCap.Round)</ID>
+    <ID>MemberNameEqualsClassName:Prefs.kt$Prefs$private fun prefs(context: Context)</ID>
+    <ID>ReturnCount:AtomicStore.kt$AtomicStore$fun &lt;T&gt; readWithBackup(file: File, decode: (ByteArray) -&gt; T): Result&lt;RecoveredValue&lt;T&gt;&gt;</ID>
+    <ID>ReturnCount:Barcodes.kt$Barcodes$fun generate(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap?</ID>
+    <ID>ReturnCount:Barcodes.kt$Barcodes$fun generateCached(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap?</ID>
+    <ID>ReturnCount:CameraScan.kt$private fun averageLuma(image: ImageProxy): Int</ID>
+    <ID>ReturnCount:CardStore.kt$CardStore$fun load(context: Context): LoadOutcome&lt;List&lt;Card&gt;&gt;</ID>
+    <ID>ReturnCount:DetailScreens.kt$@Composable internal fun CardDetail(card: Card, onUpdate: (Card) -&gt; Boolean, onDelete: () -&gt; Boolean, onBack: () -&gt; Unit)</ID>
+    <ID>ReturnCount:KeystoreKeys.kt$KeystoreKeys$@Synchronized fun getOrCreateAes256(alias: String): SecretKey</ID>
+    <ID>ReturnCount:MainActivity.kt$@Composable private fun LoadedPakaApp( homeResetSignal: Int, resumeSignal: Int, cardLoad: LoadOutcome&lt;List&lt;Card&gt;&gt;, codeLoad: LoadOutcome&lt;List&lt;OtpAccount&gt;&gt;, )</ID>
+    <ID>ReturnCount:MainActivity.kt$fun addCard(card: Card, allowDuplicate: Boolean = false): Boolean</ID>
+    <ID>ReturnCount:MainActivity.kt$fun addCode(account: OtpAccount, allowDuplicate: Boolean = false): Boolean</ID>
+    <ID>ReturnCount:MainActivity.kt$fun saveCards(list: List&lt;Card&gt;): Boolean</ID>
+    <ID>ReturnCount:MainActivity.kt$fun saveCodes(list: List&lt;OtpAccount&gt;): Boolean</ID>
+    <ID>ReturnCount:PdfStore.kt$PdfStore$private fun hasPdfHeader(bytes: ByteArray): Boolean</ID>
+    <ID>ReturnCount:PhotoStore.kt$PhotoStore$internal fun hasSupportedHeader(bytes: ByteArray): Boolean</ID>
+    <ID>ReturnCount:PhotoStore.kt$PhotoStore$private fun dataKey(context: Context): SecretKey</ID>
+    <ID>ReturnCount:SecureStore.kt$SecureStore$fun loadAccounts(context: Context): LoadOutcome&lt;List&lt;OtpAccount&gt;&gt;</ID>
+    <ID>ReturnCount:Totp.kt$Totp$fun parseOtpauth(raw: String): OtpAccount?</ID>
+    <ID>ReturnCount:Totp.kt$Totp$fun validationError(account: OtpAccount): String?</ID>
+    <ID>SwallowedException:Barcodes.kt$Barcodes$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:BackupPayloadCodec.kt$BackupPayloadCodec$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:BackupStore.kt$BackupStore$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:Barcodes.kt$Barcodes$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:EntryScreens.kt$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PdfStore.kt$PdfDocumentSession.Companion$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:UriBytes.kt$UriBytes$error: Throwable</ID>
+    <ID>TooManyFunctions:CardStore.kt$CardStore</ID>
+    <ID>TooManyFunctions:MainActivity.kt$com.paka.app.MainActivity.kt</ID>
+    <ID>TooManyFunctions:PdfStore.kt$PdfStore</ID>
+    <ID>TooManyFunctions:PhotoStore.kt$PhotoStore</ID>
+    <ID>TooManyFunctions:Prefs.kt$Prefs</ID>
+    <ID>UnusedPrivateProperty:BackupStore.kt$BackupStore$private const val SCHEMA = 3</ID>
+  </CurrentIssues>
+</SmellBaseline>

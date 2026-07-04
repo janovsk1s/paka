@@ -1,0 +1,1 @@
+Faster cold start from a recorded baseline profile applied on sideloaded installs, updated Android toolchain (Gradle 9.6, AGP 9.2, compileSdk 37) and current Compose, tested store-recovery and restore-rollback paths, and a linted, release-workflow-backed build pipeline.

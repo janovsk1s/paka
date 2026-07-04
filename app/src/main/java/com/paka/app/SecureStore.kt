@@ -1,14 +1,10 @@
 package com.paka.app
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.security.KeyStore
 import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
@@ -20,43 +16,27 @@ import javax.crypto.spec.GCMParameterSpec
 internal object SecureStore {
     private const val KEY_ALIAS = "paka_otp_key"
     private const val FILE = "otp.enc"
-    private const val KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"
     private const val SCHEMA = 1
     private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'A'.code.toByte(), 1)
     private val AAD = "paka-otp-v1".toByteArray(Charsets.UTF_8)
 
-    private fun secretKey(): SecretKey {
-        val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-        (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
-        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
-        generator.init(
-            KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-            )
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build(),
-        )
-        return generator.generateKey()
-    }
+    private fun secretKey(): SecretKey = KeystoreKeys.getOrCreateAes256(KEY_ALIAS)
 
     fun loadAccounts(context: Context): LoadOutcome<List<OtpAccount>> {
         val file = File(context.filesDir, FILE)
         if (!file.exists()) return LoadOutcome(emptyList())
 
-        runCatching { return LoadOutcome(decrypt(AtomicStore.readBytes(file))) }
-
-        val backup = AtomicStore.backupFile(file)
-        if (backup.exists()) {
-            runCatching {
-                return LoadOutcome(
-                    value = decrypt(AtomicStore.readBytes(backup)),
-                    warning = "2FA accounts were recovered from the previous backup.",
-                )
+        AtomicStore.readWithBackup(file, ::decrypt).getOrNull()?.let { recovered ->
+            // A pre-versioned store carries no AAD binding. Re-encrypt it in the
+            // current layout now instead of waiting for the next user edit.
+            if (!recovered.value.versioned && !recovered.fromBackup) {
+                saveAccounts(context, recovered.value.accounts)
             }
+            return LoadOutcome(
+                value = recovered.value.accounts,
+                warning = if (recovered.fromBackup) "2FA accounts were recovered from the previous backup." else null,
+            )
         }
         return LoadOutcome(
             value = emptyList(),
@@ -65,7 +45,9 @@ internal object SecureStore {
         )
     }
 
-    private fun decrypt(blob: ByteArray): List<OtpAccount> {
+    private data class DecodedStore(val accounts: List<OtpAccount>, val versioned: Boolean)
+
+    private fun decrypt(blob: ByteArray): DecodedStore {
         require(blob.size > 28) { "Encrypted store is truncated" }
         val versioned = blob.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)
         val ivOffset = if (versioned) MAGIC.size else 0
@@ -74,7 +56,7 @@ internal object SecureStore {
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
         if (versioned) cipher.updateAAD(AAD)
-        return parse(String(cipher.doFinal(cipherText), Charsets.UTF_8))
+        return DecodedStore(parse(String(cipher.doFinal(cipherText), Charsets.UTF_8)), versioned)
     }
 
     fun saveAccounts(context: Context, accounts: List<OtpAccount>): Result<Unit> =

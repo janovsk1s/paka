@@ -1,0 +1,18 @@
+Paka is an intentionally small, offline pass-and-authenticator tool designed for the Light Phone III. It scans and renders common barcode formats, carries encrypted PDF and photo passes, and generates TOTP codes without Google Play Services.
+
+<b>Private by construction</b>
+
+<ul>
+<li>No internet permission, no analytics, no advertising.</li>
+<li>Camera access is requested only while scanning.</li>
+<li>Pass data and TOTP secrets are encrypted with separate AES-256-GCM keys held by the Android Keystore.</li>
+<li>Imported PDFs and photos are stored only as ciphertext; viewing decrypts them into RAM, never a plaintext file.</li>
+<li>Android cloud backup and device transfer are disabled. Portable backups are encrypted and authenticated offline with a key derived from your passphrase.</li>
+<li>TOTP codes copied to the clipboard are marked sensitive and cleared after 30 seconds.</li>
+</ul>
+
+<b>Quiet by design</b>
+
+Paka follows the restrained, monochrome character of the Light Phone III: a pure black background, five list entries per page, hard-cut page transitions, and no ripples or animation flourishes. Barcodes are decoded and payload-checked again before display, so the symbol on screen always matches what was scanned.
+
+Paka is an independent, unofficial community tool. It is not affiliated with, endorsed by, sponsored by, or published by The Light Phone, Inc.

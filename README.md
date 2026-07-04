@@ -2,9 +2,10 @@
 
 Paka is an intentionally small, offline pass-and-authenticator tool designed for
 Light Phone III. It scans and renders common barcode formats, carries encrypted
-PDF passes, and generates TOTP codes without Google Play Services.
+PDF passes, encrypted one- or two-sided document photos, and generates TOTP
+codes without Google Play Services.
 
-Current release: **0.13.0**
+Current release: **0.14.0**
 
 ## Photos
 
@@ -36,6 +37,13 @@ intentional design principles described by the LightOS Developer Program.
 - Imported PDFs use their own Android Keystore key. Their encrypted copies are
   stored privately; viewing decrypts them into anonymous RAM through `memfd`,
   never a plaintext file. PDF passes require Android 11 or newer.
+- Imported document photos are encrypted with a dedicated random data key that
+  is itself wrapped by a hardware-backed Android Keystore key, so bulk
+  decryption stays fast while the master key never leaves the hardware. One or
+  two sides are copied into Paka as encrypted originals and included in
+  encrypted portable backups. Each photo also keeps a pre-scaled display copy,
+  encrypted the same way; viewing decodes only this copy, and decoded photos
+  are released when Paka leaves the foreground or the system trims memory.
 - Up to two optional file references in pass Details are external links. Paka stores only
   the link metadata in its encrypted pass database; the referenced file itself
   is not copied, encrypted, or included in Paka backups.
@@ -61,6 +69,9 @@ and can engage the camera light automatically. Rendered barcodes are decoded and
 payload-checked before display; a bounded memory cache keeps common passes fast.
 PDF pages open at a fitted overview, support pinch and instant double-tap zoom,
 and rerender the settled viewport for sharp text without giant zoom bitmaps.
+Photo passes prefetch one or two sides from encrypted display copies; a fitted
+photo flips sides immediately when tapped, while zoom-in is pinch-only so the
+tap never waits on a double/triple-tap detector. PDF double-tap zoom is unchanged.
 Paka returns to the pass list after leaving the app by default; the hidden
 Developer screen can disable that behavior.
 The same screen can enable an isolated demo mode with freshly generated,
