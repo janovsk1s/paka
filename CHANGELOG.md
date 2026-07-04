@@ -57,6 +57,7 @@ Notable changes to Paka are documented here.
 
 - Backup passphrase entry uses the same focused full-screen text editor as manual entry, with masked values on the export and unlock forms; passphrases are saved exactly as typed.
 - Exporting a backup that contains photo passes notes that restoring requires Paka 0.14 or newer.
+- A pass opened on its own now shows its barcode at the same height as when it is part of a stack.
 
 ## 0.13.0 — 2026-07-02
 

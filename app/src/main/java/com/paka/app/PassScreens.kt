@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -224,7 +225,13 @@ internal fun CardScreen(card: Card, forceMaximumBrightness: Boolean, onLong: () 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) { SimpleTopBar(card.name, onBack) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            BarcodePanel(card = card, onClick = {}, onLongClick = onLong, longPressOnly = true)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                BarcodePanel(card = card, onClick = {}, onLongClick = onLong, longPressOnly = true)
+                Spacer(Modifier.height(18.dp))
+                // Invisible stand-in for StackScreen's caption so the barcode sits at
+                // the same vertical position whether the pass is viewed alone or in a stack.
+                Text("${card.name} · 1/1", color = Color.Transparent, fontSize = 14.sp, fontWeight = FontWeight.Light)
+            }
         }
     }
 }
