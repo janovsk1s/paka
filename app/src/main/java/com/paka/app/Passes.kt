@@ -57,3 +57,27 @@ internal val Card.photoContent: PassContent.Photos?
 
 internal fun Iterable<Card>.photoDocumentIds(): Set<String> =
     flatMap { it.photoContent?.pages.orEmpty() }.mapTo(linkedSetOf(), PhotoPage::documentId)
+
+/**
+ * Swaps a stacked pass with its neighbour inside the same stack. Only the two
+ * members trade places in the overall list, so singles and other stacks keep
+ * their positions, and the stack itself stays anchored where it first appears.
+ */
+internal fun List<Card>.movedWithinStack(id: String, up: Boolean): List<Card> {
+    val index = indexOfFirst { it.id == id }
+    val stackName = getOrNull(index)?.stack
+    val candidates: IntProgression = when {
+        stackName == null -> IntRange.EMPTY
+        up -> index - 1 downTo 0
+        else -> index + 1 until size
+    }
+    val neighbor = candidates.firstOrNull { this[it].stack == stackName }
+    return if (neighbor == null) {
+        this
+    } else {
+        val reordered = toMutableList()
+        reordered[index] = this[neighbor]
+        reordered[neighbor] = this[index]
+        reordered
+    }
+}

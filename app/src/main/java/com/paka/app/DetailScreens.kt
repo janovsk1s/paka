@@ -131,7 +131,14 @@ private fun ReferenceOptionsScreen(
 }
 
 @Composable
-internal fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () -> Boolean, onBack: () -> Unit) {
+internal fun CardDetail(
+    card: Card,
+    onUpdate: (Card) -> Boolean,
+    onDelete: () -> Boolean,
+    stackMembers: (String) -> List<ManageRow>,
+    onStackMove: (String, Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
     val context = LocalContext.current
     var name by remember(card.id) { mutableStateOf(card.name) }
     var notes by remember(card.id) { mutableStateOf(card.notes) }
@@ -140,6 +147,7 @@ internal fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () ->
     var confirmDelete by remember(card.id) { mutableStateOf(false) }
     var editingField by remember(card.id) { mutableStateOf<DetailField?>(null) }
     var activeReferenceIndex by remember(card.id) { mutableStateOf<Int?>(null) }
+    var managingStack by remember(card.id) { mutableStateOf(false) }
     val addReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         context.setPakaExternalFlowActive(false)
         val remaining = (2 - references.size).coerceAtLeast(0)
@@ -208,6 +216,17 @@ internal fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () ->
         if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }, references = references))) onBack()
     }
 
+    val savedStack = card.stack
+    if (managingStack && savedStack != null) {
+        ManageScreen(
+            rows = stackMembers(savedStack),
+            onUp = { onStackMove(it, true) },
+            onDown = { onStackMove(it, false) },
+            onBack = { managingStack = false },
+        )
+        return
+    }
+
     if (confirmDelete) {
         ConfirmDeleteScreen(
             name = name.trim().ifBlank { card.name },
@@ -269,7 +288,22 @@ internal fun CardDetail(card: Card, onUpdate: (Card) -> Boolean, onDelete: () ->
             ) {
                 if (page == 0) {
                     ManualEntryRow("name", name, card.name) { editingField = DetailField.NAME }
-                    ManualEntryRow("stack", stack, "none") { editingField = DetailField.STACK }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            ManualEntryRow("stack", stack, "none") { editingField = DetailField.STACK }
+                        }
+                        if (savedStack != null && stackMembers(savedStack).size >= 2) {
+                            Text(
+                                "sort",
+                                color = Grey,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Light,
+                                modifier = Modifier
+                                    .padding(start = 16.dp)
+                                    .then(tapModifier({ managingStack = true }, "Sort passes in this stack")),
+                            )
+                        }
+                    }
                     Row(modifier = Modifier.fillMaxWidth()) {
                         LabelValue(
                             "format",

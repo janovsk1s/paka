@@ -624,6 +624,10 @@ private fun LoadedPakaApp(
             card = fresh,
             onUpdate = updateCard,
             onDelete = { saveCards(activeCards.filter { it.id != fresh.id }) },
+            stackMembers = { stackName ->
+                activeCards.filter { it.stack == stackName }.map { ManageRow(it.id, it.name) }
+            },
+            onStackMove = { id, up -> saveCards(activeCards.movedWithinStack(id, up)) },
             onBack = { detailCard = null },
         )
         return

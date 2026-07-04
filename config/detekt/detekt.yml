@@ -7,11 +7,14 @@ naming:
 complexity:
   LongMethod:
     ignoreAnnotated: ['Composable']
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
   CyclomaticComplexMethod:
     ignoreAnnotated: ['Composable']
 
 style:
   ReturnCount:
     ignoreAnnotated: ['Composable']
+    excludeGuardClauses: true
   MagicNumber:
     ignoreAnnotated: ['Composable']

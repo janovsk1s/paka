@@ -8,6 +8,7 @@ Notable changes to Paka are documented here.
 
 - Document photos can be taken directly inside Paka when creating a photo pass, alongside choosing existing images.
 - The capture screen reuses the scanner's camera: tap to focus, a manual light toggle, and a retake/use confirmation before anything is stored.
+- Passes inside a stack can be reordered from a pass's Details: a sort action next to the stack field opens the familiar reorder screen scoped to that stack.
 
 ### Security
 
