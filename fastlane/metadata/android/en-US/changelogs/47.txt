@@ -1,0 +1,1 @@
+Crop document photos after taking them, with a scanner-style frame. The capture screen now auto-retries focus for close-up documents so they settle without repeated taps. Plus the first capture preview: take photos directly inside Paka (no gallery, no files) and sort passes within a stack from the details screen.
