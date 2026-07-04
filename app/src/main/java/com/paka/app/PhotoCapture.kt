@@ -2,6 +2,7 @@ package com.paka.app
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.camera.core.Camera
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,9 +54,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 import kotlin.math.min
@@ -86,6 +91,7 @@ internal fun PhotoCaptureScreen(
     val previewRef = remember { AtomicReference<PreviewView?>(null) }
     val captureRef = remember { AtomicReference<ImageCapture?>(null) }
     val torchRef = remember { AtomicBoolean(false) }
+    val lastFocusAt = remember { AtomicLong(SystemClock.elapsedRealtime()) }
 
     // A live view of someone's ID is never a sharing feature.
     ProtectSensitiveContent(true)
@@ -112,6 +118,23 @@ internal fun PhotoCaptureScreen(
                 cameraRef.getAndSet(null)?.cameraControl?.enableTorch(false)
                 previewRef.set(null)
                 providerRef.getAndSet(null)?.unbindAll()
+            }
+        }
+    }
+
+    // Close-up documents make the camera hunt just like barcodes do, so keep
+    // nudging centre focus at the scanner's cadence while the preview is live.
+    // A manual tap-to-focus postpones the next nudge by a full interval.
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            delay(FOCUS_RETRY_MS / 4)
+            val now = SystemClock.elapsedRealtime()
+            val idle = normalized == null && !busy && now - lastFocusAt.get() >= FOCUS_RETRY_MS
+            val camera = cameraRef.get()
+            val preview = previewRef.get()?.takeIf { it.width > 0 && it.height > 0 }
+            if (idle && camera != null && preview != null) {
+                lastFocusAt.set(now)
+                focusAt(camera, preview, preview.width / 2f, preview.height / 2f)
             }
         }
     }
@@ -295,7 +318,10 @@ internal fun PhotoCaptureScreen(
                     detectTapGestures { point ->
                         val camera = cameraRef.get()
                         val preview = previewRef.get()
-                        if (camera != null && preview != null) focusAt(camera, preview, point.x, point.y)
+                        if (camera != null && preview != null) {
+                            lastFocusAt.set(SystemClock.elapsedRealtime())
+                            focusAt(camera, preview, point.x, point.y)
+                        }
                     }
                 },
             )

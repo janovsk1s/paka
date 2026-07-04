@@ -10,6 +10,7 @@ Notable changes to Paka are documented here.
 - The capture screen reuses the scanner's camera: tap to focus, a manual light toggle, and a retake/use confirmation before anything is stored.
 - Passes inside a stack can be reordered from a pass's Details: a sort action next to the stack field opens the familiar reorder screen scoped to that stack.
 - Captured photos can be cropped before saving: drag the scanner-style corner frame or move the whole selection, then confirm. Cropping happens entirely in memory before encryption, and the buffers of the uncropped capture are zeroed.
+- The capture screen keeps nudging centre focus on the scanner's retry cadence, so close-up documents settle without repeated manual taps; a tap-to-focus still takes priority.
 
 ### Security
 

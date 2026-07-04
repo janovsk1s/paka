@@ -304,7 +304,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
 private const val LOW_LIGHT_LUMA = 48
 private const val LOW_LIGHT_FRAMES = 6
 private const val BRIGHT_LIGHT_FRAMES = 4
-private const val FOCUS_RETRY_MS = 2_200L
+internal const val FOCUS_RETRY_MS = 2_200L
 
 /** Samples the central image area without allocating a full luminance copy. */
 private fun averageLuma(image: ImageProxy): Int {
