@@ -5,7 +5,7 @@ Light Phone III. It scans and renders common barcode formats, carries encrypted
 PDF passes, encrypted one- or two-sided document photos, and generates TOTP
 codes without Google Play Services.
 
-Current release: **0.13.0**
+Current release: **0.14.0**
 
 ## Photos
 
