@@ -2,7 +2,6 @@ package com.paka.app
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Size
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.camera.core.Camera
@@ -15,9 +14,11 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,11 +32,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +57,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Photographs a document straight into the encrypted photo store. The frame
@@ -71,6 +78,8 @@ internal fun PhotoCaptureScreen(
     var busy by remember { mutableStateOf(false) }
     var normalized by remember { mutableStateOf<ByteArray?>(null) }
     var confirmBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var cropping by remember { mutableStateOf(false) }
+    var cropRect by remember { mutableStateOf(CropRect.FULL) }
     val disposed = remember { AtomicBoolean(false) }
     val providerRef = remember { AtomicReference<ProcessCameraProvider?>(null) }
     val cameraRef = remember { AtomicReference<Camera?>(null) }
@@ -86,6 +95,8 @@ internal fun PhotoCaptureScreen(
         normalized = null
         confirmBitmap?.recycle()
         confirmBitmap = null
+        cropping = false
+        cropRect = CropRect.FULL
     }
 
     fun captureFailed(message: String) {
@@ -106,7 +117,14 @@ internal fun PhotoCaptureScreen(
     }
 
     BackHandler {
-        if (normalized != null) discardCapture() else onBack()
+        when {
+            cropping -> {
+                cropping = false
+                cropRect = CropRect.FULL
+            }
+            normalized != null -> discardCapture()
+            else -> onBack()
+        }
     }
 
     val captured = normalized
@@ -117,22 +135,78 @@ internal fun PhotoCaptureScreen(
             }
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 confirmBitmap?.let { bitmap ->
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "Captured document photo",
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                        contentScale = ContentScale.Fit,
-                    )
+                    if (cropping) {
+                        CropOverlay(bitmap = bitmap, selection = cropRect, onSelection = { cropRect = it })
+                    } else {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Captured document photo",
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
                 }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 18.dp),
             ) {
+                if (cropping) {
+                    Text(
+                        text = "cancel",
+                        color = Grey,
+                        fontSize = 18.sp,
+                        modifier = Modifier.weight(1f).then(
+                            if (busy) Modifier else tapModifier {
+                                cropping = false
+                                cropRect = CropRect.FULL
+                            },
+                        ),
+                    )
+                    Text(
+                        text = if (busy) "cropping…" else "done",
+                        color = White,
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f).then(
+                            if (busy) Modifier else tapModifier {
+                                if (cropRect == CropRect.FULL) {
+                                    cropping = false
+                                } else {
+                                    busy = true
+                                    scope.launch {
+                                        val result = withContext(Dispatchers.Default) {
+                                            runCatching { CapturedPhoto.crop(captured, cropRect) }
+                                        }
+                                        busy = false
+                                        result.onSuccess { bytes ->
+                                            normalized?.fill(0)
+                                            confirmBitmap?.recycle()
+                                            confirmBitmap = runCatching { decodeForConfirm(bytes) }.getOrNull()
+                                            normalized = bytes
+                                            cropRect = CropRect.FULL
+                                            cropping = false
+                                        }.onFailure {
+                                            captureFailed("Photo could not be cropped")
+                                        }
+                                    }
+                                }
+                            },
+                        ),
+                    )
+                    return@Row
+                }
                 Text(
                     text = "retake",
                     color = Grey,
                     fontSize = 18.sp,
                     modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { discardCapture() }),
+                )
+                Text(
+                    text = "crop",
+                    color = Grey,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { cropping = true }),
                 )
                 Text(
                     text = if (busy) "saving…" else "use photo",
@@ -185,7 +259,10 @@ internal fun PhotoCaptureScreen(
                                     ResolutionSelector.Builder()
                                         .setResolutionStrategy(
                                             ResolutionStrategy(
-                                                Size(CapturedPhoto.MAX_DIMENSION, CapturedPhoto.MAX_DIMENSION),
+                                                android.util.Size(
+                                                    CapturedPhoto.MAX_DIMENSION,
+                                                    CapturedPhoto.MAX_DIMENSION,
+                                                ),
                                                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
                                             ),
                                         )
@@ -323,4 +400,87 @@ private fun decodeForConfirm(bytes: ByteArray): Bitmap? {
         bytes.size,
         BitmapFactory.Options().apply { inSampleSize = sample },
     )
+}
+
+private const val CROP_MIN_SIZE = 0.15f
+
+/**
+ * The captured photo with the crop selection over it: dimmed outside, a thin
+ * frame with scanner-style corner arms, draggable by corners or as a whole.
+ */
+@Composable
+private fun CropOverlay(bitmap: Bitmap, selection: CropRect, onSelection: (CropRect) -> Unit) {
+    val currentSelection by rememberUpdatedState(selection)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+        val boxWidth = constraints.maxWidth.toFloat()
+        val boxHeight = constraints.maxHeight.toFloat()
+        val scale = min(boxWidth / bitmap.width, boxHeight / bitmap.height)
+        val imageWidth = bitmap.width * scale
+        val imageHeight = bitmap.height * scale
+        val imageLeft = (boxWidth - imageWidth) / 2f
+        val imageTop = (boxHeight - imageHeight) / 2f
+
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "Captured document photo",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit,
+        )
+        Canvas(
+            modifier = Modifier.fillMaxSize().pointerInput(bitmap) {
+                var drag: CropDrag? = null
+                detectDragGestures(
+                    onDragStart = { position ->
+                        drag = currentSelection.dragAt(
+                            x = position.x - imageLeft,
+                            y = position.y - imageTop,
+                            imageWidth = imageWidth,
+                            imageHeight = imageHeight,
+                            touchRadius = 28.dp.toPx(),
+                        )
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        val dx = amount.x / imageWidth
+                        val dy = amount.y / imageHeight
+                        when (val active = drag) {
+                            is CropDrag.Corner ->
+                                onSelection(currentSelection.resized(active.handle, dx, dy, CROP_MIN_SIZE))
+                            CropDrag.Move -> onSelection(currentSelection.movedBy(dx, dy))
+                            null -> Unit
+                        }
+                    },
+                    onDragEnd = { drag = null },
+                    onDragCancel = { drag = null },
+                )
+            },
+        ) {
+            val left = imageLeft + currentSelection.left * imageWidth
+            val top = imageTop + currentSelection.top * imageHeight
+            val right = imageLeft + currentSelection.right * imageWidth
+            val bottom = imageTop + currentSelection.bottom * imageHeight
+            val dim = Black.copy(alpha = 0.6f)
+            drawRect(dim, Offset(imageLeft, imageTop), Size(imageWidth, top - imageTop))
+            drawRect(dim, Offset(imageLeft, bottom), Size(imageWidth, imageTop + imageHeight - bottom))
+            drawRect(dim, Offset(imageLeft, top), Size(left - imageLeft, bottom - top))
+            drawRect(dim, Offset(right, top), Size(imageLeft + imageWidth - right, bottom - top))
+            drawRect(
+                White.copy(alpha = 0.75f),
+                Offset(left, top),
+                Size(right - left, bottom - top),
+                style = Stroke(1.dp.toPx()),
+            )
+            val arm = min(24.dp.toPx(), min(right - left, bottom - top) / 3f)
+            val stroke = 2.dp.toPx()
+            listOf(
+                Triple(Offset(left, top), Offset(arm, 0f), Offset(0f, arm)),
+                Triple(Offset(right, top), Offset(-arm, 0f), Offset(0f, arm)),
+                Triple(Offset(left, bottom), Offset(arm, 0f), Offset(0f, -arm)),
+                Triple(Offset(right, bottom), Offset(-arm, 0f), Offset(0f, -arm)),
+            ).forEach { (corner, horizontal, vertical) ->
+                drawLine(White, corner, corner + horizontal, stroke)
+                drawLine(White, corner, corner + vertical, stroke)
+            }
+        }
+    }
 }

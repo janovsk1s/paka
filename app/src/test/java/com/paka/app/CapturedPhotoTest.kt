@@ -40,6 +40,18 @@ class CapturedPhotoTest {
         return output.toByteArray()
     }
 
+    private fun twoToneJpeg(width: Int, height: Int): ByteArray {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        for (x in 0 until width) {
+            val column = if (x < width / 2) Color.BLACK else Color.WHITE
+            for (y in 0 until height) bitmap.setPixel(x, y, column)
+        }
+        val output = ByteArrayOutputStream()
+        check(bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output))
+        bitmap.recycle()
+        return output.toByteArray()
+    }
+
     private fun dimensionsOf(bytes: ByteArray): Pair<Int, Int> {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -71,6 +83,18 @@ class CapturedPhotoTest {
         assertThrows(IllegalArgumentException::class.java) {
             CapturedPhoto.normalize(ByteArray(64) { 0x33 }, rotationDegrees = 0)
         }
+    }
+
+    @Test
+    fun croppingCutsTheSelectedRegion() {
+        val source = twoToneJpeg(320, 200)
+        val rightHalf = CapturedPhoto.crop(source, CropRect(0.5f, 0f, 1f, 1f))
+
+        assertEquals(160 to 200, dimensionsOf(rightHalf))
+        val decoded = BitmapFactory.decodeByteArray(rightHalf, 0, rightHalf.size)
+        val center = decoded.getPixel(decoded.width / 2, decoded.height / 2)
+        decoded.recycle()
+        assertTrue("cropped half must contain the white side", Color.red(center) > 200)
     }
 
     @Test
