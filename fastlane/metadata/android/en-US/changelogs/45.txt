@@ -1,0 +1,1 @@
+A pass opened on its own now shows its barcode at the same height as inside a stack. Release-candidate preview of 0.14.0: encrypted photo passes, faster cold start from an installed baseline profile, updated toolchain, hardened backups and storage.
