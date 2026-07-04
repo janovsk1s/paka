@@ -2,6 +2,20 @@
 
 Notable changes to Paka are documented here.
 
+## 0.15.0 — Unreleased
+
+### Added
+
+- Document photos can be taken directly inside Paka when creating a photo pass, alongside choosing existing images.
+- The capture screen reuses the scanner's camera: tap to focus, a manual light toggle, and a retake/use confirmation before anything is stored.
+
+### Security
+
+- Captured frames travel sensor → RAM → encrypted store; no temporary file, media-store entry, or gallery thumbnail is ever created.
+- Captures are re-encoded in memory before storage, which bakes in the sensor rotation, bounds the longest edge, and strips all camera metadata (EXIF timestamps and device identifiers).
+- The capture screen blocks screenshots and screen recording while a document is in front of the camera.
+- Every intermediate capture buffer is zeroed, including on failure paths.
+
 ## 0.14.0 — 2026-07-04
 
 ### Security

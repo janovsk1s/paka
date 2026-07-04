@@ -1,5 +1,7 @@
 package com.paka.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -43,6 +45,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -94,6 +97,8 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
     var pdfImport by remember { mutableStateOf<PdfImport?>(null) }
     var photoMode by remember { mutableStateOf(false) }
     var photoImports by remember { mutableStateOf<List<PhotoImport>>(emptyList()) }
+    var photoSourceMenu by remember { mutableStateOf(false) }
+    var capturing by remember { mutableStateOf(false) }
     var pdfChecking by remember { mutableStateOf(false) }
     var pdfError by remember { mutableStateOf<String?>(null) }
     var editingField by remember { mutableStateOf<ManualCardField?>(null) }
@@ -159,6 +164,29 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
         }
     }
 
+    // Shared by the document picker and the in-app camera: appends a second
+    // side or replaces the selection, deleting freshly created orphans.
+    suspend fun mergePhotoImports(imported: List<PhotoImport>) {
+        val next = if (photoImports.size == 1 && imported.size == 1 &&
+            photoImports.first().page.documentId != imported.first().page.documentId
+        ) {
+            photoImports + imported
+        } else {
+            imported
+        }
+        val priorCreatedIds = photoImports.filter { it.created }.map { it.page.documentId }.toSet()
+        val normalized = next.map { importedPhoto ->
+            if (importedPhoto.page.documentId in priorCreatedIds && !importedPhoto.created) {
+                importedPhoto.copy(created = true)
+            } else importedPhoto
+        }
+        val keptIds = normalized.map { it.page.documentId }.toSet()
+        photoImports.filter { it.created && it.page.documentId !in keptIds }.forEach { orphan ->
+            withContext(Dispatchers.IO) { PhotoStore.delete(context, orphan.page.documentId) }
+        }
+        photoImports = normalized
+    }
+
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         context.setPakaExternalFlowActive(false)
         if (uris.isNotEmpty()) {
@@ -181,29 +209,55 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                 }
                 pdfChecking = false
                 result.onSuccess { imported ->
-                    val next = if (photoImports.size == 1 && imported.size == 1 &&
-                        photoImports.first().page.documentId != imported.first().page.documentId
-                    ) {
-                        photoImports + imported
-                    } else {
-                        imported
-                    }
-                    val priorCreatedIds = photoImports.filter { it.created }.map { it.page.documentId }.toSet()
-                    val normalized = next.map { importedPhoto ->
-                        if (importedPhoto.page.documentId in priorCreatedIds && !importedPhoto.created) {
-                            importedPhoto.copy(created = true)
-                        } else importedPhoto
-                    }
-                    val keptIds = normalized.map { it.page.documentId }.toSet()
-                    photoImports.filter { it.created && it.page.documentId !in keptIds }.forEach { orphan ->
-                        withContext(Dispatchers.IO) { PhotoStore.delete(context, orphan.page.documentId) }
-                    }
-                    photoImports = normalized
+                    mergePhotoImports(imported)
                 }.onFailure { error ->
                     pdfError = error.message ?: "Photos could not be opened"
                 }
             }
         }
+    }
+
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            photoSourceMenu = false
+            capturing = true
+        } else {
+            Toast.makeText(context, "Camera permission is needed to take photos", Toast.LENGTH_LONG).show()
+        }
+    }
+    val startCapture = {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+        if (granted == PackageManager.PERMISSION_GRANTED) {
+            photoSourceMenu = false
+            capturing = true
+        } else {
+            cameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    if (capturing) {
+        PhotoCaptureScreen(
+            onCaptured = { imported ->
+                scope.launch { mergePhotoImports(listOf(imported)) }
+                capturing = false
+            },
+            onBack = { capturing = false },
+        )
+        return
+    }
+
+    if (photoSourceMenu) {
+        PhotoSourceScreen(
+            secondSide = photoImports.size == 1,
+            onTake = startCapture,
+            onChoose = {
+                photoSourceMenu = false
+                context.setPakaExternalFlowActive(true)
+                photoPicker.launch(arrayOf("image/*"))
+            },
+            onBack = { photoSourceMenu = false },
+        )
+        return
     }
 
     editingField?.let { field ->
@@ -251,9 +305,12 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                             else pdfImport?.let { "${it.pageCount}p" },
                             onClick = {
                                 if (!pdfChecking) {
-                                    context.setPakaExternalFlowActive(true)
-                                    if (photoMode) photoPicker.launch(arrayOf("image/*"))
-                                    else pdfPicker.launch(arrayOf("application/pdf"))
+                                    if (photoMode) {
+                                        photoSourceMenu = true
+                                    } else {
+                                        context.setPakaExternalFlowActive(true)
+                                        pdfPicker.launch(arrayOf("application/pdf"))
+                                    }
                                 }
                             },
                         )
@@ -318,10 +375,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                             format = null
                             photoMode = true
                             pdfError = null
-                            if (!pdfChecking) {
-                                context.setPakaExternalFlowActive(true)
-                                photoPicker.launch(arrayOf("image/*"))
-                            }
+                            if (!pdfChecking) photoSourceMenu = true
                         }),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -375,6 +429,35 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                 else Modifier,
             ),
         )
+    }
+}
+
+@Composable
+private fun PhotoSourceScreen(secondSide: Boolean, onTake: () -> Unit, onChoose: () -> Unit, onBack: () -> Unit) {
+    BackHandler { onBack() }
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+        SimpleTopBar(if (secondSide) "back side" else "photos", onBack)
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            PagedList(listOf("take photo", "choose photos")) { action ->
+                Text(
+                    action,
+                    color = White,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.fillMaxWidth().then(
+                        tapModifier { if (action == "take photo") onTake() else onChoose() },
+                    ),
+                )
+            }
+            Text(
+                "Taken photos go straight into Paka's encrypted store. " +
+                    "They are never written to the gallery or any file.",
+                color = Grey,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Light,
+                modifier = Modifier.align(Alignment.BottomStart).padding(end = 14.dp, bottom = 20.dp),
+            )
+        }
     }
 }
 

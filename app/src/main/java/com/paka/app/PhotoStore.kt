@@ -59,16 +59,21 @@ internal object PhotoStore {
     fun import(context: Context, uri: Uri): Result<PhotoImport> = runCatching {
         val bytes = readUri(context, uri)
         try {
-            val dimensions = inspect(bytes)
-            val documentId = photoDocumentId(bytes)
-            val file = documentFile(context, documentId)
-            val created = !file.exists()
-            encryptToFile(context, file, aad(documentId), bytes)
-            runCatching { writeDisplayCopy(context, documentId, bytes) }
-            PhotoImport(PhotoPage(documentId, dimensions.first, dimensions.second), created)
+            importBytes(context, bytes).getOrThrow()
         } finally {
             bytes.fill(0)
         }
+    }
+
+    /** Ingests photo bytes already in memory (an in-app capture). The caller zeroes them. */
+    fun importBytes(context: Context, bytes: ByteArray): Result<PhotoImport> = runCatching {
+        val dimensions = inspect(bytes)
+        val documentId = photoDocumentId(bytes)
+        val file = documentFile(context, documentId)
+        val created = !file.exists()
+        encryptToFile(context, file, aad(documentId), bytes)
+        runCatching { writeDisplayCopy(context, documentId, bytes) }
+        PhotoImport(PhotoPage(documentId, dimensions.first, dimensions.second), created)
     }
 
     // Decoded display bitmaps for the current session, so opening a pass and

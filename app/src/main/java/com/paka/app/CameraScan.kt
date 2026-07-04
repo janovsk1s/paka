@@ -360,7 +360,7 @@ private fun ScanGuide() {
     }
 }
 
-private fun focusAt(camera: Camera, preview: PreviewView, x: Float, y: Float) {
+internal fun focusAt(camera: Camera, preview: PreviewView, x: Float, y: Float) {
     val point = preview.meteringPointFactory.createPoint(x, y)
     val action = FocusMeteringAction.Builder(
         point,
