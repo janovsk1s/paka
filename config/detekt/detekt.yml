@@ -1,0 +1,17 @@
+# Compose composables are PascalCase, screen-sized, and full of layout
+# dimensions by design; these rules stay active for ordinary functions.
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+
+complexity:
+  LongMethod:
+    ignoreAnnotated: ['Composable']
+  CyclomaticComplexMethod:
+    ignoreAnnotated: ['Composable']
+
+style:
+  ReturnCount:
+    ignoreAnnotated: ['Composable']
+  MagicNumber:
+    ignoreAnnotated: ['Composable']
