@@ -4,13 +4,17 @@ Notable changes to Paka are documented here.
 
 ## 0.15.0 — Unreleased
 
-### Documentation
+### Beta 3.2 — changes since `v0.15.0-beta.3.1`
 
 - Added a security policy, security contact metadata, threat model, persistence
   format registry, device testing checklist, release checklist, and
-  security/longevity roadmap as capture preview 4 preparation.
+  security/longevity roadmap.
 - Added a CI APK-permission guard so debug, preview, and unsigned release APKs
   fail checks if internet, network-state, or any unexpected permission appears.
+- Corrected the photo format registry to list every supported image header
+  (JPEG, PNG, GIF, WebP, HEIF/HEIC, AVIF).
+- Hardened the APK verification scripts: `aapt2` fallback and version-ordered
+  build-tools selection.
 
 ### Beta 3.1 — changes since `v0.15.0-beta.3`
 

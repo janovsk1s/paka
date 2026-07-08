@@ -10,18 +10,22 @@ die() {
   exit 1
 }
 
+# Accepts one or more candidate tool names (e.g. aapt aapt2) and returns the
+# first found, preferring the highest build-tools version (version-ordered).
 find_android_tool() {
-  tool="$1"
-  for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk"; do
-    [ -n "$sdk" ] || continue
-    [ -d "$sdk/build-tools" ] || continue
-    found="$(find "$sdk/build-tools" -path "*/$tool" -type f 2>/dev/null | sort | tail -n 1)"
-    if [ -n "$found" ]; then
-      printf '%s\n' "$found"
-      return 0
-    fi
+  for tool in "$@"; do
+    for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk"; do
+      [ -n "$sdk" ] || continue
+      [ -d "$sdk/build-tools" ] || continue
+      found="$(find "$sdk/build-tools" -path "*/$tool" -type f 2>/dev/null | sort -V | tail -n 1)"
+      if [ -n "$found" ]; then
+        printf '%s\n' "$found"
+        return 0
+      fi
+    done
+    command -v "$tool" 2>/dev/null && return 0
   done
-  command -v "$tool" 2>/dev/null || return 1
+  return 1
 }
 
 [ -f "$APK" ] || die "APK not found: $APK"
@@ -31,7 +35,7 @@ if [ -z "${JAVA_HOME:-}" ] && [ -d /opt/homebrew/opt/openjdk@17/libexec/openjdk.
 fi
 
 APKSIGNER="$(find_android_tool apksigner)" || die "apksigner not found; set ANDROID_HOME or ANDROID_SDK_ROOT"
-AAPT="$(find_android_tool aapt)" || die "aapt not found; set ANDROID_HOME or ANDROID_SDK_ROOT"
+AAPT="$(find_android_tool aapt aapt2)" || die "aapt/aapt2 not found; set ANDROID_HOME or ANDROID_SDK_ROOT"
 
 cert_output="$("$APKSIGNER" verify --print-certs "$APK")"
 

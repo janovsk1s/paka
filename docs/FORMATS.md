@@ -63,7 +63,8 @@ transactionally. Orphan cleanup runs only after a healthy pass-store load.
 - Owner: `PhotoStore`
 - Identifier: SHA-256 hex of the original normalized image bytes.
 - Limit: 10 MB per image, bounded dimensions, and bounded pixel count.
-- Supported headers: JPEG, PNG, and WebP.
+- Supported headers: JPEG, PNG, GIF, WebP, HEIF/HEIC, and AVIF (matched by
+  `PhotoStore.hasSupportedHeader`).
 - Current container: `PKI` magic version `2`.
 - Legacy container: `PKI` magic version `1`.
 - Data-key wrapper: `PKD` magic version `1`.
