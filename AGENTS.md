@@ -226,6 +226,27 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 - `tools/check_apk_permissions.sh` and `tools/verify_release_apk.sh` — CI
   permission guard and local release APK certificate/permission verifier.
 
+## Release naming
+
+Keep release titles, tags, APK assets, and the version-bump commit consistent so
+the history and the GitHub Releases page stay legible. Match the established
+pattern exactly:
+
+- Stable: title `Paka <version>` (e.g. `Paka 0.14.0`), tag `v<version>`, asset
+  `Paka-v<version>.apk`. Marked as the latest release, not a pre-release.
+- Preview: title `Paka <version> <objective> preview <N>`, where `<objective>`
+  names the preview line's focus — e.g. `Paka 0.15.0 capture preview 3.2`. Tag
+  `v<version>-beta.<N>` (e.g. `v0.15.0-beta.3.2`), asset
+  `Paka-v<version>-beta.<N>.apk`. Marked as a pre-release, never latest, cut
+  from the active preview branch (currently `preview/document-capture`).
+- Version-bump commit subject: `Bump versionCode to <code> for <objective>
+  preview <N>` — e.g. `Bump versionCode to 50 for capture preview 3.2` — using
+  the same objective and number as the preview title.
+- The release author must be the owner's GitHub account, not
+  `github-actions[bot]`, and commits must use the owner's GitHub-linked identity
+  (`81934547+janovsk1s@users.noreply.github.com`), not a personal email GitHub
+  will not attribute to the profile.
+
 ## Working rules for future AI agents
 
 1. Inspect `git status`, the active branch, this file, and `CHANGELOG.md` first.
