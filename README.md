@@ -7,7 +7,7 @@ codes without Google Play Services.
 
 Current stable release: **0.14.0**
 
-Current beta preview: **0.15.0-beta.3.2** (`0.15.0-photo-beta.3.2`)
+Current beta preview: **0.15.0-beta.3.3** (`0.15.0-photo-beta.3.3`)
 
 ## Photos
 

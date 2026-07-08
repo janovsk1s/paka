@@ -21,7 +21,7 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 50
+        versionCode = 51
         versionName = "0.15.0"
     }
 
@@ -39,7 +39,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".photopreview"
-            versionNameSuffix = "-photo-beta.3.2"
+            versionNameSuffix = "-photo-beta.3.3"
             resValue("string", "app_name", "Paka Photo Test")
         }
         release {
@@ -57,7 +57,7 @@ android {
         create("preview") {
             initWith(getByName("release"))
             applicationIdSuffix = ".photopreview"
-            versionNameSuffix = "-photo-beta.3.2"
+            versionNameSuffix = "-photo-beta.3.3"
             resValue("string", "app_name", "Paka Photo Test")
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"

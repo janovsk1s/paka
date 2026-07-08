@@ -4,6 +4,14 @@ Notable changes to Paka are documented here.
 
 ## 0.15.0 — Unreleased
 
+### Beta 3.3 — changes since `v0.15.0-beta.3.2`
+
+- Rendered barcodes and QR codes now snap to an exact whole-module pixel grid,
+  so every module is an identical width with no leftover quiet-zone pixels and
+  no sub-pixel draw drift. Payload verification is unchanged.
+- Raised the internal render cap so a future enlarged/zoom code view can be
+  drawn at native resolution instead of upscaling.
+
 ### Beta 3.2 — changes since `v0.15.0-beta.3.1`
 
 - Added a security policy, security contact metadata, threat model, persistence
