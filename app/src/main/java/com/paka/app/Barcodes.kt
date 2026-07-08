@@ -40,6 +40,9 @@ private fun PakaFormat.zxing(): BarcodeFormat? = when (this) {
 
 object Barcodes {
     private const val CACHE_KIB = 12 * 1024
+    // Render cap. Raised beyond a typical panel so an enlarged/zoom view can be
+    // drawn at native resolution instead of upscaling a smaller bitmap.
+    private const val MAX_RENDER_PX = 2160
     private val bitmapCache = object : LruCache<String, Bitmap>(CACHE_KIB) {
         override fun sizeOf(key: String, value: Bitmap): Int = (value.allocationByteCount / 1024).coerceAtLeast(1)
     }
@@ -75,22 +78,27 @@ object Barcodes {
     /** Render at the actual available display width so modules are never smoothly rescaled. */
     fun generate(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
         if (validationError(format, data) != null) return null
-        val width = targetWidthPx.coerceIn(240, 1440)
+        val width = targetWidthPx.coerceIn(240, MAX_RENDER_PX)
         return if (format == PakaFormat.DATABAR_EXPANDED) {
             generateDataBar(data, width)
         } else {
+            val zx = format.zxing() ?: return null
+            // Snap to an exact integer multiple of the module count: every module
+            // is identical width and the quiet zone carries no leftover pixels.
+            val modules = zxingModuleWidth(zx, data) ?: return null
+            val snapped = snappedWidth(modules, width)
             val height = when {
-                format in SQUARE_FORMATS -> width
-                format == PakaFormat.PDF417 -> (width * 0.42f).toInt().coerceAtLeast(240)
-                else -> (width * 0.30f).toInt().coerceAtLeast(180)
+                format in SQUARE_FORMATS -> snapped
+                format == PakaFormat.PDF417 -> (snapped * 0.42f).toInt().coerceAtLeast(240)
+                else -> (snapped * 0.30f).toInt().coerceAtLeast(180)
             }
-            generateZxing(format.zxing() ?: return null, data, width, height)
+            generateZxing(zx, data, snapped, height)
         }
     }
 
     /** Bounded cache for passes already verified by [generate]. */
     fun generateCached(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
-        val width = targetWidthPx.coerceIn(240, 1440)
+        val width = targetWidthPx.coerceIn(240, MAX_RENDER_PX)
         val key = cacheKey(format, data, width)
         synchronized(bitmapCache) { bitmapCache.get(key) }?.let { return it }
         val generated = generate(format, data, width) ?: return null
@@ -111,23 +119,41 @@ object Barcodes {
         return "${format.name}:$width:$digest"
     }
 
+    /** Encoder hints shared by the raw module-count probe and the final render. */
+    private fun zxingHints(format: BarcodeFormat): HashMap<EncodeHintType, Any> {
+        val hints = HashMap<EncodeHintType, Any>()
+        hints[EncodeHintType.MARGIN] = when (format) {
+            BarcodeFormat.QR_CODE -> 4
+            BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> 2
+            BarcodeFormat.PDF_417 -> 4
+            else -> 10
+        }
+        // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
+        when (format) {
+            BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
+            BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
+            else -> Unit
+        }
+        if (format == BarcodeFormat.QR_CODE) hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M
+        return hints
+    }
+
+    /** Module count (incl. quiet zone) of the raw symbol; drives module snapping. */
+    private fun zxingModuleWidth(format: BarcodeFormat, data: String): Int? = try {
+        MultiFormatWriter().encode(data, format, 1, 1, zxingHints(format)).width.takeIf { it > 0 }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Largest exact integer-module width that fits [targetWidth]. */
+    internal fun snappedWidth(moduleCount: Int, targetWidth: Int): Int {
+        val modulePx = (targetWidth / moduleCount).coerceAtLeast(1)
+        return moduleCount * modulePx
+    }
+
     private fun generateZxing(format: BarcodeFormat, data: String, width: Int, height: Int): Bitmap? {
         return try {
-            val hints = HashMap<EncodeHintType, Any>()
-            hints[EncodeHintType.MARGIN] = when (format) {
-                BarcodeFormat.QR_CODE -> 4
-                BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> 2
-                BarcodeFormat.PDF_417 -> 4
-                else -> 10
-            }
-            // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
-            when (format) {
-                BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
-                BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
-                else -> Unit
-            }
-            if (format == BarcodeFormat.QR_CODE) hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M
-            val matrix = MultiFormatWriter().encode(data, format, width, height, hints)
+            val matrix = MultiFormatWriter().encode(data, format, width, height, zxingHints(format))
             val w = matrix.width
             val h = matrix.height
             val pixels = IntArray(w * h) { i ->
