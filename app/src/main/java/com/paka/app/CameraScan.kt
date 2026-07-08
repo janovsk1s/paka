@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,6 +95,18 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
     val torchRef = remember { AtomicBoolean(false) }
     val manualLightOverride = remember { AtomicBoolean(false) }
     val lastFocusRetry = remember { AtomicLong(SystemClock.elapsedRealtime()) }
+    val foreground by rememberIsForeground()
+
+    // CameraX drops the torch when it unbinds on background; clear the mirrored
+    // state so the label and auto-light logic restart honestly on return.
+    LaunchedEffect(foreground) {
+        if (!foreground) {
+            torchRef.set(false)
+            manualLightOverride.set(false)
+            torchEnabled = false
+            autoLight = false
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {

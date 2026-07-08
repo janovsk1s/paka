@@ -92,6 +92,7 @@ internal fun PhotoCaptureScreen(
     val captureRef = remember { AtomicReference<ImageCapture?>(null) }
     val torchRef = remember { AtomicBoolean(false) }
     val lastFocusAt = remember { AtomicLong(SystemClock.elapsedRealtime()) }
+    val foreground by rememberIsForeground()
 
     // A live view of someone's ID is never a sharing feature.
     ProtectSensitiveContent(true)
@@ -114,7 +115,10 @@ internal fun PhotoCaptureScreen(
     // Close-up documents make the camera hunt just like barcodes do, so keep
     // nudging centre focus at the scanner's cadence while the preview is live.
     // A manual tap-to-focus postpones the next nudge by a full interval.
-    LaunchedEffect(Unit) {
+    // Keyed on foreground so the loop is cancelled while Paka is backgrounded
+    // (CameraX has unbound the camera anyway) instead of waking twice a second.
+    LaunchedEffect(foreground) {
+        if (!foreground) return@LaunchedEffect
         while (isActive) {
             delay(FOCUS_RETRY_MS / 4)
             val now = SystemClock.elapsedRealtime()
@@ -125,6 +129,14 @@ internal fun PhotoCaptureScreen(
                 lastFocusAt.set(now)
                 focusAt(camera, preview, preview.width / 2f, preview.height / 2f)
             }
+        }
+    }
+
+    // CameraX turns the torch off when it unbinds on background; keep the label
+    // honest by clearing the on-state so it does not read "light on" on return.
+    LaunchedEffect(foreground) {
+        if (!foreground && torchRef.getAndSet(false)) {
+            torchEnabled = false
         }
     }
 

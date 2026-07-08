@@ -123,6 +123,17 @@ internal fun StackScreen(
                     photoRenders.clear()
                 }
             }
+            // The rendered map mixes shared-cache barcode bitmaps (which must not
+            // be recycled) with owned PDF page bitmaps; recycle only the latter.
+            DisposableEffect(rendered) {
+                onDispose {
+                    cards.filter { it.content is PassContent.Pdf }
+                        .mapNotNull { rendered[it.id]?.bitmap }
+                        .distinctBy(System::identityHashCode)
+                        .forEach { if (!it.isRecycled) it.recycle() }
+                    rendered.clear()
+                }
+            }
 
             LaunchedEffect(cards, targetWidthPx) {
                 val uniqueCards = cards.distinctBy { it.id }

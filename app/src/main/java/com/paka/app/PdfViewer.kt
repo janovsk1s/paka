@@ -122,10 +122,15 @@ private fun PdfDocumentViewerApi30(
     onPageChanged: (page: Int, pageCount: Int) -> Unit,
 ) {
     val context = LocalContext.current
+    val foreground by rememberIsForeground()
     var session by remember(content.documentId) { mutableStateOf<PdfDocumentSession?>(null) }
     var error by remember(content.documentId) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(content.documentId) {
+    // Open only while foregrounded; release the session (a memfd + PdfRenderer)
+    // and its native memory when backgrounded, matching how decoded photos are
+    // freed on stop. It reopens on return.
+    LaunchedEffect(content.documentId, foreground) {
+        if (!foreground || session != null) return@LaunchedEffect
         var opened: PdfDocumentSession? = null
         try {
             // The holder is assigned inside the IO block so a cancellation that
@@ -143,9 +148,11 @@ private fun PdfDocumentViewerApi30(
             opened?.close()
         }
     }
-    val sessionToClose = session
-    DisposableEffect(sessionToClose) {
-        onDispose { sessionToClose?.close() }
+    DisposableEffect(content.documentId, foreground) {
+        onDispose {
+            session?.close()
+            session = null
+        }
     }
 
     val document = session

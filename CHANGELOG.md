@@ -4,6 +4,15 @@ Notable changes to Paka are documented here.
 
 ## 0.15.0 — Unreleased
 
+### Beta 3.1 — changes since `v0.15.0-beta.3`
+
+- Kotlin updated to 2.4.0 (dependency-verification checksums regenerated); no behavior change.
+- Battery/lifecycle pass: work now pauses when Paka is backgrounded instead of relying on Compose keeping effects alive.
+  - The per-second 2FA code tick and the capture screen's focus-retry loop stop while Paka is not in the foreground.
+  - An open PDF releases its decrypted session and native memory when backgrounded (like photos already do) and reopens on return.
+  - Stack previews now recycle their rendered PDF page bitmaps instead of leaking them until garbage collection.
+  - The scanner and capture light label no longer reads "on" after returning from the background, where the torch was actually switched off.
+
 ### Beta 3 — changes since `v0.15.0-beta.2`
 
 - Chosen/imported photos now use the same review and crop screen before they are saved, including two-photo front/back batches.

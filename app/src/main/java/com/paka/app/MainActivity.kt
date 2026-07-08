@@ -242,6 +242,7 @@ private fun LoadedPakaApp(
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var pendingClipboard by remember { mutableStateOf<PendingClipboard?>(null) }
+    val foreground by rememberIsForeground()
     val scope = rememberCoroutineScope()
     val activeCards = if (demoModeEnabled) demoContent.cards else cards
     val activeCodes = if (demoModeEnabled) demoContent.accounts else codes
@@ -269,8 +270,10 @@ private fun LoadedPakaApp(
             showDev = false
         }
     }
-    LaunchedEffect(codesVisible) {
-        if (codesVisible) {
+    // Gated on foreground so the per-second wake-up stops when Paka is
+    // backgrounded; Compose would otherwise keep this loop alive while stopped.
+    LaunchedEffect(codesVisible, foreground) {
+        if (codesVisible && foreground) {
             while (true) {
                 nowMs = System.currentTimeMillis()
                 delay(1000)
