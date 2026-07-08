@@ -98,6 +98,24 @@ class CapturedPhotoTest {
     }
 
     @Test
+    fun rotationTurnsTheWorkingPhotoCounterClockwise() {
+        val rotated = CapturedPhoto.rotateCounterClockwise(jpegOf(320, 200))
+        assertEquals(200 to 320, dimensionsOf(rotated))
+        assertTrue("output must be a JPEG", PhotoStore.hasSupportedHeader(rotated))
+    }
+
+    @Test
+    fun rotationCanApplyMultipleQueuedTurnsAtOnce() {
+        val upsideDown = CapturedPhoto.rotateCounterClockwise(jpegOf(320, 200), quarterTurns = 2)
+        val fullTurn = CapturedPhoto.rotateCounterClockwise(jpegOf(320, 200), quarterTurns = 4)
+
+        assertEquals(320 to 200, dimensionsOf(upsideDown))
+        assertEquals(320 to 200, dimensionsOf(fullTurn))
+        assertTrue("queued rotation output must be a JPEG", PhotoStore.hasSupportedHeader(upsideDown))
+        assertTrue("full-turn output must remain a JPEG", PhotoStore.hasSupportedHeader(fullTurn))
+    }
+
+    @Test
     fun normalizedCapturesRoundTripThroughTheEncryptedStore() {
         val normalized = CapturedPhoto.normalize(jpegOf(320, 200), rotationDegrees = 90)
         val imported = PhotoStore.importBytes(context, normalized).getOrThrow()

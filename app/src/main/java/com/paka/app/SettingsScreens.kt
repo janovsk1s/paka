@@ -152,6 +152,10 @@ internal fun DevScreen(
     onMaxCodeBrightness: (Boolean) -> Unit,
     pageNumbersEnabled: Boolean,
     onPageNumbers: (Boolean) -> Unit,
+    officialFontEnabled: Boolean,
+    onOfficialFont: (Boolean) -> Unit,
+    lightGearEnabled: Boolean,
+    onLightGear: (Boolean) -> Unit,
     demoModeEnabled: Boolean,
     onDemoMode: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -160,7 +164,7 @@ internal fun DevScreen(
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
         SimpleTopBar("developer", onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            PagedList(listOf(0, 1, 2, 3, 4, 5, 6, 7)) { item ->
+            PagedList(listOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)) { item ->
                 when (item) {
                     0 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("text size", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light, modifier = Modifier.weight(1f))
@@ -209,6 +213,16 @@ internal fun DevScreen(
                         label = "page numbers",
                         trailing = if (pageNumbersEnabled) "on" else "off",
                         onClick = { onPageNumbers(!pageNumbersEnabled) },
+                    )
+                    7 -> SettingsItem(
+                        label = "official font",
+                        trailing = if (officialFontEnabled) "on" else "off",
+                        onClick = { onOfficialFont(!officialFontEnabled) },
+                    )
+                    8 -> SettingsItem(
+                        label = "light gear",
+                        trailing = if (lightGearEnabled) "on" else "off",
+                        onClick = { onLightGear(!lightGearEnabled) },
                     )
                     else -> SettingsItem(
                         label = "demo mode",

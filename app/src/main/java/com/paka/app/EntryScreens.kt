@@ -63,6 +63,11 @@ private sealed interface ManualCardItem {
 private enum class ManualCodeItem { NAME, ACCOUNT, SECRET }
 private enum class ManualCardField { NAME, DATA }
 
+private data class PendingPhotoBatch(
+    val bytes: List<ByteArray>,
+    val reviewed: List<PhotoImport> = emptyList(),
+)
+
 private val MANUAL_FORMATS = listOf(
     PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.PDF417, PakaFormat.DATA_MATRIX,
     PakaFormat.CODE128, PakaFormat.CODE39, PakaFormat.CODE93, PakaFormat.CODABAR,
@@ -99,6 +104,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
     var photoImports by remember { mutableStateOf<List<PhotoImport>>(emptyList()) }
     var photoSourceMenu by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
+    var photoReviewBatch by remember { mutableStateOf<PendingPhotoBatch?>(null) }
     var pdfChecking by remember { mutableStateOf(false) }
     var pdfError by remember { mutableStateOf<String?>(null) }
     var editingField by remember { mutableStateOf<ManualCardField?>(null) }
@@ -132,6 +138,12 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
         }
         photoImports.filter { it.created }.forEach { orphan ->
             scope.launch(Dispatchers.IO) { PhotoStore.delete(context, orphan.page.documentId) }
+        }
+        photoReviewBatch?.let { batch ->
+            batch.bytes.forEach { it.fill(0) }
+            batch.reviewed.filter { it.created }.forEach { imported ->
+                scope.launch(Dispatchers.IO) { PhotoStore.delete(context, imported.page.documentId) }
+            }
         }
         onBack()
     }
@@ -195,21 +207,21 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                 pdfError = null
                 val result = withContext(Dispatchers.IO) {
                     runCatching {
-                        val imported = mutableListOf<PhotoImport>()
+                        val picked = mutableListOf<ByteArray>()
                         try {
                             uris.distinctBy(Uri::toString).take(2).forEach { uri ->
-                                imported += PhotoStore.import(context, uri).getOrThrow()
+                                picked += PhotoStore.readImportBytes(context, uri).getOrThrow()
                             }
-                            imported.toList()
+                            picked.toList()
                         } catch (error: Throwable) {
-                            imported.filter { it.created }.forEach { PhotoStore.delete(context, it.page.documentId) }
+                            picked.forEach { it.fill(0) }
                             throw error
                         }
                     }
                 }
                 pdfChecking = false
-                result.onSuccess { imported ->
-                    mergePhotoImports(imported)
+                result.onSuccess { picked ->
+                    if (picked.isNotEmpty()) photoReviewBatch = PendingPhotoBatch(picked)
                 }.onFailure { error ->
                     pdfError = error.message ?: "Photos could not be opened"
                 }
@@ -244,6 +256,46 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
             onBack = { capturing = false },
         )
         return
+    }
+
+    val reviewBatch = photoReviewBatch
+    if (reviewBatch != null) {
+        val reviewIndex = reviewBatch.reviewed.size
+        val currentBytes = reviewBatch.bytes.getOrNull(reviewIndex)
+        if (currentBytes != null) {
+            fun cancelReviewBatch() {
+                reviewBatch.bytes.forEach { it.fill(0) }
+                reviewBatch.reviewed.filter { it.created }.forEach { imported ->
+                    scope.launch(Dispatchers.IO) { PhotoStore.delete(context, imported.page.documentId) }
+                }
+                photoReviewBatch = null
+            }
+            val title = when {
+                reviewBatch.bytes.size > 1 && reviewIndex == 0 -> "front side"
+                reviewBatch.bytes.size > 1 || photoImports.size == 1 -> "back side"
+                else -> "photo"
+            }
+            PhotoReviewScreen(
+                title = title,
+                initialBytes = currentBytes,
+                cancelLabel = "cancel",
+                contentDescription = "Selected document photo",
+                onUse = { bytes -> PhotoStore.importBytes(context, bytes) },
+                onUsed = { imported ->
+                    val reviewed = reviewBatch.reviewed + imported
+                    if (reviewed.size >= reviewBatch.bytes.size) {
+                        scope.launch { mergePhotoImports(reviewed) }
+                        photoReviewBatch = null
+                    } else {
+                        photoReviewBatch = reviewBatch.copy(reviewed = reviewed)
+                    }
+                },
+                onCancel = ::cancelReviewBatch,
+            )
+            return
+        } else {
+            photoReviewBatch = null
+        }
     }
 
     if (photoSourceMenu) {
@@ -560,7 +612,11 @@ internal fun TextEntryScreen(
                     onValueChange = { text = it },
                     singleLine = singleLine,
                     visualTransformation = visualTransformation,
-                    textStyle = TextStyle(color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal),
+                    textStyle = TextStyle(
+                        color = White,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Normal,
+                    ).withPakaFont(),
                     cursorBrush = SolidColor(White),
                     keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default),
                     keyboardActions = KeyboardActions(onDone = { if (canSave) { keyboard?.hide(); onSave(savedText()) } }),

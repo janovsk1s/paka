@@ -14,6 +14,8 @@ object Prefs {
     private const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
     private const val KEY_DEMO_MODE = "demo_mode"
     private const val KEY_PAGE_NUMBERS = "viewer_page_numbers"
+    private const val KEY_OFFICIAL_FONT = "official_light_font"
+    private const val KEY_LIGHT_GEAR = "light_sdk_settings_gear"
 
     const val DEFAULT_TEXT_SIZE = 30f
 
@@ -54,6 +56,18 @@ object Prefs {
 
     fun setPageNumbers(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_PAGE_NUMBERS, enabled).apply()
+    }
+
+    fun officialFont(context: Context): Boolean = prefs(context).getBoolean(KEY_OFFICIAL_FONT, true)
+
+    fun setOfficialFont(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_OFFICIAL_FONT, enabled).apply()
+    }
+
+    fun lightGear(context: Context): Boolean = prefs(context).getBoolean(KEY_LIGHT_GEAR, false)
+
+    fun setLightGear(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LIGHT_GEAR, enabled).apply()
     }
 
     fun demoMode(context: Context): Boolean = prefs(context).getBoolean(KEY_DEMO_MODE, false)

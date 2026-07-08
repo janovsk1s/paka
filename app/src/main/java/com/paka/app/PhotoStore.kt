@@ -57,12 +57,17 @@ internal object PhotoStore {
         synchronized(documentLocks.getOrPut(documentId) { Any() }) { block() }
 
     fun import(context: Context, uri: Uri): Result<PhotoImport> = runCatching {
-        val bytes = readUri(context, uri)
+        val bytes = readImportBytes(context, uri).getOrThrow()
         try {
             importBytes(context, bytes).getOrThrow()
         } finally {
             bytes.fill(0)
         }
+    }
+
+    /** Reads and validates an import candidate without storing it. The caller zeroes the returned bytes. */
+    fun readImportBytes(context: Context, uri: Uri): Result<ByteArray> = runCatching {
+        readUri(context, uri).also { inspect(it) }
     }
 
     /** Ingests photo bytes already in memory (an in-app capture). The caller zeroes them. */

@@ -1,5 +1,7 @@
 package com.paka.app
 
+import kotlin.math.abs
+
 /** A corner of the crop selection. */
 internal enum class CropHandle { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 
@@ -8,6 +10,14 @@ internal sealed interface CropDrag {
     data class Corner(val handle: CropHandle) : CropDrag
     data object Move : CropDrag
 }
+
+/** Pixel-space bounds and invisible hit targets for crop dragging. */
+internal data class CropDragTarget(
+    val imageWidth: Float,
+    val imageHeight: Float,
+    val touchRadius: Float,
+    val topTouchRadius: Float = touchRadius,
+)
 
 /**
  * Crop selection in coordinates normalized to the photo (0..1 on both axes),
@@ -50,24 +60,39 @@ internal data class CropRect(
     /**
      * Decides what a touch at ([x], [y]) — in pixels relative to the drawn
      * photo of [imageWidth] x [imageHeight] — grabs: the nearest corner within
-     * [touchRadius], the whole selection when inside it, or nothing.
+     * the invisible touch target, the whole selection when inside it, or
+     * nothing. The target is intentionally box-shaped rather than circular so
+     * diagonal thumb misses still feel like grabbing the visible corner.
      */
-    fun dragAt(x: Float, y: Float, imageWidth: Float, imageHeight: Float, touchRadius: Float): CropDrag? {
+    fun dragAt(x: Float, y: Float, target: CropDragTarget): CropDrag? {
+        val imageWidth = target.imageWidth
+        val imageHeight = target.imageHeight
         val corners = listOf(
-            CropHandle.TOP_LEFT to (left * imageWidth to top * imageHeight),
-            CropHandle.TOP_RIGHT to (right * imageWidth to top * imageHeight),
-            CropHandle.BOTTOM_LEFT to (left * imageWidth to bottom * imageHeight),
-            CropHandle.BOTTOM_RIGHT to (right * imageWidth to bottom * imageHeight),
+            Triple(CropHandle.TOP_LEFT, left * imageWidth to top * imageHeight, target.topTouchRadius),
+            Triple(CropHandle.TOP_RIGHT, right * imageWidth to top * imageHeight, target.topTouchRadius),
+            Triple(CropHandle.BOTTOM_LEFT, left * imageWidth to bottom * imageHeight, target.touchRadius),
+            Triple(CropHandle.BOTTOM_RIGHT, right * imageWidth to bottom * imageHeight, target.touchRadius),
         )
-        val radiusSquared = touchRadius * touchRadius
         val grabbed = corners
-            .map { (handle, corner) ->
+            .map { (handle, corner, radius) ->
                 val (cornerX, cornerY) = corner
                 val distanceSquared = (x - cornerX) * (x - cornerX) + (y - cornerY) * (y - cornerY)
-                handle to distanceSquared
+                Triple(handle, distanceSquared, radius)
             }
-            .filter { (_, distanceSquared) -> distanceSquared <= radiusSquared }
-            .minByOrNull { (_, distanceSquared) -> distanceSquared }
+            .filter { (handle, _, radius) ->
+                val cornerX = if (handle == CropHandle.TOP_LEFT || handle == CropHandle.BOTTOM_LEFT) {
+                    left * imageWidth
+                } else {
+                    right * imageWidth
+                }
+                val cornerY = if (handle == CropHandle.TOP_LEFT || handle == CropHandle.TOP_RIGHT) {
+                    top * imageHeight
+                } else {
+                    bottom * imageHeight
+                }
+                abs(x - cornerX) <= radius && abs(y - cornerY) <= radius
+            }
+            .minByOrNull { (_, distanceSquared, _) -> distanceSquared }
         val inside = x >= left * imageWidth && x <= right * imageWidth &&
             y >= top * imageHeight && y <= bottom * imageHeight
         return when {

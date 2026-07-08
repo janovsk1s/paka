@@ -4,12 +4,26 @@ Notable changes to Paka are documented here.
 
 ## 0.15.0 — Unreleased
 
+### Beta 3 — changes since `v0.15.0-beta.2`
+
+- Chosen/imported photos now use the same review and crop screen before they are saved, including two-photo front/back batches.
+- Crop corners use larger invisible touch targets so resizing feels snappier on the Light Phone III.
+- While cropping, tapping the photo rotates the working image 90° counter-clockwise with an immediate hard-cut preview, and rapid repeated taps no longer crash the crop screen.
+- Details, manual entry, settings, and submenus now share the app typography more consistently, with an optional official-font toggle in hidden Developer settings.
+- The bottom controls were sharpened and rebalanced without changing their original sizes: gear, plus, barcode, and code/asterisk glyphs now snap more cleanly to the same visual envelope.
+- The original Paka gear is again the default settings icon; the Light SDK gear is available only as an optional Developer setting.
+- The transitive `ACCESS_NETWORK_STATE` permission from CameraX/Media3 is explicitly removed from Paka's merged manifest; the APK should request camera only.
+- Before stable 0.15.0, beta 3 still needs a hardware battery/lifecycle pass covering camera, torch, brightness, TOTP ticking, and PDF/photo rerender cleanup.
+
 ### Added
 
 - Document photos can be taken directly inside Paka when creating a photo pass, alongside choosing existing images.
 - The capture screen reuses the scanner's camera: tap to focus, a manual light toggle, and a retake/use confirmation before anything is stored.
 - Passes inside a stack can be reordered from a pass's Details: a sort action next to the stack field opens the familiar reorder screen scoped to that stack.
 - Captured photos can be cropped before saving: drag the scanner-style corner frame or move the whole selection, then confirm. Cropping happens entirely in memory before encryption, and the buffers of the uncropped capture are zeroed.
+- Chosen/imported photos now use the same review and crop screen before they are saved, including two-photo front/back batches.
+- Crop corners use larger invisible touch targets so resizing feels snappier on the Light Phone III.
+- While cropping, tapping the photo rotates the working image 90° counter-clockwise with an immediate hard-cut preview.
 - The capture screen keeps nudging centre focus on the scanner's retry cadence, so close-up documents settle without repeated manual taps; a tap-to-focus still takes priority.
 
 ### Security
@@ -18,6 +32,7 @@ Notable changes to Paka are documented here.
 - Captures are re-encoded in memory before storage, which bakes in the sensor rotation, bounds the longest edge, and strips all camera metadata (EXIF timestamps and device identifiers).
 - The capture screen blocks screenshots and screen recording while a document is in front of the camera.
 - Every intermediate capture buffer is zeroed, including on failure paths.
+- The transitive `ACCESS_NETWORK_STATE` permission from CameraX/Media3 is explicitly removed from Paka's merged manifest; the APK should request camera only.
 
 ## 0.14.0 — 2026-07-04
 

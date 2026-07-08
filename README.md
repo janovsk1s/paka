@@ -5,7 +5,9 @@ Light Phone III. It scans and renders common barcode formats, carries encrypted
 PDF passes, encrypted one- or two-sided document photos, and generates TOTP
 codes without Google Play Services.
 
-Current release: **0.14.0**
+Current stable release: **0.14.0**
+
+Current beta preview: **0.15.0-beta.3** (`0.15.0-photo-beta.3`)
 
 ## Photos
 
@@ -30,8 +32,10 @@ intentional design principles described by the LightOS Developer Program.
 
 ## Privacy
 
-- Paka requests camera access only while scanning.
-- Paka does not request internet access and contains no analytics or advertising.
+- Paka requests camera access only while scanning codes or taking document
+  photos inside the app.
+- Paka does not request internet or network-state access and contains no
+  analytics or advertising.
 - Pass data and TOTP secrets are encrypted with separate AES-256-GCM keys held
   by Android Keystore. Existing plaintext pass stores migrate automatically.
 - Imported PDFs use their own Android Keystore key. Their encrypted copies are
@@ -44,6 +48,11 @@ intentional design principles described by the LightOS Developer Program.
   encrypted portable backups. Each photo also keeps a pre-scaled display copy,
   encrypted the same way; viewing decodes only this copy, and decoded photos
   are released when Paka leaves the foreground or the system trims memory.
+- In the 0.15 preview, document photos can also be captured directly inside
+  Paka. Captures travel sensor → memory → encrypted store, are never written to
+  the gallery or a temporary file, and are re-encoded before storage so camera
+  metadata is stripped. Captured and chosen photos can be reviewed and cropped
+  before they are saved.
 - Up to two optional file references in pass Details are external links. Paka stores only
   the link metadata in its encrypted pass database; the referenced file itself
   is not copied, encrypted, or included in Paka backups.

@@ -18,6 +18,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +59,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private enum class Mode { CARDS, CODES }
@@ -139,6 +142,28 @@ internal fun Context.setPakaExternalFlowActive(active: Boolean) {
 @Composable
 fun PakaApp(homeResetSignal: Int = 0, resumeSignal: Int = 0) {
     val context = LocalContext.current
+    var officialFontEnabled by remember { mutableStateOf(Prefs.officialFont(context)) }
+    ProvidePakaTypography(officialFontEnabled) {
+        PakaAppContent(
+            homeResetSignal = homeResetSignal,
+            resumeSignal = resumeSignal,
+            officialFontEnabled = officialFontEnabled,
+            onOfficialFont = { enabled ->
+                officialFontEnabled = enabled
+                Prefs.setOfficialFont(context, enabled)
+            },
+        )
+    }
+}
+
+@Composable
+private fun PakaAppContent(
+    homeResetSignal: Int,
+    resumeSignal: Int,
+    officialFontEnabled: Boolean,
+    onOfficialFont: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
     var initialLoad by remember { mutableStateOf<InitialAppLoad?>(null) }
     LaunchedEffect(Unit) {
         StoreWriteCoordinator.awaitPendingWrites()
@@ -162,7 +187,14 @@ fun PakaApp(homeResetSignal: Int = 0, resumeSignal: Int = 0) {
         }
         return
     }
-    LoadedPakaApp(homeResetSignal, resumeSignal, loaded.cards, loaded.codes)
+    LoadedPakaApp(
+        homeResetSignal = homeResetSignal,
+        resumeSignal = resumeSignal,
+        cardLoad = loaded.cards,
+        codeLoad = loaded.codes,
+        officialFontEnabled = officialFontEnabled,
+        onOfficialFont = onOfficialFont,
+    )
 }
 
 @Composable
@@ -171,6 +203,8 @@ private fun LoadedPakaApp(
     resumeSignal: Int,
     cardLoad: LoadOutcome<List<Card>>,
     codeLoad: LoadOutcome<List<OtpAccount>>,
+    officialFontEnabled: Boolean,
+    onOfficialFont: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -202,6 +236,7 @@ private fun LoadedPakaApp(
     var autoLightEnabled by remember { mutableStateOf(Prefs.autoLight(context)) }
     var maxCodeBrightnessEnabled by remember { mutableStateOf(Prefs.maxCodeBrightness(context)) }
     var pageNumbersEnabled by remember { mutableStateOf(Prefs.pageNumbers(context)) }
+    var lightGearEnabled by remember { mutableStateOf(Prefs.lightGear(context)) }
     var demoModeEnabled by remember { mutableStateOf(Prefs.demoMode(context)) }
     var demoContent by remember { mutableStateOf(DemoData.create()) }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
@@ -471,6 +506,13 @@ private fun LoadedPakaApp(
                 pageNumbersEnabled = enabled
                 Prefs.setPageNumbers(context, enabled)
             },
+            officialFontEnabled = officialFontEnabled,
+            onOfficialFont = onOfficialFont,
+            lightGearEnabled = lightGearEnabled,
+            onLightGear = { enabled ->
+                lightGearEnabled = enabled
+                Prefs.setLightGear(context, enabled)
+            },
             demoModeEnabled = demoModeEnabled,
             onDemoMode = { enabled ->
                 if (enabled) {
@@ -717,6 +759,7 @@ private fun LoadedPakaApp(
 
         BottomBar(
             mode = mode,
+            lightGear = lightGearEnabled,
             onSettings = { showSettings = true },
             onAdd = { scanMode = if (mode == Mode.CARDS) ScanMode.CARD else ScanMode.CODE; startScan() },
             onAddLong = { if (mode == Mode.CARDS) manualCard = true else manualCode = true },
@@ -767,13 +810,33 @@ private fun ColumnScope.OnboardingRow(weight: Float, content: @Composable () -> 
 }
 
 @Composable
-private fun BottomBar(mode: Mode, onSettings: () -> Unit, onAdd: () -> Unit, onAddLong: () -> Unit, onToggleMode: () -> Unit) {
+private fun BottomBar(
+    mode: Mode,
+    lightGear: Boolean,
+    onSettings: () -> Unit,
+    onAdd: () -> Unit,
+    onAddLong: () -> Unit,
+    onToggleMode: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(modifier = Modifier.size(48.dp).then(tapModifier(onSettings, "Settings"))) { drawGear() }
+        if (lightGear) {
+            Box(
+                modifier = Modifier.size(48.dp).then(tapModifier(onSettings, "Settings")),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_light_settings_white),
+                    contentDescription = null,
+                    modifier = Modifier.size(27.dp),
+                )
+            }
+        } else {
+            Canvas(modifier = Modifier.size(48.dp).then(tapModifier(onSettings, "Settings"))) { drawGear() }
+        }
         Canvas(modifier = Modifier.size(48.dp).then(tapLongModifier(onClick = onAdd, onLongClick = onAddLong, label = "Add"))) { drawPlus() }
         Canvas(modifier = Modifier.size(48.dp).then(tapLongModifier(onClick = onToggleMode, onLongClick = onToggleMode, label = if (mode == Mode.CARDS) "2FA codes" else "Cards"))) {
             if (mode == Mode.CARDS) drawBarcodeGlyph() else drawAsterisk()
@@ -783,14 +846,23 @@ private fun BottomBar(mode: Mode, onSettings: () -> Unit, onAdd: () -> Unit, onA
 
 private fun DrawScope.drawGear() {
     val s = size.minDimension
-    val c = Offset(s / 2f, s / 2f)
-    val body = s * 0.18f
-    val hole = s * 0.085f
-    val tw = s * 0.10f
-    val th = s * 0.12f
-    for (k in 0 until 8) {
-        rotate(45f * k, c) {
-            drawRect(color = White, topLeft = Offset(c.x - tw / 2f, c.y - body - th * 0.5f), size = Size(tw, th))
+    val toothWidth = (s * GEAR_TOOTH_WIDTH).roundToInt().toFloat()
+    val toothHeight = (s * GEAR_TOOTH_HEIGHT).roundToInt().toFloat()
+    val center = pixelAlignedCenter(s / 2f, toothWidth)
+    val c = Offset(center, center)
+    val body = (s * GEAR_BODY_RADIUS).roundToInt().toFloat()
+    val hole = (s * GEAR_HOLE_RADIUS).roundToInt().toFloat()
+    val outerRadius = (s * BOTTOM_PLUS_HALF_LENGTH).roundToInt().toFloat()
+    for (k in 0 until GEAR_TOOTH_COUNT) {
+        rotate(GEAR_TOOTH_STEP_DEGREES * k, c) {
+            drawRect(
+                color = White,
+                topLeft = Offset(
+                    pixelAlignedCenter(c.x, toothWidth) - toothWidth / 2f,
+                    c.y - outerRadius,
+                ),
+                size = Size(toothWidth, toothHeight),
+            )
         }
     }
     drawCircle(White, body, c)
@@ -799,30 +871,106 @@ private fun DrawScope.drawGear() {
 
 private fun DrawScope.drawPlus() {
     val s = size.minDimension
-    val c = s / 2f
-    val h = s * 0.27f
-    val w = s * 0.085f
-    drawLine(White, Offset(c - h, c), Offset(c + h, c), strokeWidth = w, cap = StrokeCap.Butt)
-    drawLine(White, Offset(c, c - h), Offset(c, c + h), strokeWidth = w, cap = StrokeCap.Butt)
+    val halfLength = (s * BOTTOM_PLUS_HALF_LENGTH).roundToInt().toFloat()
+    val stroke = pixelAlignedStroke(s * BOTTOM_PLUS_STROKE)
+    val center = pixelAlignedCenter(s / 2f, stroke)
+    drawLine(
+        White,
+        Offset(center - halfLength, center),
+        Offset(center + halfLength, center),
+        strokeWidth = stroke,
+        cap = StrokeCap.Butt,
+    )
+    drawLine(
+        White,
+        Offset(center, center - halfLength),
+        Offset(center, center + halfLength),
+        strokeWidth = stroke,
+        cap = StrokeCap.Butt,
+    )
 }
 
 private fun DrawScope.drawBarcodeGlyph() {
     val s = size.minDimension
-    val top = s * 0.24f
-    val bot = s * 0.76f
-    fun bar(x: Float, w: Float) = drawLine(White, Offset(x * s, top), Offset(x * s, bot), strokeWidth = w * s, cap = StrokeCap.Butt)
-    bar(0.30f, 0.055f); bar(0.40f, 0.03f); bar(0.485f, 0.06f); bar(0.575f, 0.03f); bar(0.66f, 0.055f); bar(0.73f, 0.03f)
+    val center = pixelAlignedCenter(s / 2f, pixelAlignedStroke(s * BOTTOM_PLUS_STROKE))
+    val halfLength = (s * BOTTOM_PLUS_HALF_LENGTH).roundToInt().toFloat()
+    val top = center - halfLength
+    val bottom = center + halfLength
+    fun bar(x: Float, width: Float) =
+        drawLine(
+            White,
+            Offset(pixelAlignedCenter((x + BOTTOM_BARCODE_CENTERING_OFFSET) * s, width * s), top),
+            Offset(pixelAlignedCenter((x + BOTTOM_BARCODE_CENTERING_OFFSET) * s, width * s), bottom),
+            strokeWidth = pixelAlignedStroke(width * s),
+            cap = StrokeCap.Butt,
+        )
+    BOTTOM_BARCODE_BARS.forEach { (x, width) -> bar(x, width) }
+}
+
+private fun pixelAlignedStroke(rawWidth: Float): Float =
+    rawWidth.roundToInt().coerceAtLeast(MIN_STROKE_PX).toFloat()
+
+private fun pixelAlignedCenter(rawCenter: Float, rawWidth: Float): Float {
+    val stroke = pixelAlignedStroke(rawWidth).toInt()
+    val rounded = rawCenter.roundToInt().toFloat()
+    return if (stroke % ODD_STROKE_MODULUS == 0) rounded else rounded + HALF_PIXEL
 }
 
 private fun DrawScope.drawAsterisk() {
     val s = size.minDimension
-    val c = Offset(s / 2f, s / 2f)
-    val r = s * 0.27f
-    val w = s * 0.085f
-    for (deg in listOf(90.0, 30.0, 150.0)) {
+    val stroke = pixelAlignedStroke(s * BOTTOM_PLUS_STROKE)
+    val center = pixelAlignedCenter(s / 2f, stroke)
+    val c = Offset(center, center)
+    val radius = (s * BOTTOM_ASTERISK_RADIUS).roundToInt().toFloat()
+    for (deg in BOTTOM_ASTERISK_ANGLES) {
         val rad = Math.toRadians(deg)
-        val dx = (r * cos(rad)).toFloat()
-        val dy = (r * sin(rad)).toFloat()
-        drawLine(White, Offset(c.x - dx, c.y - dy), Offset(c.x + dx, c.y + dy), strokeWidth = w, cap = StrokeCap.Square)
+        val dx = (radius * cos(rad)).toFloat()
+        val dy = (radius * sin(rad)).toFloat()
+        drawLine(
+            White,
+            Offset(pixelAlignedCenter(c.x - dx, stroke), pixelAlignedCenter(c.y - dy, stroke)),
+            Offset(pixelAlignedCenter(c.x + dx, stroke), pixelAlignedCenter(c.y + dy, stroke)),
+            strokeWidth = stroke,
+            cap = StrokeCap.Square,
+        )
     }
 }
+
+private const val MIN_STROKE_PX = 1
+private const val ODD_STROKE_MODULUS = 2
+private const val HALF_PIXEL = 0.5f
+private const val GEAR_TOOTH_COUNT = 8
+private const val GEAR_TOOTH_STEP_DEGREES = 45f
+private const val GEAR_BODY_RADIUS = 0.205f
+private const val GEAR_HOLE_RADIUS = 0.085f
+private const val GEAR_TOOTH_WIDTH = 0.10f
+private const val GEAR_TOOTH_HEIGHT = 0.12f
+private const val BOTTOM_PLUS_HALF_LENGTH = 0.27f
+private const val BOTTOM_PLUS_STROKE = 0.085f
+private const val BOTTOM_ASTERISK_RADIUS = 0.27f
+private const val BOTTOM_ASTERISK_VERTICAL_DEGREES = 90.0
+private const val BOTTOM_ASTERISK_RISING_DEGREES = 30.0
+private const val BOTTOM_ASTERISK_FALLING_DEGREES = 150.0
+private const val BOTTOM_BARCODE_CENTERING_OFFSET = -0.015f
+private const val BOTTOM_BARCODE_X_1 = 0.30f
+private const val BOTTOM_BARCODE_X_2 = 0.40f
+private const val BOTTOM_BARCODE_X_3 = 0.485f
+private const val BOTTOM_BARCODE_X_4 = 0.575f
+private const val BOTTOM_BARCODE_X_5 = 0.66f
+private const val BOTTOM_BARCODE_X_6 = 0.73f
+private const val BOTTOM_BARCODE_THIN = 0.03f
+private const val BOTTOM_BARCODE_THICK = 0.055f
+private const val BOTTOM_BARCODE_WIDE = 0.06f
+private val BOTTOM_BARCODE_BARS = listOf(
+    BOTTOM_BARCODE_X_1 to BOTTOM_BARCODE_THICK,
+    BOTTOM_BARCODE_X_2 to BOTTOM_BARCODE_THIN,
+    BOTTOM_BARCODE_X_3 to BOTTOM_BARCODE_WIDE,
+    BOTTOM_BARCODE_X_4 to BOTTOM_BARCODE_THIN,
+    BOTTOM_BARCODE_X_5 to BOTTOM_BARCODE_THICK,
+    BOTTOM_BARCODE_X_6 to BOTTOM_BARCODE_THIN,
+)
+private val BOTTOM_ASTERISK_ANGLES = listOf(
+    BOTTOM_ASTERISK_VERTICAL_DEGREES,
+    BOTTOM_ASTERISK_RISING_DEGREES,
+    BOTTOM_ASTERISK_FALLING_DEGREES,
+)

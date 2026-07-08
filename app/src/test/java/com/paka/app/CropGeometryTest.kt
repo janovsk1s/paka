@@ -39,19 +39,40 @@ class CropGeometryTest {
         val radius = 48f
         assertEquals(
             CropDrag.Corner(CropHandle.TOP_LEFT),
-            centered.dragAt(260f, 260f, width, height, radius),
+            centered.dragAt(260f, 260f, CropDragTarget(width, height, radius)),
         )
         assertEquals(
             CropDrag.Corner(CropHandle.BOTTOM_RIGHT),
-            centered.dragAt(740f, 760f, width, height, radius),
+            centered.dragAt(740f, 760f, CropDragTarget(width, height, radius)),
         )
-        assertEquals(CropDrag.Move, centered.dragAt(500f, 500f, width, height, radius))
-        assertNull(centered.dragAt(100f, 100f, width, height, radius))
+        assertEquals(CropDrag.Move, centered.dragAt(500f, 500f, CropDragTarget(width, height, radius)))
+        assertNull(centered.dragAt(100f, 100f, CropDragTarget(width, height, radius)))
     }
 
     @Test
     fun overlappingCornersPreferTheNearest() {
-        val drag = centered.dragAt(265f, 500f, 1_000f, 1_000f, 300f)
+        val drag = centered.dragAt(265f, 500f, CropDragTarget(1_000f, 1_000f, 300f))
         assertTrue(drag is CropDrag.Corner)
+    }
+
+    @Test
+    fun enlargedCornerTargetStillGrabsTheCornerNearTheFrame() {
+        val drag = centered.dragAt(305f, 250f, CropDragTarget(1_000f, 1_000f, 64f))
+        assertEquals(CropDrag.Corner(CropHandle.TOP_LEFT), drag)
+    }
+
+    @Test
+    fun topCornersHaveExtraForgivenessForThumbsBelowTheFrame() {
+        val drag = centered.dragAt(
+            x = 325f,
+            y = 320f,
+            target = CropDragTarget(
+                imageWidth = 1_000f,
+                imageHeight = 1_000f,
+                touchRadius = 64f,
+                topTouchRadius = 88f,
+            ),
+        )
+        assertEquals(CropDrag.Corner(CropHandle.TOP_LEFT), drag)
     }
 }

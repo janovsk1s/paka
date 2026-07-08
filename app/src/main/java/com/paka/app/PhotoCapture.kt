@@ -2,6 +2,7 @@ package com.paka.app
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,6 +49,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,10 +84,7 @@ internal fun PhotoCaptureScreen(
     var hasFlash by remember { mutableStateOf(false) }
     var torchEnabled by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
-    var normalized by remember { mutableStateOf<ByteArray?>(null) }
-    var confirmBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var cropping by remember { mutableStateOf(false) }
-    var cropRect by remember { mutableStateOf(CropRect.FULL) }
+    var capturedBytes by remember { mutableStateOf<ByteArray?>(null) }
     val disposed = remember { AtomicBoolean(false) }
     val providerRef = remember { AtomicReference<ProcessCameraProvider?>(null) }
     val cameraRef = remember { AtomicReference<Camera?>(null) }
@@ -96,15 +96,6 @@ internal fun PhotoCaptureScreen(
     // A live view of someone's ID is never a sharing feature.
     ProtectSensitiveContent(true)
 
-    fun discardCapture() {
-        normalized?.fill(0)
-        normalized = null
-        confirmBitmap?.recycle()
-        confirmBitmap = null
-        cropping = false
-        cropRect = CropRect.FULL
-    }
-
     fun captureFailed(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
@@ -112,8 +103,6 @@ internal fun PhotoCaptureScreen(
     DisposableEffect(Unit) {
         onDispose {
             disposed.set(true)
-            normalized?.fill(0)
-            confirmBitmap?.recycle()
             ContextCompat.getMainExecutor(context).execute {
                 cameraRef.getAndSet(null)?.cameraControl?.enableTorch(false)
                 previewRef.set(null)
@@ -129,7 +118,7 @@ internal fun PhotoCaptureScreen(
         while (isActive) {
             delay(FOCUS_RETRY_MS / 4)
             val now = SystemClock.elapsedRealtime()
-            val idle = normalized == null && !busy && now - lastFocusAt.get() >= FOCUS_RETRY_MS
+            val idle = capturedBytes == null && !busy && now - lastFocusAt.get() >= FOCUS_RETRY_MS
             val camera = cameraRef.get()
             val preview = previewRef.get()?.takeIf { it.width > 0 && it.height > 0 }
             if (idle && camera != null && preview != null) {
@@ -140,120 +129,23 @@ internal fun PhotoCaptureScreen(
     }
 
     BackHandler {
-        when {
-            cropping -> {
-                cropping = false
-                cropRect = CropRect.FULL
-            }
-            normalized != null -> discardCapture()
-            else -> onBack()
-        }
+        onBack()
     }
 
-    val captured = normalized
+    val captured = capturedBytes
     if (captured != null) {
-        Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
-                SimpleTopBar("photo", onBack = { discardCapture() })
-            }
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                confirmBitmap?.let { bitmap ->
-                    if (cropping) {
-                        CropOverlay(bitmap = bitmap, selection = cropRect, onSelection = { cropRect = it })
-                    } else {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Captured document photo",
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                            contentScale = ContentScale.Fit,
-                        )
-                    }
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 18.dp),
-            ) {
-                if (cropping) {
-                    Text(
-                        text = "cancel",
-                        color = Grey,
-                        fontSize = 18.sp,
-                        modifier = Modifier.weight(1f).then(
-                            if (busy) Modifier else tapModifier {
-                                cropping = false
-                                cropRect = CropRect.FULL
-                            },
-                        ),
-                    )
-                    Text(
-                        text = if (busy) "cropping…" else "done",
-                        color = White,
-                        fontSize = 18.sp,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f).then(
-                            if (busy) Modifier else tapModifier {
-                                if (cropRect == CropRect.FULL) {
-                                    cropping = false
-                                } else {
-                                    busy = true
-                                    scope.launch {
-                                        val result = withContext(Dispatchers.Default) {
-                                            runCatching { CapturedPhoto.crop(captured, cropRect) }
-                                        }
-                                        busy = false
-                                        result.onSuccess { bytes ->
-                                            normalized?.fill(0)
-                                            confirmBitmap?.recycle()
-                                            confirmBitmap = runCatching { decodeForConfirm(bytes) }.getOrNull()
-                                            normalized = bytes
-                                            cropRect = CropRect.FULL
-                                            cropping = false
-                                        }.onFailure {
-                                            captureFailed("Photo could not be cropped")
-                                        }
-                                    }
-                                }
-                            },
-                        ),
-                    )
-                    return@Row
-                }
-                Text(
-                    text = "retake",
-                    color = Grey,
-                    fontSize = 18.sp,
-                    modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { discardCapture() }),
-                )
-                Text(
-                    text = "crop",
-                    color = Grey,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { cropping = true }),
-                )
-                Text(
-                    text = if (busy) "saving…" else "use photo",
-                    color = White,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f).then(
-                        if (busy) Modifier else tapModifier {
-                            busy = true
-                            scope.launch {
-                                val result = withContext(Dispatchers.IO) { PhotoStore.importBytes(context, captured) }
-                                busy = false
-                                result.onSuccess { imported ->
-                                    discardCapture()
-                                    onCaptured(imported)
-                                }.onFailure { error ->
-                                    captureFailed(error.message ?: "Photo could not be saved")
-                                }
-                            }
-                        },
-                    ),
-                )
-            }
-        }
+        PhotoReviewScreen(
+            title = "photo",
+            initialBytes = captured,
+            cancelLabel = "retake",
+            contentDescription = "Captured document photo",
+            onUse = { bytes -> PhotoStore.importBytes(context, bytes) },
+            onUsed = { imported ->
+                capturedBytes = null
+                onCaptured(imported)
+            },
+            onCancel = { capturedBytes = null },
+        )
         return
     }
 
@@ -390,8 +282,7 @@ internal fun PhotoCaptureScreen(
                                             }
                                             busy = false
                                             result.onSuccess { bytes ->
-                                                confirmBitmap = runCatching { decodeForConfirm(bytes) }.getOrNull()
-                                                normalized = bytes
+                                                capturedBytes = bytes
                                             }.onFailure {
                                                 captureFailed("Photo could not be processed")
                                             }
@@ -411,7 +302,212 @@ internal fun PhotoCaptureScreen(
     }
 }
 
+@Composable
+internal fun PhotoReviewScreen(
+    title: String,
+    initialBytes: ByteArray,
+    cancelLabel: String,
+    contentDescription: String,
+    onUse: suspend (ByteArray) -> Result<PhotoImport>,
+    onUsed: (PhotoImport) -> Unit,
+    onCancel: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    var currentBytes by remember(initialBytes) { mutableStateOf(initialBytes) }
+    var confirmBitmap by remember(initialBytes) {
+        mutableStateOf(runCatching { decodeForConfirm(initialBytes) }.getOrNull())
+    }
+    var pendingRotations by remember(initialBytes) { mutableIntStateOf(0) }
+    var cropping by remember(initialBytes) { mutableStateOf(false) }
+    var cropRect by remember(initialBytes) { mutableStateOf(CropRect.FULL) }
+    var busy by remember(initialBytes) { mutableStateOf(false) }
+    val displayBitmap = remember(confirmBitmap, pendingRotations) {
+        confirmBitmap?.rotatedCounterClockwise(pendingRotations)
+    }
+
+    ProtectSensitiveContent(true)
+
+    fun showError(message: String) {
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+    }
+
+    DisposableEffect(initialBytes) {
+        onDispose {
+            currentBytes.fill(0)
+        }
+    }
+
+    BackHandler {
+        if (cropping) {
+            cropping = false
+            cropRect = CropRect.FULL
+        } else {
+            onCancel()
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
+            SimpleTopBar(title, onBack = {
+                if (cropping) {
+                    cropping = false
+                    cropRect = CropRect.FULL
+                } else {
+                    onCancel()
+                }
+            })
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            displayBitmap?.let { bitmap ->
+                if (cropping) {
+                    CropOverlay(
+                        bitmap = bitmap,
+                        selection = cropRect,
+                        onSelection = { cropRect = it },
+                        onRotate = {
+                            if (!busy) {
+                                performPakaHaptic(context, haptics)
+                                pendingRotations = (pendingRotations + 1).floorMod(4)
+                                cropRect = CropRect.FULL
+                            }
+                        },
+                    )
+                } else {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = contentDescription,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 18.dp),
+        ) {
+            if (cropping) {
+                Text(
+                    text = "cancel",
+                    color = Grey,
+                    fontSize = 18.sp,
+                    modifier = Modifier.weight(1f).then(
+                        if (busy) Modifier else tapModifier {
+                            cropping = false
+                            cropRect = CropRect.FULL
+                        },
+                    ),
+                )
+                Text(
+                    text = if (busy) "cropping…" else "done",
+                    color = White,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).then(
+                        if (busy) Modifier else tapModifier {
+                            if (cropRect == CropRect.FULL) {
+                                cropping = false
+                            } else {
+                                busy = true
+                                scope.launch {
+                                    val source = currentBytes
+                                    val turns = pendingRotations
+                                    val result = withContext(Dispatchers.Default) {
+                                        runCatching {
+                                            val rotated = materializeRotations(source, turns)
+                                            try {
+                                                CapturedPhoto.crop(rotated, cropRect)
+                                            } finally {
+                                                if (rotated !== source) rotated.fill(0)
+                                            }
+                                        }
+                                    }
+                                    busy = false
+                                    result.onSuccess { bytes ->
+                                        currentBytes.fill(0)
+                                        confirmBitmap = runCatching { decodeForConfirm(bytes) }.getOrNull()
+                                        currentBytes = bytes
+                                        pendingRotations = 0
+                                        cropRect = CropRect.FULL
+                                        cropping = false
+                                    }.onFailure {
+                                        showError("Photo could not be cropped")
+                                    }
+                                }
+                            }
+                        },
+                    ),
+                )
+                return@Row
+            }
+            Text(
+                text = cancelLabel,
+                color = Grey,
+                fontSize = 18.sp,
+                modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { onCancel() }),
+            )
+            Text(
+                text = "crop",
+                color = Grey,
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { cropping = true }),
+            )
+            Text(
+                text = if (busy) "saving…" else "use photo",
+                color = White,
+                fontSize = 18.sp,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f).then(
+                    if (busy) Modifier else tapModifier {
+                        busy = true
+                        scope.launch {
+                            val source = currentBytes
+                            val turns = pendingRotations
+                            val prepared = withContext(Dispatchers.Default) {
+                                runCatching { materializeRotations(source, turns) }
+                            }
+                            val result = prepared.getOrNull()?.let { bytes ->
+                                try {
+                                    withContext(Dispatchers.IO) { onUse(bytes) }
+                                } finally {
+                                    if (bytes !== source) bytes.fill(0)
+                                }
+                            } ?: Result.failure(
+                                prepared.exceptionOrNull() ?: IllegalStateException("Photo could not be prepared"),
+                            )
+                            busy = false
+                            result.onSuccess(onUsed).onFailure { error ->
+                                showError(error.message ?: "Photo could not be saved")
+                            }
+                        }
+                    },
+                ),
+            )
+        }
+    }
+}
+
 private const val CONFIRM_MAX_DIMENSION = 1_440
+private const val COUNTER_CLOCKWISE_QUARTER_TURN = -90f
+private const val FULL_TURN_QUARTERS = 4
+
+private fun Bitmap.rotatedCounterClockwise(quarterTurns: Int): Bitmap {
+    val turns = quarterTurns.floorMod(FULL_TURN_QUARTERS)
+    if (turns == 0) return this
+    val matrix = Matrix().apply { postRotate(COUNTER_CLOCKWISE_QUARTER_TURN * turns) }
+    return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
+}
+
+private fun materializeRotations(bytes: ByteArray, quarterTurns: Int): ByteArray =
+    if (quarterTurns.floorMod(FULL_TURN_QUARTERS) == 0) {
+        bytes
+    } else {
+        CapturedPhoto.rotateCounterClockwise(bytes, quarterTurns)
+    }
+
+private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
 
 /** Screen-sized preview of the normalized capture for the confirm step. */
 private fun decodeForConfirm(bytes: ByteArray): Bitmap? {
@@ -429,13 +525,20 @@ private fun decodeForConfirm(bytes: ByteArray): Bitmap? {
 }
 
 private const val CROP_MIN_SIZE = 0.15f
+private val CROP_HANDLE_TOUCH_RADIUS = 64.dp
+private val CROP_TOP_HANDLE_TOUCH_RADIUS = 88.dp
 
 /**
  * The captured photo with the crop selection over it: dimmed outside, a thin
  * frame with scanner-style corner arms, draggable by corners or as a whole.
  */
 @Composable
-private fun CropOverlay(bitmap: Bitmap, selection: CropRect, onSelection: (CropRect) -> Unit) {
+private fun CropOverlay(
+    bitmap: Bitmap,
+    selection: CropRect,
+    onSelection: (CropRect) -> Unit,
+    onRotate: () -> Unit,
+) {
     val currentSelection by rememberUpdatedState(selection)
     BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
         val boxWidth = constraints.maxWidth.toFloat()
@@ -453,16 +556,37 @@ private fun CropOverlay(bitmap: Bitmap, selection: CropRect, onSelection: (CropR
             contentScale = ContentScale.Fit,
         )
         Canvas(
-            modifier = Modifier.fillMaxSize().pointerInput(bitmap) {
+            modifier = Modifier.fillMaxSize()
+                .pointerInput(bitmap) {
+                    detectTapGestures(
+                        onTap = { position ->
+                            val tappedCorner = currentSelection.dragAt(
+                                x = position.x - imageLeft,
+                                y = position.y - imageTop,
+                                target = CropDragTarget(
+                                    imageWidth = imageWidth,
+                                    imageHeight = imageHeight,
+                                    touchRadius = CROP_HANDLE_TOUCH_RADIUS.toPx(),
+                                    topTouchRadius = CROP_TOP_HANDLE_TOUCH_RADIUS.toPx(),
+                                ),
+                            ) is CropDrag.Corner
+                            if (!tappedCorner) onRotate()
+                        },
+                    )
+                }
+                .pointerInput(bitmap) {
                 var drag: CropDrag? = null
                 detectDragGestures(
                     onDragStart = { position ->
                         drag = currentSelection.dragAt(
                             x = position.x - imageLeft,
                             y = position.y - imageTop,
-                            imageWidth = imageWidth,
-                            imageHeight = imageHeight,
-                            touchRadius = 28.dp.toPx(),
+                            target = CropDragTarget(
+                                imageWidth = imageWidth,
+                                imageHeight = imageHeight,
+                                touchRadius = CROP_HANDLE_TOUCH_RADIUS.toPx(),
+                                topTouchRadius = CROP_TOP_HANDLE_TOUCH_RADIUS.toPx(),
+                            ),
                         )
                     },
                     onDrag = { change, amount ->
@@ -479,7 +603,7 @@ private fun CropOverlay(bitmap: Bitmap, selection: CropRect, onSelection: (CropR
                     onDragEnd = { drag = null },
                     onDragCancel = { drag = null },
                 )
-            },
+                },
         ) {
             val left = imageLeft + currentSelection.left * imageWidth
             val top = imageTop + currentSelection.top * imageHeight

@@ -2,8 +2,11 @@ package com.paka.app
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.Matrix
+import android.os.Build
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import kotlin.math.max
 
 /**
@@ -15,6 +18,8 @@ import kotlin.math.max
 internal object CapturedPhoto {
     const val MAX_DIMENSION = 3072
     private const val JPEG_QUALITY = 90
+    private const val COUNTER_CLOCKWISE_QUARTER_TURN = -90f
+    private const val FULL_TURN_QUARTERS = 4
 
     // Exposes the inherited buffer so compressed plaintext can be zeroed
     // after the caller takes its copy.
@@ -49,12 +54,7 @@ internal object CapturedPhoto {
 
     /** Cuts the selection out of an already-normalized capture, in memory. */
     fun crop(jpeg: ByteArray, selection: CropRect): ByteArray {
-        val bitmap = BitmapFactory.decodeByteArray(
-            jpeg,
-            0,
-            jpeg.size,
-            BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 },
-        ) ?: error("The captured photo could not be decoded")
+        val bitmap = decodeEditable(jpeg)
         val x = (selection.left * bitmap.width).toInt().coerceIn(0, bitmap.width - 1)
         val y = (selection.top * bitmap.height).toInt().coerceIn(0, bitmap.height - 1)
         val width = (selection.width * bitmap.width).toInt().coerceIn(1, bitmap.width - x)
@@ -63,6 +63,34 @@ internal object CapturedPhoto {
         if (cut !== bitmap) bitmap.recycle()
         return encode(cut)
     }
+
+    /** Rotates the working photo 90° counter-clockwise, in memory. */
+    fun rotateCounterClockwise(bytes: ByteArray, quarterTurns: Int = 1): ByteArray {
+        val turns = quarterTurns.floorMod(FULL_TURN_QUARTERS)
+        if (turns == 0) return bytes.copyOf()
+        val bitmap = decodeEditable(bytes)
+        val matrix = Matrix().apply { postRotate(COUNTER_CLOCKWISE_QUARTER_TURN * turns) }
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (rotated !== bitmap) bitmap.recycle()
+        return encode(rotated)
+    }
+
+    private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
+
+    private fun decodeEditable(bytes: ByteArray): Bitmap =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, _, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.isMutableRequired = false
+            }
+        } else {
+            BitmapFactory.decodeByteArray(
+                bytes,
+                0,
+                bytes.size,
+                BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 },
+            )
+        } ?: error("The captured photo could not be decoded")
 
     /** Encodes and recycles [bitmap], zeroing the compression buffer. */
     private fun encode(bitmap: Bitmap): ByteArray = try {

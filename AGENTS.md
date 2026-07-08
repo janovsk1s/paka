@@ -14,7 +14,9 @@ high-contrast character of LightOS without copying proprietary source or assets.
 The product goal is not to become a general Android wallet. Paka should remain
 fast, legible, monochrome, local-first, and unusually restrained.
 
-Current PDF feature baseline: **0.13.0**, 2026-07-02. Consult `CHANGELOG.md` for recent work.
+Current stable feature baseline: **0.14.0**, 2026-07-04. The 0.15 preview
+adds in-app document capture and crop review. Consult `CHANGELOG.md` for recent
+work.
 
 ## Non-negotiable design language
 
@@ -50,10 +52,10 @@ Current PDF feature baseline: **0.13.0**, 2026-07-02. Consult `CHANGELOG.md` for
 
 ## Navigation behaviour
 
-The current explicit route/state structure in `MainActivity.kt` is intentional.
-Do not migrate it to Navigation Compose or redesign the navigation unless the
-owner explicitly asks. Small internal extraction is fine if behaviour remains
-identical.
+The current explicit route/state structure is intentional. `MainActivity.kt`
+now coordinates focused screen files; do not migrate it to Navigation Compose
+or redesign the navigation unless the owner explicitly asks. Small internal
+extraction is fine if behaviour remains identical.
 
 - Android back and the drawn back arrow must agree and return one screen level.
 - Leaving the app returns Paka to its pass home by default.
@@ -105,6 +107,13 @@ barcode is not sufficient: scanners must receive the exact original payload.
   they are not external `PassReference` links and are not disguised barcodes.
 - Import at most two images per pass. Enforce the 10 MB per-image limit, decoded
   dimension and pixel-count caps, and a successful bounded decode before save.
+- Chosen and captured photos must pass through the same review/crop step before
+  they enter the encrypted photo store. If review is cancelled, no newly chosen
+  photo should remain stored.
+- In-app capture travels camera sensor → RAM → review/crop → encrypted store.
+  Do not write a temporary capture file, gallery entry, media-store item, or
+  thumbnail. Re-encode captures before storage so sensor rotation is baked in,
+  dimensions are bounded, and camera metadata is stripped.
 - Persist only AES-256-GCM ciphertext under the dedicated photo Keystore key.
   Never write a plaintext image cache.
 - Decoded photo bitmaps are viewer-scoped, prefetched front/back, and released
@@ -123,8 +132,10 @@ barcode is not sufficient: scanners must receive the exact original payload.
 
 ## Security and privacy invariants
 
-- Paka has no internet permission, analytics, advertising, accounts, or cloud
-  service. Do not add any silently.
+- Paka has no internet permission, network-state permission, analytics,
+  advertising, accounts, or cloud service. Do not add any silently. If a
+  dependency contributes network permissions through manifest merge, remove them
+  explicitly and verify the merged APK permissions.
 - Passes and TOTP accounts are encrypted separately with AES-256-GCM keys held
   by Android Keystore. Atomic replacement and recovery behaviour must survive
   failed writes and corrupted primary files.
@@ -172,8 +183,12 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 
 ## Important files
 
-- `app/src/main/java/com/paka/app/MainActivity.kt` — screen state, routing, lists,
-  manual entry, settings, backup UI, and pass/code presentation.
+- `app/src/main/java/com/paka/app/MainActivity.kt` — top-level state, routing,
+  store loading, and screen coordination.
+- `app/src/main/java/com/paka/app/ListUi.kt`, `HomeLists.kt`, `PassScreens.kt`,
+  `SettingsScreens.kt`, `EntryScreens.kt`, `DetailScreens.kt`, and
+  `BackupScreens.kt` — extracted UI screens and list/page behaviour. Keep their
+  behaviour aligned with the explicit route flags in `MainActivity.kt`.
 - `app/src/main/java/com/paka/app/Ui.kt` — colours, haptics, click semantics, and
   shared custom interaction modifiers.
 - `app/src/main/java/com/paka/app/Barcodes.kt` — barcode validation, exact render,
@@ -191,12 +206,17 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
   `PdfRenderer` sessions, validation, and page rendering.
 - `app/src/main/java/com/paka/app/PdfViewer.kt` — fitted pages, hard-cut paging,
   GPU gestures, and sharp settled viewport layers.
-- `app/src/main/java/com/paka/app/PhotoStore.kt` and `PhotoViewer.kt` — encrypted
-  document-photo originals, bounded decode, front/back paging, and zoom.
+- `app/src/main/java/com/paka/app/PhotoStore.kt`, `PhotoViewer.kt`,
+  `PhotoCapture.kt`, `CapturedPhoto.kt`, and `CropGeometry.kt` — encrypted
+  document-photo originals, in-app capture, review/crop, bounded decode,
+  front/back paging, and zoom.
 - `app/src/main/java/com/paka/app/BackupStore.kt` — encrypted portable backups.
 - `app/src/main/java/com/paka/app/Totp.kt` — URI parsing and RFC 6238 generation.
 - `app/src/main/java/com/paka/app/DemoData.kt` — synthetic in-memory demo data.
 - `app/src/main/java/com/paka/app/Prefs.kt` — intentionally small local settings.
+- `config/detekt/detekt.yml` and `app/detekt-baseline.xml` — detekt is a
+  ratchet. Do not casually regenerate the baseline; fix new findings unless the
+  owner explicitly accepts a debt update.
 - `README.md`, `CHANGELOG.md`, `NOTICE`, and `ADDITIONAL_TERMS.md` — public-facing
   behaviour, history, authorship, and licensing.
 
@@ -234,8 +254,8 @@ On `feature/pdf-passes`, the debug variant deliberately uses the
 `com.paka.app.pdfpreview` application ID and “Paka PDF Test” label. Keep feature
 testing isolated from the owner's real encrypted Paka installation.
 
-On `feature/encrypted-document-photos`, the corresponding isolated debug ID is
-`com.paka.app.photopreview` and the label is “Paka Photo Test.”
+On document-photo preview branches, the corresponding isolated debug/preview ID
+is `com.paka.app.photopreview` and the label is “Paka Photo Test.”
 
 When a proposed improvement conflicts with this document, pause and explain the
 trade-off. The owner’s explicit instruction wins; otherwise preserve Paka’s core:
