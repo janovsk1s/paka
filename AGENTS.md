@@ -217,8 +217,14 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 - `config/detekt/detekt.yml` and `app/detekt-baseline.xml` — detekt is a
   ratchet. Do not casually regenerate the baseline; fix new findings unless the
   owner explicitly accepts a debt update.
-- `README.md`, `CHANGELOG.md`, `NOTICE`, and `ADDITIONAL_TERMS.md` — public-facing
-  behaviour, history, authorship, and licensing.
+- `README.md`, `CHANGELOG.md`, `SECURITY.md`, `NOTICE`, and
+  `ADDITIONAL_TERMS.md` — public-facing behaviour, history, security contact,
+  authorship, and licensing.
+- `docs/THREAT_MODEL.md`, `docs/FORMATS.md`, `docs/DEVICE_TESTING.md`,
+  `docs/RELEASE_CHECKLIST.md`, and `docs/SECURITY_ROADMAP.md` — security model,
+  persistence boundaries, hardware testing, release ritual, and future work.
+- `tools/check_apk_permissions.sh` and `tools/verify_release_apk.sh` — CI
+  permission guard and local release APK certificate/permission verifier.
 
 ## Working rules for future AI agents
 
@@ -236,11 +242,12 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
    `CHANGELOG.md` and the README release number, then run:
 
    ```sh
-   ./gradlew test lint assembleDebug assembleRelease
+   ./gradlew test lint detekt assembleDebug assemblePreview assembleRelease
+   tools/verify_release_apk.sh app/build/outputs/apk/release/app-release.apk
    ```
 
-8. Verify the release APK with Android `apksigner` and confirm it uses the same
-   release certificate. The known certificate SHA-256 is:
+8. Verify the release APK uses the same release certificate and expected
+   permissions. The known certificate SHA-256 is:
 
    ```text
    098fbb0a5455ec00dbafae93f16bff74b048e5bde7a824fac9ecf42effad0019

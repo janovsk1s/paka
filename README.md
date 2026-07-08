@@ -7,7 +7,7 @@ codes without Google Play Services.
 
 Current stable release: **0.14.0**
 
-Current beta preview: **0.15.0-beta.3** (`0.15.0-photo-beta.3`)
+Current beta preview: **0.15.0-beta.3.1** (`0.15.0-photo-beta.3`)
 
 ## Photos
 
@@ -61,6 +61,15 @@ intentional design principles described by the LightOS Developer Program.
   AES-256-GCM key derived from the user's passphrase.
 - TOTP codes copied to the clipboard are marked sensitive and cleared after 30 seconds while Paka has focus, or safely on the next return to Paka if the code is still present.
 
+Security policy, threat model, format notes, and device testing guidance live in:
+
+- [SECURITY.md](SECURITY.md)
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
+- [docs/FORMATS.md](docs/FORMATS.md)
+- [docs/DEVICE_TESTING.md](docs/DEVICE_TESTING.md)
+- [docs/SECURITY_ROADMAP.md](docs/SECURITY_ROADMAP.md)
+- [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
+
 Uninstalling Paka permanently removes data that was not exported first. If an
 Android Keystore key is invalidated, on-device encrypted data can only
 be recovered from a user-created encrypted backup. Paka cannot recover a forgotten
@@ -94,8 +103,13 @@ that ignored file and its referenced keystore must be backed up together because
 future upgrades require the same signing identity.
 
 ```sh
-./gradlew test lint assembleDebug assembleRelease
+./gradlew test lint detekt assembleDebug assemblePreview assembleRelease
+tools/verify_release_apk.sh app/build/outputs/apk/release/app-release.apk
 ```
+
+See [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before tagging or
+publishing a GitHub release. The tagged-release workflow opens a draft only;
+release signing and APK attachment stay local.
 
 LightOS SDK integration should use the official Compose design library and
 emulator when those developer-program dependencies are available.

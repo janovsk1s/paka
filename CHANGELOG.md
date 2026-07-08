@@ -4,6 +4,14 @@ Notable changes to Paka are documented here.
 
 ## 0.15.0 — Unreleased
 
+### Documentation
+
+- Added a security policy, security contact metadata, threat model, persistence
+  format registry, device testing checklist, release checklist, and
+  security/longevity roadmap as capture preview 4 preparation.
+- Added a CI APK-permission guard so debug, preview, and unsigned release APKs
+  fail checks if internet, network-state, or any unexpected permission appears.
+
 ### Beta 3.1 — changes since `v0.15.0-beta.3`
 
 - Kotlin updated to 2.4.0 (dependency-verification checksums regenerated); no behavior change.

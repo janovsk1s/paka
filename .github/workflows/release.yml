@@ -27,6 +27,12 @@ jobs:
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Run tests, lint, and all builds
         run: ./gradlew test lint detekt assembleDebug assemblePreview assembleRelease --stacktrace
+      - name: Verify APK permissions
+        run: |
+          tools/check_apk_permissions.sh \
+            app/build/outputs/apk/debug/app-debug.apk \
+            app/build/outputs/apk/preview/app-preview.apk \
+            app/build/outputs/apk/release/app-release-unsigned.apk
       - name: Upload unsigned release APK for comparison
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
