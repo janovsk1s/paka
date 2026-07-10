@@ -1,5 +1,6 @@
 package com.paka.app
 
+import android.content.Context
 import java.security.SecureRandom
 
 internal data class DemoContent(
@@ -13,25 +14,45 @@ internal object DemoData {
     private const val ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     private val random = SecureRandom()
 
-    fun create(): DemoContent {
+    fun create(context: Context? = null): DemoContent {
         val session = randomText(12)
+        fun text(resourceId: Int, fallback: String) = context?.getString(resourceId) ?: fallback
+        val transit = text(R.string.demo_transit, "Transit")
         return DemoContent(
             cards = listOf(
-                Card("Museum", "https://example.invalid/paka/museum/$session", PakaFormat.QR),
-                Card("Library", "LIB-${randomText(14)}", PakaFormat.CODE128),
-                Card("Day ticket", "DEMO|DAY|${randomText(20)}", PakaFormat.AZTEC, stack = "Transit"),
-                Card("Night ticket", "DEMO|NIGHT|${randomText(20)}", PakaFormat.AZTEC, stack = "Transit"),
-                Card("Event", "EVENT-${randomText(18)}", PakaFormat.PDF417),
-                Card("Rewards", "https://example.invalid/paka/rewards/${randomText(10)}", PakaFormat.QR),
-                Card("Parcel", "PK${randomText(16)}", PakaFormat.CODE39),
+                Card(
+                    text(R.string.demo_museum, "Museum"),
+                    "https://example.invalid/paka/museum/$session",
+                    PakaFormat.QR,
+                ),
+                Card(text(R.string.demo_library, "Library"), "LIB-${randomText(14)}", PakaFormat.CODE128),
+                Card(
+                    text(R.string.demo_day_ticket, "Day ticket"),
+                    "DEMO|DAY|${randomText(20)}",
+                    PakaFormat.AZTEC,
+                    stack = transit,
+                ),
+                Card(
+                    text(R.string.demo_night_ticket, "Night ticket"),
+                    "DEMO|NIGHT|${randomText(20)}",
+                    PakaFormat.AZTEC,
+                    stack = transit,
+                ),
+                Card(text(R.string.demo_event, "Event"), "EVENT-${randomText(18)}", PakaFormat.PDF417),
+                Card(
+                    text(R.string.demo_rewards, "Rewards"),
+                    "https://example.invalid/paka/rewards/${randomText(10)}",
+                    PakaFormat.QR,
+                ),
+                Card(text(R.string.demo_parcel, "Parcel"), "PK${randomText(16)}", PakaFormat.CODE39),
             ),
             accounts = listOf(
-                demoAccount("Northstar", "demo@example.invalid"),
-                demoAccount("Workshop", "guest@example.invalid"),
-                demoAccount("Archive", "sample@example.invalid"),
-                demoAccount("Studio", "visitor@example.invalid"),
-                demoAccount("Cloud", "demo@example.invalid"),
-                demoAccount("Forum", "sample@example.invalid"),
+                demoAccount(text(R.string.demo_northstar, "Northstar"), "demo@example.invalid"),
+                demoAccount(text(R.string.demo_workshop, "Workshop"), "guest@example.invalid"),
+                demoAccount(text(R.string.demo_archive, "Archive"), "sample@example.invalid"),
+                demoAccount(text(R.string.demo_studio, "Studio"), "visitor@example.invalid"),
+                demoAccount(text(R.string.demo_cloud, "Cloud"), "demo@example.invalid"),
+                demoAccount(text(R.string.demo_forum, "Forum"), "sample@example.invalid"),
             ),
         )
     }

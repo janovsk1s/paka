@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_back">Back</string>
+    <string name="accessibility_open_details">Open details</string>
+    <string name="accessibility_page_position">Page %1$d of %2$d</string>
+    <string name="accessibility_previous_page">Previous page</string>
+    <string name="accessibility_next_page">Next page</string>
+    <string name="accessibility_pass_position">Pass %1$d of %2$d</string>
+    <string name="accessibility_previous_pass">Previous pass</string>
+    <string name="accessibility_next_pass">Next pass</string>
+    <string name="accessibility_side_position">Side %1$d of %2$d</string>
+    <string name="accessibility_previous_side">Previous side</string>
+    <string name="accessibility_next_side">Next side</string>
+    <string name="accessibility_pdf_page">PDF page %1$d</string>
+    <string name="accessibility_pdf_document">PDF document</string>
+    <string name="accessibility_named_photo_side">%1$s, side %2$d of %3$d</string>
+    <string name="accessibility_copy_code">Copy code</string>
+
+    <plurals name="accessibility_seconds_remaining">
+        <item quantity="one">%1$d second remaining</item>
+        <item quantity="other">%1$d seconds remaining</item>
+    </plurals>
+
+    <string name="page_fraction">%1$d/%2$d</string>
+    <string name="pass_stack_position">%1$s · %2$d/%3$d</string>
+
+    <string name="status_rendering">Rendering…</string>
+    <string name="status_opening_pdf">Opening PDF…</string>
+    <string name="status_opening_photo">Opening photo…</string>
+    <string name="error_code_render">Couldn\'t render this code</string>
+    <string name="error_pdf_render">Couldn\'t render this PDF</string>
+    <string name="error_pdf_open">PDF could not be opened</string>
+    <string name="error_photo_open">Couldn\'t open this photo</string>
+    <string name="pdf_requires_android_11">PDF passes require Android 11 or newer</string>
+</resources>

@@ -1,8 +1,10 @@
 # Release Checklist
 
-Use this when cutting a stable release or a capture/photo preview. The GitHub
-workflow deliberately opens a draft release only; the release-signed APK is
-built and attached from the maintainer machine that holds the signing key.
+Use this when cutting a stable release or a capture/photo preview. The tagged
+workflow verifies the tag and retains an unsigned comparison APK. The owner
+creates the GitHub release only after that workflow is green; the release-signed
+APK is built and attached from the maintainer machine that holds the signing
+key.
 
 ## 1. Confirm scope and branch
 
@@ -16,6 +18,11 @@ built and attached from the maintainer machine that holds the signing key.
 ## 2. Update version and public notes
 
 - Bump `versionCode` and `versionName`.
+- For a signed preview, update `releaseChannelLabel` and
+  `isolatedVersionSuffix` in `app/build.gradle.kts` so About and isolated builds
+  identify the preview and `versionCode`. Clear the channel label for stable.
+- Run `sh tools/check_release_metadata.sh <tag>`; tagged CI repeats this check
+  and stops before building if the tag, version, channel, or suffix is stale.
 - Update the README stable or beta line.
 - Update `CHANGELOG.md` with user-visible, security, privacy, and compatibility
   changes.
@@ -58,8 +65,11 @@ from [DEVICE_TESTING.md](DEVICE_TESTING.md):
 - Background and reopen from code, scanner, PDF, and photo screens.
 - Confirm app/task background is black and return-home behaves as configured.
 - Confirm haptics occur only on real actions and available page changes.
+- Copy [DEVICE_TEST_RESULT_TEMPLATE.md](DEVICE_TEST_RESULT_TEMPLATE.md), record
+  the candidate and device details, and leave anything not exercised as
+  `NOT RUN` rather than assuming it passed.
 
-## 5. Tag and let CI open the draft
+## 5. Tag and wait for CI
 
 Create an annotated tag after local checks pass.
 
@@ -74,13 +84,18 @@ The tagged-release workflow will:
 
 - run tests, lint, detekt, debug build, preview build, and release build;
 - verify debug, preview, and unsigned release APK permissions;
-- upload an unsigned release APK artifact for comparison;
-- open a draft GitHub release if one does not already exist.
+- upload an unsigned release APK artifact for comparison.
 
-Signing stays local. Do not publish the workflow draft until the release-signed
-APK has been attached and verified.
+Wait for the tagged-release workflow to finish successfully. Do not create or
+publish a GitHub release while it is queued or running. If it fails, fix the
+failure and cut a new version/tag; do not move a published tag. Signing stays
+local.
 
-## 6. Finish the GitHub release manually
+## 6. Create the GitHub release manually as the owner
+
+While signed in to the owner's GitHub account, create the release only after
+the tagged workflow is green. This keeps the release author attributable to the
+owner rather than `github-actions[bot]`.
 
 For capture/photo previews:
 

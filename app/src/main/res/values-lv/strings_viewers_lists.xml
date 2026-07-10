@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_back">Atpakaļ</string>
+    <string name="accessibility_open_details">Atvērt informāciju</string>
+    <string name="accessibility_page_position">Lapa %1$d no %2$d</string>
+    <string name="accessibility_previous_page">Iepriekšējā lapa</string>
+    <string name="accessibility_next_page">Nākamā lapa</string>
+    <string name="accessibility_pass_position">Caurlaide %1$d no %2$d</string>
+    <string name="accessibility_previous_pass">Iepriekšējā caurlaide</string>
+    <string name="accessibility_next_pass">Nākamā caurlaide</string>
+    <string name="accessibility_side_position">Puse %1$d no %2$d</string>
+    <string name="accessibility_previous_side">Iepriekšējā puse</string>
+    <string name="accessibility_next_side">Nākamā puse</string>
+    <string name="accessibility_pdf_page">PDF lapa %1$d</string>
+    <string name="accessibility_pdf_document">PDF dokuments</string>
+    <string name="accessibility_named_photo_side">%1$s, puse %2$d no %3$d</string>
+    <string name="accessibility_copy_code">Kopēt kodu</string>
+
+    <plurals name="accessibility_seconds_remaining">
+        <item quantity="zero">Atlikušas %1$d sekundes</item>
+        <item quantity="one">Atlikusi %1$d sekunde</item>
+        <item quantity="other">Atlikušas %1$d sekundes</item>
+    </plurals>
+
+    <string name="page_fraction">%1$d/%2$d</string>
+    <string name="pass_stack_position">%1$s · %2$d/%3$d</string>
+
+    <string name="status_rendering">Atveido…</string>
+    <string name="status_opening_pdf">Atver PDF…</string>
+    <string name="status_opening_photo">Atver fotoattēlu…</string>
+    <string name="error_code_render">Neizdevās atveidot kodu</string>
+    <string name="error_pdf_render">Neizdevās atveidot PDF</string>
+    <string name="error_pdf_open">Neizdevās atvērt PDF</string>
+    <string name="error_photo_open">Neizdevās atvērt fotoattēlu</string>
+    <string name="pdf_requires_android_11">PDF caurlaidēm vajadzīga Android 11 vai jaunāka versija</string>
+</resources>

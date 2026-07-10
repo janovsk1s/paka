@@ -4,16 +4,16 @@ This roadmap describes how Paka moves from very good to reference-grade
 security while staying maintainable and extensible over time. It is scoped to
 preserve Paka's identity: offline, monochrome, restrained, and local-first.
 
-Status: draft, revised after review.
+Status: living roadmap, revised for the 0.15.0 stable release.
 
 ## Branch base and caveat
 
-- Live development is on `preview/document-capture`, the 0.15 capture/photo
-  beta, not `main`.
-- Branch implementation work from the current beta base unless the maintainer
-  explicitly asks for a stable-branch fix.
-- The danger is release scope, not the ideas. 0.15 is already a capture/photo
-  release; do not stuff deep security changes into it.
+- Stable development is based on `main`; preview branches remain isolated until
+  their changes have passed the release checklist.
+- Branch implementation work from the current stable base unless the maintainer
+  explicitly asks to continue an active preview line.
+- Keep each release scoped: storage, cryptography, dependency, and UI changes
+  should remain independently reviewable whenever possible.
 
 ## Guardrails
 
@@ -27,12 +27,15 @@ Status: draft, revised after review.
 
 ## Milestones
 
-### 0.15 stable — capture/photo release plus security-doc hygiene
+### 0.15 stable — capture/photo, localization, and restore hardening
 
-No behavioral security changes. Docs and verification only.
-
-- Finish capture/photo reliability.
-- Complete the battery and lifecycle device test pass.
+- Ship capture/photo reliability and bounded EXIF-aware review/crop handling.
+- Keep decoded identity photos viewer-scoped and release them on close or
+  background.
+- Add the fixed eight-language LTR allowlist, automatic supported-device-locale
+  selection, translated warnings/accessibility text, and overflow-safe labels.
+- Make portable restore interruption-safe with encrypted snapshots and a durable
+  journal, while preserving corrupt encrypted evidence for recovery.
 - Keep release hygiene current: `CHANGELOG.md`, README release number,
   `versionCode`, `versionName`, release title/body, pre-release/latest state,
   and APK asset name. Use [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) before
@@ -53,13 +56,12 @@ No behavioral security changes. Docs and verification only.
 - Content descriptions for custom glyphs and basic TalkBack sweep.
 - Dependency signature-verification experiment on an isolated branch.
 
-### 0.17 — internationalization and accessibility foundation
+### 0.17 — translation maintenance and accessibility foundation
 
-- Extract hardcoded UI strings into Android resources with plurals and
-  placeholders.
-- Add pseudolocalization checks and fix layout overflow.
+- Add pseudolocalization and screenshot/layout regression coverage.
 - Full TalkBack pass of scan, TOTP, Details, and backup flows.
-- Latvian first; consider Weblate once the translation surface is stable.
+- Establish native-speaker review and a contributor translation workflow while
+  preserving the fixed supported-language allowlist.
 
 ### 0.18 — crypto upgrades and parser assurance
 

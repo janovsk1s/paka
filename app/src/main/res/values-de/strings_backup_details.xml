@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">Sicherung</string>
+    <string name="backup_export_title">Export</string>
+    <string name="backup_unlock_title">Entsperren</string>
+    <string name="backup_restore_title">Wiederherstellen</string>
+    <string name="backup_passphrase_field">Passphrase</string>
+    <string name="backup_repeat_field">Wiederholen</string>
+    <string name="backup_encrypted_export">verschlüsselter Export</string>
+    <string name="backup_restore_backup">Sicherung wiederherstellen</string>
+    <string name="backup_offline_description">Sicherungen werden offline verschlüsselt und enthalten alle Pässe und 2FA-Geheimnisse. Externe Dateiverweise sind nicht enthalten.</string>
+    <string name="backup_new_passphrase_instructions">Mindestens %1$d Zeichen verwenden. Diese Passphrase kann nicht wiederhergestellt werden.</string>
+    <string name="backup_photo_compatibility">Diese Sicherung enthält Fotopässe und kann nur mit Paka 0.14 oder neuer wiederhergestellt werden.</string>
+    <string name="backup_minimum_characters">mindestens %1$d Zeichen</string>
+    <string name="backup_repeat_passphrase">Passphrase wiederholen</string>
+    <string name="backup_passphrases_do_not_match">Passphrasen stimmen nicht überein</string>
+    <string name="backup_encrypting">wird verschlüsselt…</string>
+    <string name="backup_save_encrypted">verschlüsselte Sicherung speichern</string>
+    <string name="backup_import_instructions">Passphrase dieser Sicherung eingeben.</string>
+    <string name="backup_passphrase_placeholder">Passphrase der Sicherung</string>
+    <string name="backup_unlocking">wird entsperrt…</string>
+    <string name="backup_unlock_action">Sicherung entsperren</string>
+    <string name="backup_replace_current_data">Aktuelle Daten ersetzen?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="one">%1$d Pass</item>
+        <item quantity="other">%1$d Pässe</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="one">%1$d Code</item>
+        <item quantity="other">%1$d Codes</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="one">%1$d Pass benötigt eine neuere Paka-Version und wird ausgelassen.</item>
+        <item quantity="other">%1$d Pässe benötigen eine neuere Paka-Version und werden ausgelassen.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Die aktuellen Daten werden ersetzt.</string>
+    <string name="backup_pdf_android_requirement">PDF-Pässe in dieser Sicherung erfordern Android 11 oder neuer.</string>
+    <string name="backup_restoring">wird wiederhergestellt…</string>
+    <string name="backup_restore_action">wiederherstellen</string>
+    <string name="backup_cancel_restore_action">Wiederherstellung abbrechen</string>
+    <string name="backup_saved">Verschlüsselte Sicherung gespeichert</string>
+    <string name="backup_save_failed">Sicherung ließ sich nicht speichern</string>
+    <string name="backup_read_failed">Sicherung ließ sich nicht lesen</string>
+    <string name="backup_encrypt_failed">Sicherung ließ sich nicht verschlüsseln</string>
+    <string name="backup_too_large">Sicherung ist zu groß</string>
+    <string name="backup_invalid_passphrase">Falsche Passphrase oder ungültige Sicherung</string>
+    <string name="backup_restored">Sicherung wiederhergestellt</string>
+
+    <string name="detail_date_pattern">dd.MM.yyyy</string>
+    <string name="detail_reference_fallback">Verweis</string>
+    <string name="detail_delete_question">%1$s löschen?</string>
+    <string name="detail_delete_action">löschen</string>
+    <string name="detail_cancel_action">abbrechen</string>
+    <string name="detail_duplicate_pass_title">Pass bereits hinzugefügt</string>
+    <string name="detail_duplicate_code_title">Code bereits hinzugefügt</string>
+    <string name="detail_duplicate_match">entspricht %1$s</string>
+    <string name="detail_add_anyway">trotzdem hinzufügen</string>
+    <string name="detail_discard_add_action">Hinzufügen verwerfen</string>
+    <string name="detail_reference_title">Verweis</string>
+    <string name="detail_reference_open">öffnen</string>
+    <string name="detail_reference_replace">ersetzen</string>
+    <string name="detail_reference_remove">entfernen</string>
+    <string name="detail_external_reference_file">Datei · %1$s</string>
+    <string name="detail_external_reference_warning">Inhalte externer Dateien werden von Paka weder verschlüsselt noch gesichert.</string>
+    <string name="detail_reference_access_many_failed">Paka konnte den Zugriff auf diese Dateien nicht behalten</string>
+    <string name="detail_reference_access_one_failed">Paka konnte den Zugriff auf diese Datei nicht behalten</string>
+    <string name="detail_file_picker_failed">Dateiauswahl ließ sich nicht öffnen</string>
+    <string name="detail_file_open_failed">Keine App kann diese Datei öffnen</string>
+    <string name="detail_name_field">Name</string>
+    <string name="detail_stack_field">Stapel</string>
+    <string name="detail_notes_field">Notizen</string>
+    <string name="detail_title">Details</string>
+    <string name="detail_none">keiner</string>
+    <string name="detail_sort_action">sortieren</string>
+    <string name="detail_sort_stack_description">Pässe in diesem Stapel sortieren</string>
+    <string name="detail_format_label">Format</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="one">PDF · %1$d Seite</item>
+        <item quantity="other">PDF · %1$d Seiten</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="one">Fotos · %1$d Seite</item>
+        <item quantity="other">Fotos · %1$d Seiten</item>
+    </plurals>
+    <string name="detail_added_label">hinzugefügt</string>
+    <string name="detail_code_label">Code</string>
+    <string name="detail_document_label">Dokument</string>
+    <string name="detail_photos_label">Fotos</string>
+    <string name="detail_encrypted_document">verschlüsseltes Dokument · %1$s</string>
+    <string name="detail_encrypted_photos">verschlüsselte Fotos · %1$s</string>
+    <string name="detail_add_note">Notiz hinzufügen</string>
+    <string name="detail_reference_one">Verweis 1</string>
+    <string name="detail_reference_two">Verweis 2</string>
+    <string name="detail_references_description">Bis zu zwei Dateien gleichzeitig auswählen. Verweise bleiben extern und werden von Paka weder verschlüsselt noch gesichert.</string>
+    <string name="detail_save_action">speichern</string>
+</resources>

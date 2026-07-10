@@ -4,6 +4,11 @@ Use this checklist on a real Light Phone III before promoting a capture/photo
 preview to stable. Emulator results are useful, but visual spacing, camera
 behavior, torch state, and battery feel must be judged on hardware.
 
+For each candidate, copy [DEVICE_TEST_RESULT_TEMPLATE.md](DEVICE_TEST_RESULT_TEMPLATE.md),
+leave untested rows marked `NOT RUN`, and commit or attach the completed result
+to the release record. The checklist describes what to test; a completed result
+records what was actually tested.
+
 ## Before testing
 
 - Install the release-signed APK for the candidate build.
@@ -54,10 +59,28 @@ behavior, torch state, and battery feel must be judged on hardware.
 - Choose/import one photo from the picker.
 - Choose/import two photos from the picker.
 - Crop each flow, including all four corners and moving the whole frame.
-- Rapidly tap to rotate during crop; confirm no crash and the preview hard-cuts
-  immediately.
+- Use the explicit Rotate action repeatedly during crop; confirm no crash and
+  that every preview change is an immediate hard cut.
 - Confirm uncropped/unused bytes are not written to the gallery or temporary
   files.
+
+## Localization and layout
+
+- Switch through English, Latvian, Estonian, Lithuanian, Finnish, Swedish,
+  German, and Slovak from Developer options; confirm the language page remains
+  open after each switch and Back still returns one screen level at a time.
+- Restart Paka in every language and confirm the selection persists.
+- Confirm Hebrew, Arabic, and other unsupported languages are never listed and
+  every supported language remains left-to-right.
+- With both the official and fallback fonts, inspect Baltic, Nordic, German,
+  and Slovak diacritics for missing or substituted glyphs.
+- Inspect every menu, form, confirmation, empty/error state, viewer caption,
+  scanner control, and accessibility action for untranslated or clipped text.
+- Confirm lists retain five fixed row slots per page in every language, a sixth
+  item starts the next page, and the edge indicator never overlaps counts or
+  timers.
+- Confirm a vertical drag changes only one page, and edge/non-scrollable drags
+  do not vibrate.
 
 ## Pass viewing
 
@@ -78,6 +101,18 @@ behavior, torch state, and battery feel must be judged on hardware.
 - Confirm screenshot protection remains active for real TOTP, secret entry,
   scanning, and backup flows.
 - Confirm pass barcodes remain capturable.
+
+## Accessibility
+
+- With TalkBack enabled, move to the next and previous hard-cut list pages and
+  confirm items after the first five remain reachable.
+- Confirm the current page and unavailable edge actions are announced without
+  adding haptics at an edge.
+- Confirm custom back, bottom-bar, and reorder glyphs have meaningful labels and
+  disabled reorder actions are exposed as unavailable.
+- Confirm the intentional long-press actions for manual entry and pass Details
+  remain discoverable through accessibility actions.
+- Confirm camera/capture light controls announce their actual on/off state.
 
 ## Backup and restore
 

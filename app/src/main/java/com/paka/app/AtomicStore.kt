@@ -25,7 +25,18 @@ internal object AtomicStore {
 
     fun backupFile(file: File): File = File(file.parentFile, "${file.name}.bak")
 
-    fun write(file: File, bytes: ByteArray): Result<Unit> = runCatching {
+    fun corruptFile(file: File): File = File(file.parentFile, "${file.name}.corrupt")
+
+    fun write(file: File, bytes: ByteArray): Result<Unit> = writeInternal(file, bytes, rotatePrimary = true)
+
+    /**
+     * Replaces content whose identity was independently verified without
+     * rotating a possibly corrupt primary over a known-good fallback.
+     */
+    fun replaceVerified(file: File, bytes: ByteArray): Result<Unit> =
+        writeInternal(file, bytes, rotatePrimary = false)
+
+    private fun writeInternal(file: File, bytes: ByteArray, rotatePrimary: Boolean): Result<Unit> = runCatching {
         require(bytes.size <= MAX_FILE_BYTES) { "Store is unexpectedly large" }
         file.parentFile?.mkdirs()
         val temp = File(file.parentFile, "${file.name}.tmp")
@@ -37,7 +48,7 @@ internal object AtomicStore {
             output.fd.sync()
         }
 
-        if (file.exists()) {
+        if (file.exists() && (rotatePrimary || !backup.exists())) {
             Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING)
             FileChannel.open(backup.toPath(), StandardOpenOption.WRITE).use { it.force(true) }
         }
@@ -54,6 +65,8 @@ internal object AtomicStore {
         } finally {
             temp.delete()
         }
+        // A successful replacement makes retained corrupt evidence obsolete.
+        corruptFile(file).delete()
         syncDirectory(file.parentFile)
     }
 
@@ -67,14 +80,68 @@ internal object AtomicStore {
         primary?.getOrNull()?.let { return Result.success(RecoveredValue(it, fromBackup = false)) }
 
         val backup = backupFile(file)
-        val recovered = if (backup.exists()) runCatching { decode(readBytes(backup)) } else null
-        recovered?.getOrNull()?.let { return Result.success(RecoveredValue(it, fromBackup = true)) }
+        val recovered = if (backup.exists()) {
+            runCatching {
+                val bytes = readBytes(backup)
+                val value = decode(bytes)
+                promoteRecoveredBackup(file, bytes)
+                RecoveredValue(value, fromBackup = true)
+            }
+        } else {
+            null
+        }
+        recovered?.getOrNull()?.let { return Result.success(it) }
 
         return Result.failure(
             recovered?.exceptionOrNull()
                 ?: primary?.exceptionOrNull()
                 ?: FileNotFoundException("Neither ${file.name} nor its backup exists"),
         )
+    }
+
+    /**
+     * Makes the decoded backup the primary generation without rotating a
+     * corrupt primary over that known-good backup. The corrupt encrypted bytes
+     * are retained separately for diagnosis instead of being destroyed.
+     */
+    private fun promoteRecoveredBackup(file: File, backupBytes: ByteArray) {
+        file.parentFile?.mkdirs()
+        if (file.exists()) {
+            val corrupt = corruptFile(file)
+            Files.copy(file.toPath(), corrupt.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            FileChannel.open(corrupt.toPath(), StandardOpenOption.WRITE).use { it.force(true) }
+        }
+
+        val temp = File(file.parentFile, "${file.name}.recover")
+        try {
+            temp.outputStream().use { output ->
+                output.write(backupBytes)
+                output.flush()
+                output.fd.sync()
+            }
+            try {
+                Files.move(
+                    temp.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+            syncDirectory(file.parentFile)
+        } finally {
+            temp.delete()
+        }
+    }
+
+    /** Removes an atomic file and all generations used for recovery. */
+    fun delete(file: File): Boolean {
+        val deleted = listOf(file, backupFile(file), corruptFile(file))
+            .map { !it.exists() || it.delete() }
+            .all { it }
+        syncDirectory(file.parentFile)
+        return deleted
     }
 
     private fun syncDirectory(directory: File?) {

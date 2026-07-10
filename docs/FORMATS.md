@@ -34,6 +34,27 @@ Current pass content variants:
 External references are `content://` links. Paka stores URI metadata only; the
 referenced file is not copied, encrypted, or included in portable backups.
 
+## Atomic generations and restore journal
+
+Encrypted stores use a primary file plus a `.bak` previous generation. If only
+the backup is valid, it is promoted without overwriting that known-good backup;
+a corrupt encrypted primary is retained as `.corrupt` until a successful save.
+Legacy plaintext migration securely erases all three possible generations.
+
+A portable restore spanning cards, 2FA, PDFs, and photos uses these private
+files:
+
+- `restore.journal`: schema 1 phase marker and old/restored content identifiers.
+- `restore.cards.enc`: encrypted pre-restore pass-store snapshot.
+- `restore.otp.enc`: encrypted pre-restore 2FA-store snapshot.
+
+`PREPARED` means startup restores both encrypted snapshots and deletes only PDF
+or photo identifiers introduced by the interrupted restore. `COMMITTED` means
+the new metadata stores are authoritative and startup finishes removing old
+unreferenced blobs. The journal is resolved before ordinary store loading or
+orphan cleanup. It contains no pass payloads, TOTP secrets, or document/photo
+plaintext.
+
 ## On-device TOTP store
 
 - File: `otp.enc`

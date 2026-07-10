@@ -2,6 +2,7 @@ package com.paka.app
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,15 +11,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,21 +27,58 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
 private enum class BackupField { PASSPHRASE, REPEAT }
+private enum class BackupMenuAction { EXPORT, RESTORE }
+
+@Composable
+private fun BackupBottomAction(
+    text: String,
+    color: Color,
+    fontSize: Int,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .then(if (enabled) tapModifier(onClick) else Modifier),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = text,
+            color = color,
+            fontSize = fontSize.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 @Composable
 internal fun BackupScreen(
@@ -50,6 +88,7 @@ internal fun BackupScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf(BackupStep.MENU) }
     var passphrase by remember { mutableStateOf("") }
@@ -59,6 +98,14 @@ internal fun BackupScreen(
     var unlocked by remember { mutableStateOf<BackupData?>(null) }
     var busy by remember { mutableStateOf(false) }
     var editingField by remember { mutableStateOf<BackupField?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingExport?.fill(0)
+            pendingImport?.fill(0)
+            unlocked?.clearDocuments()
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -84,9 +131,9 @@ internal fun BackupScreen(
                     passphrase = ""
                     confirmation = ""
                     step = BackupStep.MENU
-                    Toast.makeText(context, "encrypted backup saved", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.backup_saved), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "backup could not be saved", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, resources.getString(R.string.backup_save_failed), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -97,7 +144,7 @@ internal fun BackupScreen(
         if (uri != null) {
             scope.launch {
                 busy = true
-                val blob = withContext(Dispatchers.IO) { runCatching { readBackupBlob(context, uri) } }
+                val blob = readBackupBlobOwned(context, uri)
                 busy = false
                 blob.onSuccess {
                     pendingImport?.fill(0)
@@ -105,7 +152,7 @@ internal fun BackupScreen(
                     passphrase = ""
                     step = BackupStep.IMPORT_PASSWORD
                 }.onFailure {
-                    Toast.makeText(context, "backup could not be read", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, resources.getString(R.string.backup_read_failed), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -125,14 +172,36 @@ internal fun BackupScreen(
         step = BackupStep.MENU
     }
 
-    val goBack: () -> Unit = {
-        if (step == BackupStep.MENU) onBack() else resetToMenu()
+    fun returnToImportPassword() {
+        unlocked?.clearDocuments()
+        unlocked = null
+        passphrase = ""
+        confirmation = ""
+        busy = false
+        editingField = null
+        step = BackupStep.IMPORT_PASSWORD
     }
+
+    val goBack: () -> Unit = {
+        if (!busy) {
+            when (step) {
+                BackupStep.MENU -> onBack()
+                BackupStep.CONFIRM_RESTORE -> returnToImportPassword()
+                else -> resetToMenu()
+            }
+        }
+    }
+    // Always consume system Back on this route. While work owns plaintext,
+    // goBack deliberately does nothing instead of falling through to Activity.
     BackHandler { goBack() }
 
     editingField?.let { field ->
         TextEntryScreen(
-            title = if (field == BackupField.PASSPHRASE) "passphrase" else "repeat",
+            title = if (field == BackupField.PASSPHRASE) {
+                stringResource(R.string.backup_passphrase_field)
+            } else {
+                stringResource(R.string.backup_repeat_field)
+            },
             initial = if (field == BackupField.PASSPHRASE) passphrase else confirmation,
             onSave = { value ->
                 if (field == BackupField.PASSPHRASE) passphrase = value else confirmation = value
@@ -149,36 +218,48 @@ internal fun BackupScreen(
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar(
             when (step) {
-                BackupStep.MENU -> "backup"
-                BackupStep.EXPORT_PASSWORD -> "export"
-                BackupStep.IMPORT_PASSWORD -> "unlock"
-                BackupStep.CONFIRM_RESTORE -> "restore"
+                BackupStep.MENU -> stringResource(R.string.backup_title)
+                BackupStep.EXPORT_PASSWORD -> stringResource(R.string.backup_export_title)
+                BackupStep.IMPORT_PASSWORD -> stringResource(R.string.backup_unlock_title)
+                BackupStep.CONFIRM_RESTORE -> stringResource(R.string.backup_restore_title)
             },
             goBack,
+            backEnabled = !busy,
         )
 
         when (step) {
             BackupStep.MENU -> {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    PagedList(listOf("encrypted export", "restore backup")) { item ->
-                        Text(
-                            item,
-                            color = White,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Normal,
-                            modifier = Modifier.fillMaxWidth().then(
+                    PagedList(listOf(BackupMenuAction.EXPORT, BackupMenuAction.RESTORE)) { action ->
+                        val label = when (action) {
+                            BackupMenuAction.EXPORT -> stringResource(R.string.backup_encrypted_export)
+                            BackupMenuAction.RESTORE -> stringResource(R.string.backup_restore_backup)
+                        }
+                        Box(
+                            modifier = Modifier.fillMaxSize().then(
                                 tapModifier {
-                                    if (item == "encrypted export") step = BackupStep.EXPORT_PASSWORD
-                                    else {
+                                    if (action == BackupMenuAction.EXPORT) {
+                                        step = BackupStep.EXPORT_PASSWORD
+                                    } else {
                                         context.setPakaExternalFlowActive(true)
                                         importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
                                     }
                                 },
                             ),
-                        )
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Text(
+                                label,
+                                color = White,
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Normal,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                     Text(
-                        "Backups are encrypted offline and contain all passes and 2FA secrets. External file references are not included.",
+                        stringResource(R.string.backup_offline_description),
                         color = Grey,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
@@ -195,72 +276,84 @@ internal fun BackupScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     Text(
-                        "Use at least ${BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH} characters. This passphrase cannot be recovered.",
+                        stringResource(
+                            R.string.backup_new_passphrase_instructions,
+                            BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH,
+                        ),
                         color = Grey,
                         fontSize = 16.sp,
                     )
                     if (cards.any { it.content is PassContent.Photos }) {
                         Text(
-                            "This backup contains photo passes and can only be restored by Paka 0.14 or newer.",
+                            stringResource(R.string.backup_photo_compatibility),
                             color = Grey,
                             fontSize = 16.sp,
                         )
                     }
                     ManualEntryRow(
-                        "passphrase",
+                        stringResource(R.string.backup_passphrase_field),
                         "•".repeat(passphrase.length),
-                        "${BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH}+ characters",
+                        stringResource(R.string.backup_minimum_characters, BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH),
                     ) { editingField = BackupField.PASSPHRASE }
-                    ManualEntryRow("repeat", "•".repeat(confirmation.length), "repeat passphrase") {
+                    ManualEntryRow(
+                        stringResource(R.string.backup_repeat_field),
+                        "•".repeat(confirmation.length),
+                        stringResource(R.string.backup_repeat_passphrase),
+                    ) {
                         editingField = BackupField.REPEAT
                     }
                     if (confirmation.isNotEmpty() && passphrase != confirmation) {
-                        Text("passphrases do not match", color = Grey, fontSize = 14.sp)
+                        Text(stringResource(R.string.backup_passphrases_do_not_match), color = Grey, fontSize = 14.sp)
                     }
                 }
-                Text(
-                    if (busy) "encrypting…" else "save encrypted backup",
+                BackupBottomAction(
+                    text = if (busy) {
+                        stringResource(R.string.backup_encrypting)
+                    } else {
+                        stringResource(R.string.backup_save_encrypted)
+                    },
                     color = if (canExport) White else Grey,
-                    fontSize = 18.sp,
-                    modifier = Modifier.padding(vertical = 18.dp).then(
-                        if (canExport) tapModifier {
-                            val password = passphrase.toCharArray()
-                            busy = true
-                            scope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    val documents = linkedMapOf<String, ByteArray>()
-                                    val photos = linkedMapOf<String, ByteArray>()
-                                    try {
-                                        runCatching {
-                                            cards.mapNotNull { it.pdfContent?.documentId }.distinct().forEach { id ->
-                                                documents[id] = PdfStore.readPlaintext(context, id)
-                                            }
-                                            cards.photoDocumentIds().forEach { id ->
-                                                photos[id] = PhotoStore.readPlaintext(context, id)
-                                            }
-                                            BackupStore.encrypt(cards, accounts, password, documents, photos)
-                                        }
-                                    } finally {
-                                        documents.values.forEach { it.fill(0) }
-                                        photos.values.forEach { it.fill(0) }
-                                        password.fill('\u0000')
+                    fontSize = 18,
+                    enabled = canExport,
+                ) {
+                    val password = passphrase.toCharArray()
+                    busy = true
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            val documents = linkedMapOf<String, ByteArray>()
+                            val photos = linkedMapOf<String, ByteArray>()
+                            try {
+                                runCatching {
+                                    cards.mapNotNull { it.pdfContent?.documentId }.distinct().forEach { id ->
+                                        documents[id] = PdfStore.readPlaintext(context, id)
                                     }
+                                    cards.photoDocumentIds().forEach { id ->
+                                        photos[id] = PhotoStore.readPlaintext(context, id)
+                                    }
+                                    BackupStore.encrypt(cards, accounts, password, documents, photos)
                                 }
-                                busy = false
-                                result.onSuccess { bytes ->
-                                    pendingExport = bytes
-                                    val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                    context.setPakaExternalFlowActive(true)
-                                    exportLauncher.launch("paka-$stamp.paka")
-                                }.onFailure { error ->
-                                    val message = error.message?.takeIf { it.contains("too large", ignoreCase = true) }
-                                        ?: "backup could not be encrypted"
-                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                                }
+                            } finally {
+                                documents.values.forEach { it.fill(0) }
+                                photos.values.forEach { it.fill(0) }
+                                password.fill('\u0000')
                             }
-                        } else Modifier,
-                    ),
-                )
+                        }
+                        busy = false
+                        result.onSuccess { bytes ->
+                            pendingExport = bytes
+                            val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            context.setPakaExternalFlowActive(true)
+                            exportLauncher.launch(resources.getString(R.string.backup_export_filename, stamp))
+                        }.onFailure { error ->
+                            val message = if (error.message?.contains("too large", ignoreCase = true) == true) {
+                                resources.getString(R.string.backup_too_large)
+                            } else {
+                                resources.getString(R.string.backup_encrypt_failed)
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
             }
 
             BackupStep.IMPORT_PASSWORD -> {
@@ -269,87 +362,146 @@ internal fun BackupScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    Text("Enter the passphrase used when this backup was created.", color = Grey, fontSize = 16.sp)
-                    ManualEntryRow("passphrase", "•".repeat(passphrase.length), "backup passphrase") {
+                    Text(stringResource(R.string.backup_import_instructions), color = Grey, fontSize = 16.sp)
+                    ManualEntryRow(
+                        stringResource(R.string.backup_passphrase_field),
+                        "•".repeat(passphrase.length),
+                        stringResource(R.string.backup_passphrase_placeholder),
+                    ) {
                         editingField = BackupField.PASSPHRASE
                     }
                 }
-                Text(
-                    if (busy) "unlocking…" else "unlock backup",
+                BackupBottomAction(
+                    text = if (busy) {
+                        stringResource(R.string.backup_unlocking)
+                    } else {
+                        stringResource(R.string.backup_unlock_action)
+                    },
                     color = if (canUnlock) White else Grey,
-                    fontSize = 18.sp,
-                    modifier = Modifier.padding(vertical = 18.dp).then(
-                        if (canUnlock) tapModifier {
-                            val blob = checkNotNull(pendingImport)
-                            val password = passphrase.toCharArray()
-                            busy = true
-                            scope.launch {
-                                val result = withContext(Dispatchers.Default) {
-                                    try {
-                                        runCatching { BackupStore.decrypt(blob, password) }
-                                    } finally {
-                                        password.fill('\u0000')
-                                    }
-                                }
-                                busy = false
-                                result.onSuccess { data ->
-                                    blob.fill(0)
-                                    pendingImport = null
-                                    passphrase = ""
-                                    unlocked = data
-                                    step = BackupStep.CONFIRM_RESTORE
-                                }.onFailure {
-                                    Toast.makeText(context, "incorrect passphrase or invalid backup", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        } else Modifier,
-                    ),
-                )
+                    fontSize = 18,
+                    enabled = canUnlock,
+                ) {
+                    val blob = checkNotNull(pendingImport)
+                    val password = passphrase.toCharArray()
+                    busy = true
+                    scope.launch {
+                        val result = decryptBackupOwned(blob, password)
+                        busy = false
+                        result.onSuccess { data ->
+                            // Retain the encrypted blob so Back from confirmation
+                            // can return one level to unlock without retaining
+                            // decrypted document/photo buffers.
+                            passphrase = ""
+                            unlocked = data
+                            step = BackupStep.CONFIRM_RESTORE
+                        }.onFailure {
+                            Toast.makeText(
+                                context,
+                                resources.getString(R.string.backup_invalid_passphrase),
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
+                }
             }
 
             BackupStep.CONFIRM_RESTORE -> {
                 val data = unlocked
+                val pdfUnsupported = Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+                    data?.cards?.any { it.content is PassContent.Pdf } == true
+                val canRestore = data != null && !busy && !pdfUnsupported
+                val passCount = data?.cards?.size ?: 0
+                val codeCount = data?.accounts?.size ?: 0
+                val skipped = data?.skippedPasses ?: 0
+                val restoreCounts = stringResource(
+                    R.string.backup_restore_counts,
+                    pluralStringResource(R.plurals.backup_pass_count, passCount, passCount),
+                    pluralStringResource(R.plurals.backup_code_count, codeCount, codeCount),
+                )
+                val skippedDescription = if (skipped > 0) {
+                    pluralStringResource(R.plurals.backup_skipped_passes, skipped, skipped)
+                } else {
+                    null
+                }
+                val currentDataWarning = stringResource(R.string.backup_current_data_replaced)
+                val pdfRequirement = stringResource(R.string.backup_pdf_android_requirement)
                 Column(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("replace current data?", color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal)
-                    Spacer(Modifier.height(24.dp))
-                    Text(
-                        buildString {
-                            append("${data?.cards?.size ?: 0} passes · ${data?.accounts?.size ?: 0} codes")
-                            val skipped = data?.skippedPasses ?: 0
-                            if (skipped > 0) {
-                                append("\n$skipped ${if (skipped == 1) "pass needs" else "passes need"} a newer Paka and will be dropped.")
-                            }
-                            append("\nCurrent data will be replaced.")
-                        },
-                        color = Grey,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Light,
-                    )
-                    Spacer(Modifier.height(42.dp))
-                    Text(
-                        "restore",
-                        color = if (data != null) White else Grey,
-                        fontSize = 24.sp,
-                        modifier = Modifier.fillMaxWidth().then(
-                            if (data != null && !busy) tapModifier {
-                                busy = true
-                                scope.launch {
-                                    val restored = onRestore(data)
-                                    busy = false
-                                    if (restored) {
-                                        Toast.makeText(context, "backup restored", Toast.LENGTH_SHORT).show()
-                                        resetToMenu()
-                                        onBack()
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        ScrollList(topPadding = 24.dp, spacing = 24.dp) {
+                            Text(
+                                stringResource(R.string.backup_replace_current_data),
+                                color = White,
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Normal,
+                            )
+                            Text(
+                                buildString {
+                                    append(restoreCounts)
+                                    skippedDescription?.let { append("\n$it") }
+                                    append("\n$currentDataWarning")
+                                    if (pdfUnsupported) {
+                                        append("\n$pdfRequirement")
                                     }
+                                },
+                                color = Grey,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Light,
+                            )
+                        }
+                    }
+                    BackupBottomAction(
+                        text = if (busy) {
+                            stringResource(R.string.backup_restoring)
+                        } else {
+                            stringResource(R.string.backup_restore_action)
+                        },
+                        color = if (canRestore) White else Grey,
+                        fontSize = 24,
+                        enabled = canRestore,
+                    ) {
+                        val ownedData = checkNotNull(data)
+                        // Ownership of decrypted document/photo arrays transfers
+                        // to the process-scoped coordinator. Clearing Back/cancel
+                        // state can no longer wipe buffers during the transaction.
+                        unlocked = null
+                        busy = true
+                        context.setPakaCriticalFlowActive(true)
+                        val started = AtomicBoolean(false)
+                        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                            started.set(true)
+                            try {
+                                val restored = onRestore(ownedData)
+                                if (restored) {
+                                    Toast.makeText(
+                                        context,
+                                        resources.getString(R.string.backup_restored),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                    resetToMenu()
+                                    onBack()
+                                } else {
+                                    resetToMenu()
                                 }
-                            } else Modifier,
-                        ),
-                    )
-                    Spacer(Modifier.height(28.dp))
-                    Text("cancel", color = Grey, fontSize = 24.sp, modifier = Modifier.fillMaxWidth().then(tapModifier { resetToMenu() }))
+                            } finally {
+                                busy = false
+                                context.setPakaCriticalFlowActive(false)
+                            }
+                        }
+                        if (!started.get()) {
+                            ownedData.clearDocuments()
+                            context.setPakaCriticalFlowActive(false)
+                        }
+                    }
+                    BackupBottomAction(
+                        text = stringResource(R.string.backup_cancel_restore_action),
+                        color = Grey,
+                        fontSize = 24,
+                        enabled = !busy,
+                    ) {
+                        resetToMenu()
+                    }
                 }
             }
         }
@@ -370,5 +522,41 @@ private fun readBackupBlob(context: Context, uri: Uri): ByteArray {
             output.write(buffer, 0, read)
         }
         output.toByteArray()
+    }
+}
+
+/** Keeps ownership of a completed read until the calling coroutine accepts it. */
+private suspend fun readBackupBlobOwned(context: Context, uri: Uri): Result<ByteArray> {
+    val outcome = AtomicReference<Result<ByteArray>?>(null)
+    return try {
+        withContext(NonCancellable + Dispatchers.IO) {
+            outcome.set(runCatching { readBackupBlob(context, uri) })
+        }
+        currentCoroutineContext().ensureActive()
+        outcome.getAndSet(null) ?: Result.failure(IllegalStateException("Backup read did not finish"))
+    } finally {
+        outcome.getAndSet(null)?.getOrNull()?.fill(0)
+    }
+}
+
+/** Decryption is not cancellable; clear any plaintext result that cannot be transferred to UI state. */
+private suspend fun decryptBackupOwned(blob: ByteArray, password: CharArray): Result<BackupData> {
+    val input = blob.copyOf()
+    val outcome = AtomicReference<Result<BackupData>?>(null)
+    return try {
+        withContext(NonCancellable + Dispatchers.Default) {
+            try {
+                outcome.set(runCatching { BackupStore.decrypt(input, password) })
+            } finally {
+                input.fill(0)
+                password.fill('\u0000')
+            }
+        }
+        currentCoroutineContext().ensureActive()
+        outcome.getAndSet(null) ?: Result.failure(IllegalStateException("Backup unlock did not finish"))
+    } finally {
+        input.fill(0)
+        password.fill('\u0000')
+        outcome.getAndSet(null)?.getOrNull()?.clearDocuments()
     }
 }

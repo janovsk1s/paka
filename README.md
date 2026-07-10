@@ -5,9 +5,7 @@ Light Phone III. It scans and renders common barcode formats, carries encrypted
 PDF passes, encrypted one- or two-sided document photos, and generates TOTP
 codes without Google Play Services.
 
-Current stable release: **0.14.0**
-
-Current beta preview: **0.15.0-beta.3.3** (`0.15.0-photo-beta.3.3`)
+Current stable release: **0.15.0**
 
 ## Photos
 
@@ -46,9 +44,9 @@ intentional design principles described by the LightOS Developer Program.
   decryption stays fast while the master key never leaves the hardware. One or
   two sides are copied into Paka as encrypted originals and included in
   encrypted portable backups. Each photo also keeps a pre-scaled display copy,
-  encrypted the same way; viewing decodes only this copy, and decoded photos
-  are released when Paka leaves the foreground or the system trims memory.
-- In the 0.15 preview, document photos can also be captured directly inside
+  encrypted the same way; only the open viewer or stack owns decoded copies,
+  which are released when it closes or Paka leaves the foreground.
+- In Paka 0.15, document photos can also be captured directly inside
   Paka. Captures travel sensor → memory → encrypted store, are never written to
   the gallery or a temporary file, and are re-encoded before storage so camera
   metadata is stripped. Captured and chosen photos can be reviewed and cropped
@@ -92,6 +90,11 @@ photo flips sides immediately when tapped, while zoom-in is pinch-only so the
 tap never waits on a double/triple-tap detector. PDF double-tap zoom is unchanged.
 Paka returns to the pass list after leaving the app by default; the hidden
 Developer screen can disable that behavior.
+On first run Paka follows the first supported device language: English, Latvian,
+Estonian, Lithuanian, Finnish, Swedish, German, or Slovak. Unsupported device
+languages use English. A choice made in the hidden Developer screen remains in
+effect until another language is selected. Paka deliberately does not expose
+right-to-left locales.
 The same screen can enable an isolated demo mode with freshly generated,
 in-memory passes and 2FA accounts; demo changes never touch the real stores.
 
@@ -108,8 +111,9 @@ tools/verify_release_apk.sh app/build/outputs/apk/release/app-release.apk
 ```
 
 See [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) before tagging or
-publishing a GitHub release. The tagged-release workflow opens a draft only;
-release signing and APK attachment stay local.
+publishing a GitHub release. The tagged-release workflow must finish green and
+retains an unsigned comparison APK; the owner then creates the release and
+attaches the locally signed APK.
 
 LightOS SDK integration should use the official Compose design library and
 emulator when those developer-program dependencies are available.

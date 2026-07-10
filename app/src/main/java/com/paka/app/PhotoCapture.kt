@@ -1,8 +1,6 @@
 package com.paka.app
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -23,8 +21,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
@@ -50,21 +50,31 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -78,8 +88,8 @@ internal fun PhotoCaptureScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val lifecycleOwner = context as? LifecycleOwner
-    val scope = rememberCoroutineScope()
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var hasFlash by remember { mutableStateOf(false) }
     var torchEnabled by remember { mutableStateOf(false) }
@@ -90,9 +100,15 @@ internal fun PhotoCaptureScreen(
     val cameraRef = remember { AtomicReference<Camera?>(null) }
     val previewRef = remember { AtomicReference<PreviewView?>(null) }
     val captureRef = remember { AtomicReference<ImageCapture?>(null) }
+    val captureExecutor = remember {
+        Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "paka-photo-capture") }
+    }
+    val mainExecutor = remember(context) { ContextCompat.getMainExecutor(context) }
+    val cameraGeneration = remember { AtomicLong(0) }
     val torchRef = remember { AtomicBoolean(false) }
     val lastFocusAt = remember { AtomicLong(SystemClock.elapsedRealtime()) }
     val foreground by rememberIsForeground()
+    val latestCapturedBytes = rememberUpdatedState(capturedBytes)
 
     // A live view of someone's ID is never a sharing feature.
     ProtectSensitiveContent(true)
@@ -101,14 +117,25 @@ internal fun PhotoCaptureScreen(
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
 
+    fun stopCamera(resetUi: Boolean = true) {
+        cameraGeneration.incrementAndGet()
+        cameraRef.getAndSet(null)?.cameraControl?.enableTorch(false)
+        captureRef.set(null)
+        previewRef.set(null)
+        providerRef.getAndSet(null)?.unbindAll()
+        torchRef.set(false)
+        if (resetUi && !disposed.get()) {
+            torchEnabled = false
+            hasFlash = false
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             disposed.set(true)
-            ContextCompat.getMainExecutor(context).execute {
-                cameraRef.getAndSet(null)?.cameraControl?.enableTorch(false)
-                previewRef.set(null)
-                providerRef.getAndSet(null)?.unbindAll()
-            }
+            latestCapturedBytes.value?.fill(0)
+            mainExecutor.execute { stopCamera(resetUi = false) }
+            captureExecutor.shutdownNow()
         }
     }
 
@@ -141,22 +168,25 @@ internal fun PhotoCaptureScreen(
     }
 
     BackHandler {
-        onBack()
+        if (!busy) onBack()
     }
 
     val captured = capturedBytes
     if (captured != null) {
         PhotoReviewScreen(
-            title = "photo",
+            title = stringResource(R.string.entry_title_photo),
             initialBytes = captured,
-            cancelLabel = "retake",
-            contentDescription = "Captured document photo",
+            cancelLabel = stringResource(R.string.capture_action_retake),
+            contentDescription = stringResource(R.string.capture_cd_captured_document_photo),
             onUse = { bytes -> PhotoStore.importBytes(context, bytes) },
             onUsed = { imported ->
                 capturedBytes = null
                 onCaptured(imported)
             },
-            onCancel = { capturedBytes = null },
+            onCancel = {
+                errorMessage = null
+                capturedBytes = null
+            },
         )
         return
     }
@@ -168,15 +198,15 @@ internal fun PhotoCaptureScreen(
                 factory = { ctx ->
                     val previewView = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
                     previewRef.set(previewView)
+                    val generation = cameraGeneration.incrementAndGet()
                     val future = ProcessCameraProvider.getInstance(ctx)
                     future.addListener({
                         try {
                             val provider = future.get()
-                            providerRef.set(provider)
-                            if (disposed.get()) {
-                                provider.unbindAll()
+                            if (disposed.get() || cameraGeneration.get() != generation) {
                                 return@addListener
                             }
+                            providerRef.set(provider)
                             val preview = Preview.Builder().build().also {
                                 it.setSurfaceProvider(previewView.surfaceProvider)
                             }
@@ -204,15 +234,21 @@ internal fun PhotoCaptureScreen(
                                 preview,
                                 imageCapture,
                             )
+                            if (disposed.get() || cameraGeneration.get() != generation) {
+                                provider.unbindAll()
+                                return@addListener
+                            }
                             cameraRef.set(camera)
                             hasFlash = camera.cameraInfo.hasFlashUnit()
                             previewView.post {
                                 focusAt(camera, previewView, previewView.width / 2f, previewView.height / 2f)
                             }
                         } catch (_: Exception) {
-                            errorMessage = "Camera could not be started"
+                            if (!disposed.get() && cameraGeneration.get() == generation) {
+                                errorMessage = resources.getString(R.string.capture_error_camera_start)
+                            }
                         }
-                    }, ContextCompat.getMainExecutor(ctx))
+                    }, mainExecutor)
                     previewView
                 },
             )
@@ -233,7 +269,7 @@ internal fun PhotoCaptureScreen(
 
         if (lifecycleOwner == null || errorMessage != null) {
             Text(
-                text = errorMessage ?: "Camera is unavailable",
+                text = errorMessage ?: stringResource(R.string.capture_error_camera_unavailable),
                 color = White,
                 modifier = Modifier.align(Alignment.Center).padding(28.dp),
             )
@@ -241,74 +277,111 @@ internal fun PhotoCaptureScreen(
 
         BackArrow(
             modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(8.dp),
+            enabled = !busy,
             onBack = onBack,
         )
 
         if (hasFlash) {
             Text(
-                text = if (torchEnabled) "light on" else "light",
+                text = if (torchEnabled) {
+                    stringResource(R.string.capture_label_light_on)
+                } else {
+                    stringResource(R.string.capture_label_light)
+                },
                 color = if (torchEnabled) White else Grey,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 22.dp)
                     .then(
-                        tapModifier({
+                        if (busy) Modifier else tapModifier({
                             val enabled = !torchRef.get()
                             cameraRef.get()?.cameraControl?.enableTorch(enabled)
                             torchRef.set(enabled)
                             torchEnabled = enabled
-                        }, "Toggle camera light"),
-                    ),
+                        }, if (torchEnabled) {
+                            stringResource(R.string.capture_cd_turn_light_off)
+                        } else {
+                            stringResource(R.string.capture_cd_turn_light_on)
+                        }),
+                    )
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
             )
         }
 
         if (errorMessage == null && lifecycleOwner != null) {
             Text(
-                text = if (busy) "processing…" else "capture",
+                text = if (busy) {
+                    stringResource(R.string.capture_action_processing)
+                } else {
+                    stringResource(R.string.capture_action_capture)
+                },
                 color = White,
                 fontSize = 18.sp,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .systemBarsPadding()
-                    .padding(bottom = 24.dp)
                     .then(
                         if (busy) Modifier else tapModifier({
                             val imageCapture = captureRef.get() ?: return@tapModifier
                             busy = true
                             imageCapture.takePicture(
-                                ContextCompat.getMainExecutor(context),
+                                captureExecutor,
                                 object : ImageCapture.OnImageCapturedCallback() {
                                     override fun onCaptureSuccess(image: ImageProxy) {
                                         val rotation = image.imageInfo.rotationDegrees
-                                        val buffer = image.planes[0].buffer
-                                        val raw = ByteArray(buffer.remaining()).also { buffer.get(it) }
-                                        image.close()
-                                        scope.launch {
-                                            val result = withContext(Dispatchers.Default) {
-                                                try {
-                                                    runCatching { CapturedPhoto.normalize(raw, rotation) }
-                                                } finally {
-                                                    raw.fill(0)
-                                                }
+                                        val raw = try {
+                                            val buffer = image.planes.firstOrNull()?.buffer
+                                                ?: error("Captured photo has no data")
+                                            ByteArray(buffer.remaining()).also { buffer.get(it) }
+                                        } catch (_: Exception) {
+                                            mainExecutor.execute {
+                                                if (disposed.get()) return@execute
+                                                busy = false
+                                                captureFailed(
+                                                    resources.getString(R.string.capture_error_process_photo),
+                                                )
+                                            }
+                                            return
+                                        } finally {
+                                            image.close()
+                                        }
+                                        // The callback executor owns the raw frame through
+                                        // normalization, so composition cancellation cannot
+                                        // strand an unwiped plaintext buffer.
+                                        val result = try {
+                                            runCatching { CapturedPhoto.normalize(raw, rotation) }
+                                        } finally {
+                                            raw.fill(0)
+                                        }
+                                        mainExecutor.execute {
+                                            if (disposed.get()) {
+                                                result.getOrNull()?.fill(0)
+                                                return@execute
                                             }
                                             busy = false
                                             result.onSuccess { bytes ->
+                                                stopCamera()
                                                 capturedBytes = bytes
                                             }.onFailure {
-                                                captureFailed("Photo could not be processed")
+                                                captureFailed(
+                                                    resources.getString(R.string.capture_error_process_photo),
+                                                )
                                             }
                                         }
                                     }
 
                                     override fun onError(exception: ImageCaptureException) {
-                                        busy = false
-                                        captureFailed("Photo could not be taken")
+                                        mainExecutor.execute {
+                                            if (disposed.get()) return@execute
+                                            busy = false
+                                            captureFailed(resources.getString(R.string.capture_error_take_photo))
+                                        }
                                     }
                                 },
                             )
-                        }, "Capture photo"),
-                    ),
+                        }, stringResource(R.string.capture_cd_capture_photo)),
+                    )
+                    .padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 24.dp),
             )
         }
     }
@@ -326,17 +399,24 @@ internal fun PhotoReviewScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val haptics = LocalHapticFeedback.current
+    val resources = LocalResources.current
     var currentBytes by remember(initialBytes) { mutableStateOf(initialBytes) }
-    var confirmBitmap by remember(initialBytes) {
-        mutableStateOf(runCatching { decodeForConfirm(initialBytes) }.getOrNull())
-    }
     var pendingRotations by remember(initialBytes) { mutableIntStateOf(0) }
     var cropping by remember(initialBytes) { mutableStateOf(false) }
     var cropRect by remember(initialBytes) { mutableStateOf(CropRect.FULL) }
     var busy by remember(initialBytes) { mutableStateOf(false) }
-    val displayBitmap = remember(confirmBitmap, pendingRotations) {
-        confirmBitmap?.rotatedCounterClockwise(pendingRotations)
+    var reviewFailed by remember(initialBytes) { mutableStateOf(false) }
+    var reviewRender by remember(initialBytes) { mutableStateOf<ReviewRender?>(null) }
+    val displayBitmap = reviewRender?.takeIf {
+        it.source === currentBytes && it.counterClockwiseTurns == pendingRotations
+    }?.bitmap
+    DisposableEffect(reviewRender?.bitmap) {
+        // Capture the exact bitmap owned by this effect. Reading mutable state
+        // from onDispose can recycle the replacement instead of the old frame.
+        val owned = reviewRender?.bitmap
+        onDispose {
+            owned?.let { if (!it.isRecycled) it.recycle() }
+        }
     }
 
     ProtectSensitiveContent(true)
@@ -345,13 +425,47 @@ internal fun PhotoReviewScreen(
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
 
+    val latestBytes = rememberUpdatedState(currentBytes)
     DisposableEffect(initialBytes) {
-        onDispose {
-            currentBytes.fill(0)
+        onDispose { latestBytes.value.fill(0) }
+    }
+
+    // Review decoding is both bounded and off the UI thread. A private copy is
+    // owned by the worker so route disposal can wipe currentBytes immediately
+    // without racing a native decode that does not respond to cancellation.
+    LaunchedEffect(currentBytes, pendingRotations) {
+        val source = currentBytes
+        val turns = pendingRotations
+        reviewFailed = false
+        val input = source.copyOf()
+        val outcome = AtomicReference<Result<Bitmap>?>(null)
+        try {
+            withContext(NonCancellable + Dispatchers.Default) {
+                try {
+                    outcome.set(runCatching { CapturedPhoto.decodePreview(input, CONFIRM_MAX_DIMENSION, turns) })
+                } finally {
+                    input.fill(0)
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            outcome.getAndSet(null)?.fold(
+                onSuccess = { bitmap ->
+                    reviewFailed = false
+                    reviewRender = ReviewRender(source, turns, bitmap)
+                },
+                onFailure = {
+                    reviewFailed = true
+                    reviewRender = null
+                },
+            )
+        } finally {
+            input.fill(0)
+            outcome.getAndSet(null)?.getOrNull()?.let { if (!it.isRecycled) it.recycle() }
         }
     }
 
-    BackHandler {
+    fun navigateBack() {
+        if (busy) return
         if (cropping) {
             cropping = false
             cropRect = CropRect.FULL
@@ -359,17 +473,13 @@ internal fun PhotoReviewScreen(
             onCancel()
         }
     }
+    // Always register so busy work consumes Back instead of falling through to
+    // the parent route. The drawn arrow follows the exact same rule.
+    BackHandler { navigateBack() }
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
-            SimpleTopBar(title, onBack = {
-                if (cropping) {
-                    cropping = false
-                    cropRect = CropRect.FULL
-                } else {
-                    onCancel()
-                }
-            })
+            SimpleTopBar(title, onBack = ::navigateBack, backEnabled = !busy)
         }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             displayBitmap?.let { bitmap ->
@@ -377,10 +487,9 @@ internal fun PhotoReviewScreen(
                     CropOverlay(
                         bitmap = bitmap,
                         selection = cropRect,
-                        onSelection = { cropRect = it },
+                        onSelection = { if (!busy) cropRect = it },
                         onRotate = {
                             if (!busy) {
-                                performPakaHaptic(context, haptics)
                                 pendingRotations = (pendingRotations + 1).floorMod(4)
                                 cropRect = CropRect.FULL
                             }
@@ -394,30 +503,51 @@ internal fun PhotoReviewScreen(
                         contentScale = ContentScale.Fit,
                     )
                 }
-            }
+            } ?: Text(
+                text = if (reviewFailed) {
+                    stringResource(R.string.capture_error_preview_photo)
+                } else {
+                    stringResource(R.string.capture_status_preparing_preview)
+                },
+                color = Grey,
+                fontSize = 16.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 18.dp),
         ) {
             if (cropping) {
-                Text(
-                    text = "cancel",
+                ReviewAction(
+                    text = stringResource(R.string.capture_action_cancel),
                     color = Grey,
-                    fontSize = 18.sp,
-                    modifier = Modifier.weight(1f).then(
-                        if (busy) Modifier else tapModifier {
-                            cropping = false
-                            cropRect = CropRect.FULL
-                        },
-                    ),
+                    alignment = Alignment.CenterStart,
+                    enabled = !busy,
+                    onClick = {
+                        cropping = false
+                        cropRect = CropRect.FULL
+                    },
                 )
-                Text(
-                    text = if (busy) "cropping…" else "done",
+                ReviewAction(
+                    text = stringResource(R.string.capture_action_rotate),
+                    color = Grey,
+                    alignment = Alignment.Center,
+                    enabled = !busy && displayBitmap != null,
+                    onClick = {
+                        pendingRotations = (pendingRotations + 1).floorMod(4)
+                        cropRect = CropRect.FULL
+                    },
+                )
+                ReviewAction(
+                    text = if (busy) {
+                        stringResource(R.string.capture_action_cropping)
+                    } else {
+                        stringResource(R.string.capture_action_done)
+                    },
                     color = White,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f).then(
-                        if (busy) Modifier else tapModifier {
+                    alignment = Alignment.CenterEnd,
+                    enabled = !busy,
+                    onClick = {
                             if (cropRect == CropRect.FULL) {
                                 cropping = false
                             } else {
@@ -425,118 +555,186 @@ internal fun PhotoReviewScreen(
                                 scope.launch {
                                     val source = currentBytes
                                     val turns = pendingRotations
-                                    val result = withContext(Dispatchers.Default) {
-                                        runCatching {
-                                            val rotated = materializeRotations(source, turns)
-                                            try {
-                                                CapturedPhoto.crop(rotated, cropRect)
-                                            } finally {
-                                                if (rotated !== source) rotated.fill(0)
-                                            }
+                                    val selection = cropRect
+                                    var replacement: ByteArray? = null
+                                    try {
+                                        val result = prepareReviewBytes(
+                                            source = source,
+                                            counterClockwiseTurns = turns,
+                                            selection = selection,
+                                            transform = true,
+                                        )
+                                        result.onSuccess { bytes ->
+                                            replacement = bytes
+                                            val previous = currentBytes
+                                            currentBytes = bytes
+                                            replacement = null
+                                            previous.fill(0)
+                                            pendingRotations = 0
+                                            cropRect = CropRect.FULL
+                                            cropping = false
+                                        }.onFailure {
+                                            showError(resources.getString(R.string.capture_error_crop_photo))
                                         }
-                                    }
-                                    busy = false
-                                    result.onSuccess { bytes ->
-                                        currentBytes.fill(0)
-                                        confirmBitmap = runCatching { decodeForConfirm(bytes) }.getOrNull()
-                                        currentBytes = bytes
-                                        pendingRotations = 0
-                                        cropRect = CropRect.FULL
-                                        cropping = false
-                                    }.onFailure {
-                                        showError("Photo could not be cropped")
+                                    } finally {
+                                        replacement?.fill(0)
+                                        if (isActive) busy = false
                                     }
                                 }
                             }
-                        },
-                    ),
+                    },
                 )
                 return@Row
             }
-            Text(
+            val photoReady = displayBitmap != null && !reviewFailed
+            ReviewAction(
                 text = cancelLabel,
                 color = Grey,
-                fontSize = 18.sp,
-                modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { onCancel() }),
+                alignment = Alignment.CenterStart,
+                enabled = !busy,
+                onClick = onCancel,
             )
-            Text(
-                text = "crop",
+            ReviewAction(
+                text = stringResource(R.string.capture_action_crop),
                 color = Grey,
-                fontSize = 18.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f).then(if (busy) Modifier else tapModifier { cropping = true }),
+                alignment = Alignment.Center,
+                enabled = !busy && photoReady,
+                onClick = { cropping = true },
             )
-            Text(
-                text = if (busy) "saving…" else "use photo",
-                color = White,
-                fontSize = 18.sp,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f).then(
-                    if (busy) Modifier else tapModifier {
+            ReviewAction(
+                text = if (busy) {
+                    stringResource(R.string.capture_action_saving)
+                } else {
+                    stringResource(R.string.capture_action_use_photo)
+                },
+                color = if (photoReady) White else Grey,
+                alignment = Alignment.CenterEnd,
+                enabled = !busy && photoReady,
+                onClick = {
                         busy = true
                         scope.launch {
                             val source = currentBytes
                             val turns = pendingRotations
-                            val prepared = withContext(Dispatchers.Default) {
-                                runCatching { materializeRotations(source, turns) }
-                            }
-                            val result = prepared.getOrNull()?.let { bytes ->
-                                try {
-                                    withContext(Dispatchers.IO) { onUse(bytes) }
-                                } finally {
-                                    if (bytes !== source) bytes.fill(0)
+                            var prepared: ByteArray? = null
+                            val imported = AtomicReference<Result<PhotoImport>?>(null)
+                            try {
+                                val preparedResult = prepareReviewBytes(
+                                    source = source,
+                                    counterClockwiseTurns = turns,
+                                    selection = CropRect.FULL,
+                                    // Untouched picker imports retain their exact
+                                    // encrypted bytes. Any queued edit is baked
+                                    // into one bounded JPEG.
+                                    transform = turns.floorMod(FULL_TURN_QUARTERS) != 0,
+                                )
+                                val bytes = preparedResult.getOrElse {
+                                    showError(resources.getString(R.string.capture_error_prepare_photo))
+                                    return@launch
                                 }
-                            } ?: Result.failure(
-                                prepared.exceptionOrNull() ?: IllegalStateException("Photo could not be prepared"),
-                            )
-                            busy = false
-                            result.onSuccess(onUsed).onFailure { error ->
-                                showError(error.message ?: "Photo could not be saved")
+                                prepared = bytes
+                                withContext(NonCancellable + Dispatchers.IO) {
+                                    imported.set(runCatching { onUse(bytes).getOrThrow() })
+                                }
+                                currentCoroutineContext().ensureActive()
+                                val result = imported.getAndSet(null)
+                                    ?: Result.failure(IllegalStateException("Photo import did not finish"))
+                                busy = false
+                                result.onSuccess(onUsed).onFailure {
+                                    showError(resources.getString(R.string.capture_error_save_photo))
+                                }
+                            } finally {
+                                prepared?.fill(0)
+                                val abandoned = imported.getAndSet(null)?.getOrNull()
+                                if (abandoned?.created == true) {
+                                    withContext(NonCancellable + Dispatchers.IO) {
+                                        PhotoStore.delete(context, abandoned.page.documentId)
+                                    }
+                                }
+                                if (isActive) busy = false
                             }
                         }
-                    },
-                ),
+                },
             )
         }
     }
 }
 
 private const val CONFIRM_MAX_DIMENSION = 1_440
-private const val COUNTER_CLOCKWISE_QUARTER_TURN = -90f
 private const val FULL_TURN_QUARTERS = 4
 
-private fun Bitmap.rotatedCounterClockwise(quarterTurns: Int): Bitmap {
-    val turns = quarterTurns.floorMod(FULL_TURN_QUARTERS)
-    if (turns == 0) return this
-    val matrix = Matrix().apply { postRotate(COUNTER_CLOCKWISE_QUARTER_TURN * turns) }
-    return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
+private data class ReviewRender(
+    val source: ByteArray,
+    val counterClockwiseTurns: Int,
+    val bitmap: Bitmap,
+)
+
+@Composable
+private fun RowScope.ReviewAction(
+    text: String,
+    color: androidx.compose.ui.graphics.Color,
+    alignment: Alignment,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .then(if (enabled) tapModifier(onClick) else Modifier)
+            .heightIn(min = 48.dp),
+        contentAlignment = alignment,
+    ) {
+        Text(
+            text = text,
+            color = color,
+            fontSize = 18.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = when (alignment) {
+                Alignment.CenterEnd -> TextAlign.End
+                Alignment.Center -> TextAlign.Center
+                else -> TextAlign.Start
+            },
+        )
+    }
 }
 
-private fun materializeRotations(bytes: ByteArray, quarterTurns: Int): ByteArray =
-    if (quarterTurns.floorMod(FULL_TURN_QUARTERS) == 0) {
-        bytes
-    } else {
-        CapturedPhoto.rotateCounterClockwise(bytes, quarterTurns)
+/** Native bitmap work is not cancellable; this function retains and wipes every output until transfer. */
+private suspend fun prepareReviewBytes(
+    source: ByteArray,
+    counterClockwiseTurns: Int,
+    selection: CropRect,
+    transform: Boolean,
+): Result<ByteArray> {
+    val input = source.copyOf()
+    val outcome = AtomicReference<Result<ByteArray>?>(null)
+    return try {
+        withContext(NonCancellable + Dispatchers.Default) {
+            try {
+                outcome.set(
+                    runCatching {
+                        if (transform) {
+                            CapturedPhoto.applyEdits(input, counterClockwiseTurns, selection)
+                        } else {
+                            input.copyOf()
+                        }
+                    },
+                )
+            } finally {
+                input.fill(0)
+            }
+        }
+        currentCoroutineContext().ensureActive()
+        outcome.getAndSet(null) ?: Result.failure(IllegalStateException("Photo preparation did not finish"))
+    } finally {
+        input.fill(0)
+        outcome.getAndSet(null)?.getOrNull()?.fill(0)
     }
+}
 
 private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
 
-/** Screen-sized preview of the normalized capture for the confirm step. */
-private fun decodeForConfirm(bytes: ByteArray): Bitmap? {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-    var sample = 1
-    while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= CONFIRM_MAX_DIMENSION) sample *= 2
-    return BitmapFactory.decodeByteArray(
-        bytes,
-        0,
-        bytes.size,
-        BitmapFactory.Options().apply { inSampleSize = sample },
-    )
-}
-
 private const val CROP_MIN_SIZE = 0.15f
+private const val ACCESSIBLE_CROP_STEP = 0.05f
 private val CROP_HANDLE_TOUCH_RADIUS = 64.dp
 private val CROP_TOP_HANDLE_TOUCH_RADIUS = 88.dp
 
@@ -552,6 +750,22 @@ private fun CropOverlay(
     onRotate: () -> Unit,
 ) {
     val currentSelection by rememberUpdatedState(selection)
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val cropDescription = stringResource(R.string.capture_cd_crop_area)
+    val rotateAction = stringResource(R.string.capture_action_rotate)
+    val resetAction = stringResource(R.string.capture_action_reset_crop)
+    val smallerAction = stringResource(R.string.capture_action_crop_smaller)
+    val largerAction = stringResource(R.string.capture_action_crop_larger)
+    val moveLeftAction = stringResource(R.string.capture_action_crop_left)
+    val moveRightAction = stringResource(R.string.capture_action_crop_right)
+    val moveUpAction = stringResource(R.string.capture_action_crop_up)
+    val moveDownAction = stringResource(R.string.capture_action_crop_down)
+    fun applyAccessibleCrop(next: CropRect) {
+        if (next == currentSelection) return
+        performPakaHaptic(context, haptics)
+        onSelection(next)
+    }
     BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
         val boxWidth = constraints.maxWidth.toFloat()
         val boxHeight = constraints.maxHeight.toFloat()
@@ -563,28 +777,83 @@ private fun CropOverlay(
 
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Captured document photo",
+            contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit,
         )
         Canvas(
             modifier = Modifier.fillMaxSize()
-                .pointerInput(bitmap) {
-                    detectTapGestures(
-                        onTap = { position ->
-                            val tappedCorner = currentSelection.dragAt(
-                                x = position.x - imageLeft,
-                                y = position.y - imageTop,
-                                target = CropDragTarget(
-                                    imageWidth = imageWidth,
-                                    imageHeight = imageHeight,
-                                    touchRadius = CROP_HANDLE_TOUCH_RADIUS.toPx(),
-                                    topTouchRadius = CROP_TOP_HANDLE_TOUCH_RADIUS.toPx(),
-                                ),
-                            ) is CropDrag.Corner
-                            if (!tappedCorner) onRotate()
-                        },
-                    )
+                .semantics {
+                    contentDescription = cropDescription
+                    customActions = buildList {
+                        add(
+                            CustomAccessibilityAction(rotateAction) {
+                                performPakaHaptic(context, haptics)
+                                onRotate()
+                                true
+                            },
+                        )
+                        if (
+                            currentSelection.width > CROP_MIN_SIZE + ACCESSIBLE_CROP_STEP * 2 &&
+                            currentSelection.height > CROP_MIN_SIZE + ACCESSIBLE_CROP_STEP * 2
+                        ) {
+                            add(
+                                CustomAccessibilityAction(smallerAction) {
+                                    applyAccessibleCrop(currentSelection.insetBy(ACCESSIBLE_CROP_STEP))
+                                    true
+                                },
+                            )
+                        }
+                        if (currentSelection != CropRect.FULL) {
+                            add(
+                                CustomAccessibilityAction(largerAction) {
+                                    applyAccessibleCrop(currentSelection.expandedBy(ACCESSIBLE_CROP_STEP))
+                                    true
+                                },
+                            )
+                        }
+                        if (currentSelection.left > 0f) {
+                            add(
+                                CustomAccessibilityAction(moveLeftAction) {
+                                    applyAccessibleCrop(currentSelection.movedBy(-ACCESSIBLE_CROP_STEP, 0f))
+                                    true
+                                },
+                            )
+                        }
+                        if (currentSelection.right < 1f) {
+                            add(
+                                CustomAccessibilityAction(moveRightAction) {
+                                    applyAccessibleCrop(currentSelection.movedBy(ACCESSIBLE_CROP_STEP, 0f))
+                                    true
+                                },
+                            )
+                        }
+                        if (currentSelection.top > 0f) {
+                            add(
+                                CustomAccessibilityAction(moveUpAction) {
+                                    applyAccessibleCrop(currentSelection.movedBy(0f, -ACCESSIBLE_CROP_STEP))
+                                    true
+                                },
+                            )
+                        }
+                        if (currentSelection.bottom < 1f) {
+                            add(
+                                CustomAccessibilityAction(moveDownAction) {
+                                    applyAccessibleCrop(currentSelection.movedBy(0f, ACCESSIBLE_CROP_STEP))
+                                    true
+                                },
+                            )
+                        }
+                        if (currentSelection != CropRect.FULL) {
+                            add(
+                                CustomAccessibilityAction(resetAction) {
+                                    performPakaHaptic(context, haptics)
+                                    onSelection(CropRect.FULL)
+                                    true
+                                },
+                            )
+                        }
+                    }
                 }
                 .pointerInput(bitmap) {
                 var drag: CropDrag? = null
@@ -646,3 +915,21 @@ private fun CropOverlay(
         }
     }
 }
+
+private fun CropRect.insetBy(amount: Float): CropRect {
+    val horizontal = amount.coerceAtMost((width - CROP_MIN_SIZE) / 2f)
+    val vertical = amount.coerceAtMost((height - CROP_MIN_SIZE) / 2f)
+    return CropRect(
+        left = left + horizontal,
+        top = top + vertical,
+        right = right - horizontal,
+        bottom = bottom - vertical,
+    )
+}
+
+private fun CropRect.expandedBy(amount: Float): CropRect = CropRect(
+    left = (left - amount).coerceAtLeast(0f),
+    top = (top - amount).coerceAtLeast(0f),
+    right = (right + amount).coerceAtMost(1f),
+    bottom = (bottom + amount).coerceAtMost(1f),
+)

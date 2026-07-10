@@ -1,28 +1,31 @@
 package com.paka.app
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
 import java.util.Locale
 
 internal sealed interface Entry
@@ -45,43 +48,43 @@ internal fun buildEntries(cards: List<Card>): List<Entry> {
 }
 
 @Composable
-internal fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card) -> Unit, onOpenStack: (String) -> Unit) {
-    val context = LocalContext.current
-    var visibleEntries by remember { mutableStateOf<List<Entry>>(emptyList()) }
-    // Warm the session cache for photo passes on the visible page (and each
-    // page scrolled to) so their first open is as instant as a reopen. The
-    // quick dimensions match the viewer's so the cache keys line up.
-    LaunchedEffect(visibleEntries) {
-        val photoPages = visibleEntries.filterIsInstance<SingleEntry>()
-            .mapNotNull { it.card.photoContent }
-            .flatMap { it.pages }
-            .distinctBy { it.documentId }
-        if (photoPages.isEmpty()) return@LaunchedEffect
-        val metrics = context.resources.displayMetrics
-        withContext(Dispatchers.IO) {
-            photoPages.forEach { page ->
-                if (!isActive) return@withContext
-                runCatching {
-                    PhotoStore.decode(context, page.documentId, metrics.widthPixels / 2, metrics.heightPixels / 2)
-                }
-            }
-        }
-    }
-    PagedList(entries, onPageChange = { visibleEntries = it }) { entry ->
+internal fun CardsList(
+    entries: List<Entry>,
+    textSize: Float,
+    onOpenCard: (Card) -> Unit,
+    onOpenStack: (String) -> Unit,
+) {
+    PagedList(entries) { entry ->
         when (entry) {
-            is SingleEntry -> Text(
-                text = entry.card.name,
-                color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, textAlign = TextAlign.Start,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().then(tapModifier { onOpenCard(entry.card) }),
-            )
+            is SingleEntry -> Box(
+                modifier = Modifier.fillMaxSize().then(tapModifier { onOpenCard(entry.card) }),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = entry.card.name,
+                    color = White,
+                    fontSize = textSize.sp,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Start,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             is StackEntry -> Row(
-                modifier = Modifier.fillMaxWidth().then(tapModifier { onOpenStack(entry.name) }),
+                modifier = Modifier.fillMaxSize().then(tapModifier { onOpenStack(entry.name) }),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(entry.name, color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text("${entry.cards.size}", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
+                Text(
+                    entry.name,
+                    color = White,
+                    fontSize = textSize.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(entry.cards.size.toString(), color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
             }
         }
     }
@@ -89,18 +92,104 @@ internal fun CardsList(entries: List<Entry>, textSize: Float, onOpenCard: (Card)
 
 @Composable
 internal fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float, onCopy: (String) -> Unit) {
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val localTextStyle = LocalTextStyle.current
+    val copyLabel = stringResource(R.string.accessibility_copy_code)
     PagedList(accounts) { account ->
         val code = Totp.code(account, nowMs)
         val remaining = Totp.secondsRemaining(account, nowMs)
+        val remainingDescription = pluralStringResource(
+            R.plurals.accessibility_seconds_remaining,
+            remaining,
+            remaining,
+        )
         // Keep the large code on the same vertical centerline as a pass name.
         // The secondary account label is overlaid above it so it cannot push
         // the primary content down when switching modes.
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .then(tapModifier { onCopy(code) }),
+                .fillMaxSize()
+                .semantics { stateDescription = remainingDescription }
+                .then(tapModifier(onClick = { onCopy(code) }, clickLabel = copyLabel)),
         ) {
+            val timerStyle = localTextStyle.merge(
+                TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
+            )
+            val labelStyle = localTextStyle.merge(
+                TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Light),
+            )
+            val timerWidthPx = remember(localTextStyle, density) {
+                textMeasurer.measure(
+                    text = "888",
+                    style = timerStyle,
+                    maxLines = 1,
+                    softWrap = false,
+                ).size.width
+            }
+            val labelHeightPx = remember(localTextStyle, density) {
+                textMeasurer.measure(
+                    text = "Åg",
+                    style = labelStyle,
+                    maxLines = 1,
+                    softWrap = false,
+                ).size.height
+            }
+            val representativeCode = when (code.length) {
+                6 -> "888 888"
+                7, 8 -> "8888 8888"
+                else -> code
+            }
+            val codeWidthPx = (constraints.maxWidth - timerWidthPx - with(density) { 8.dp.roundToPx() })
+                .coerceAtLeast(1)
+            val verticalGapPx = with(density) { 4.dp.roundToPx() }
+            val fittedTextSize = remember(
+                representativeCode,
+                textSize,
+                codeWidthPx,
+                constraints.maxHeight,
+                labelHeightPx,
+                localTextStyle,
+                density,
+            ) {
+                var candidate = textSize.coerceIn(16f, 64f)
+                while (candidate > 16f) {
+                    val measured = textMeasurer.measure(
+                        text = representativeCode,
+                        style = localTextStyle.merge(
+                            TextStyle(
+                                fontSize = candidate.sp,
+                                fontWeight = FontWeight.Normal,
+                                letterSpacing = 2.sp,
+                            ),
+                        ),
+                        maxLines = 1,
+                        softWrap = false,
+                    ).size
+                    val fitsWidth = measured.width <= codeWidthPx
+                    val fitsHeight = measured.height + labelHeightPx + verticalGapPx <= constraints.maxHeight
+                    if (fitsWidth && fitsHeight) break
+                    candidate -= 1f
+                }
+                candidate
+            }
+            val fittedCodeHeightPx = remember(representativeCode, fittedTextSize, localTextStyle, density) {
+                textMeasurer.measure(
+                    text = representativeCode,
+                    style = localTextStyle.merge(
+                        TextStyle(
+                            fontSize = fittedTextSize.sp,
+                            fontWeight = FontWeight.Normal,
+                            letterSpacing = 2.sp,
+                        ),
+                    ),
+                    maxLines = 1,
+                    softWrap = false,
+                ).size.height
+            }
+            val labelOffset = with(density) {
+                (-(fittedCodeHeightPx / 2f + verticalGapPx + labelHeightPx / 2f)).toDp()
+            }
             Text(
                 account.title(),
                 color = Grey,
@@ -108,11 +197,33 @@ internal fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float,
                 fontWeight = FontWeight.Light,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.align(Alignment.TopStart).offset(y = (-10).dp),
+                modifier = Modifier.align(Alignment.CenterStart).offset(y = labelOffset),
             )
-            Row(modifier = Modifier.fillMaxWidth().align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
-                Text(formatCode(code), color = White, fontSize = textSize.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp, modifier = Modifier.weight(1f))
-                Text("$remaining", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
+            Row(
+                modifier = Modifier.fillMaxWidth().align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    formatCode(code),
+                    color = White,
+                    fontSize = fittedTextSize.sp,
+                    fontWeight = FontWeight.Normal,
+                    letterSpacing = 2.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    remaining.toString(),
+                    color = Grey,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Light,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier
+                        .width(with(density) { timerWidthPx.toDp() })
+                        .clearAndSetSemantics { },
+                )
             }
         }
     }

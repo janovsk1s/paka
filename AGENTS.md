@@ -14,9 +14,9 @@ high-contrast character of LightOS without copying proprietary source or assets.
 The product goal is not to become a general Android wallet. Paka should remain
 fast, legible, monochrome, local-first, and unusually restrained.
 
-Current stable feature baseline: **0.14.0**, 2026-07-04. The 0.15 preview
-adds in-app document capture and crop review. Consult `CHANGELOG.md` for recent
-work.
+Current stable feature baseline: **0.15.0**, 2026-07-11. It adds in-app
+document capture and crop review, full supported-language localization, and
+restore/storage hardening. Consult `CHANGELOG.md` for recent work.
 
 ## Non-negotiable design language
 
@@ -38,6 +38,11 @@ work.
   Never show an indicator when there is only one page.
 - Top bars use a centred, capitalised screen title and the custom back glyph at
   the far left. Back means one level back, not “jump to home.”
+- On first run, Paka follows the first supported device language from the fixed,
+  left-to-right allowlist: English, Latvian, Estonian, Lithuanian, Finnish,
+  Swedish, German, and Slovak. Unsupported device languages fall back to English.
+  A language explicitly selected in hidden Developer options remains authoritative.
+  Never offer Hebrew, Arabic, or another RTL locale.
 - Bottom controls and reorder controls use the existing custom-drawn glyph
   language. Avoid importing a mismatched icon pack for convenience.
 - Hidden long-press actions are intentional. Long-press `+` opens manual entry.

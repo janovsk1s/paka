@@ -1,6 +1,7 @@
 package com.paka.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,7 +28,9 @@ class BarcodeRenderTest {
     }
 
     @Test
-    fun denserThanTargetFallsBackToOnePixelPerModule() {
-        assertEquals(700, Barcodes.snappedWidth(700, 640))
+    fun denserThanTargetIsRejected() {
+        assertThrows(IllegalArgumentException::class.java) {
+            Barcodes.snappedWidth(700, 640)
+        }
     }
 }

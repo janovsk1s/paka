@@ -5,6 +5,11 @@ val signingPropertiesFile = rootProject.file("keystore.properties")
 val signingProperties = Properties().apply {
     if (signingPropertiesFile.exists()) signingPropertiesFile.inputStream().use(::load)
 }
+// Signed previews use the production package/signing identity so they upgrade
+// in place. Development builds must not claim a released preview identity;
+// update both values when cutting the next preview and clear the label for stable.
+val releaseChannelLabel = ""
+val isolatedVersionSuffix = "-photo-development"
 
 plugins {
     alias(libs.plugins.android.application)
@@ -21,8 +26,9 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 51
+        versionCode = 52
         versionName = "0.15.0"
+        buildConfigField("String", "RELEASE_CHANNEL_LABEL", "\"$releaseChannelLabel\"")
     }
 
     signingConfigs {
@@ -39,7 +45,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".photopreview"
-            versionNameSuffix = "-photo-beta.3.3"
+            versionNameSuffix = isolatedVersionSuffix
             resValue("string", "app_name", "Paka Photo Test")
         }
         release {
@@ -57,7 +63,7 @@ android {
         create("preview") {
             initWith(getByName("release"))
             applicationIdSuffix = ".photopreview"
-            versionNameSuffix = "-photo-beta.3.3"
+            versionNameSuffix = isolatedVersionSuffix
             resValue("string", "app_name", "Paka Photo Test")
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
@@ -74,6 +80,14 @@ android {
         // AGP 9 disables resource values by default; the debug and preview
         // channels rely on them for their side-by-side app names.
         resValues = true
+    }
+    androidResources {
+        localeFilters += setOf("en", "lv", "et", "lt", "fi", "sv", "de", "sk")
+    }
+    bundle {
+        language {
+            enableSplit = false
+        }
     }
     testOptions {
         unitTests {
@@ -120,6 +134,7 @@ dependencies {
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
+    implementation(libs.androidx.exifinterface)
 
     // Installs the merged baseline profile on sideloaded APKs, where no
     // app store delivers ahead-of-time compilation profiles.

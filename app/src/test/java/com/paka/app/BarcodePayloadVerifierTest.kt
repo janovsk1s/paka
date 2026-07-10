@@ -14,6 +14,7 @@ class BarcodePayloadVerifierTest {
         val payload = byteArrayOf(0, 1, 127, 128.toByte(), 255.toByte()).toString(Charsets.ISO_8859_1)
         assertTrue(BarcodePayloadVerifier.payloadMatches(PakaFormat.AZTEC, payload, payload))
         assertFalse(BarcodePayloadVerifier.payloadMatches(PakaFormat.AZTEC, payload, payload.dropLast(1) + "x"))
+        assertFalse(BarcodePayloadVerifier.payloadMatches(PakaFormat.AZTEC, "🙂", "?"))
     }
 
     @Test
@@ -27,6 +28,25 @@ class BarcodePayloadVerifierTest {
         val expected = "(01)09010374000019(21)04696367404058"
         val decoded = "01090103740000192104696367404058"
         assertTrue(BarcodePayloadVerifier.payloadMatches(PakaFormat.DATABAR_EXPANDED, expected, decoded))
+    }
+
+    @Test
+    fun gs1VariableLengthBoundariesArePayloadSignificant() {
+        val expected = "(10)ABC(21)123"
+        assertTrue(
+            BarcodePayloadVerifier.payloadMatches(
+                PakaFormat.DATABAR_EXPANDED,
+                expected,
+                "10ABC\u001D21123",
+            ),
+        )
+        assertFalse(
+            BarcodePayloadVerifier.payloadMatches(
+                PakaFormat.DATABAR_EXPANDED,
+                expected,
+                "10ABC21123",
+            ),
+        )
     }
 
     @Test

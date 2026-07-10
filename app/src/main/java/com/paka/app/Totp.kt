@@ -23,15 +23,17 @@ fun OtpAccount.title(): String = if (account.isBlank()) issuer else "$issuer · 
 object Totp {
     private val SUPPORTED_ALGORITHMS = setOf("SHA1", "SHA256", "SHA512")
 
-    fun validationError(account: OtpAccount): String? {
-        if (account.issuer.isBlank()) return "Name is required"
-        if (account.digits !in setOf(6, 8)) return "Codes must use 6 or 8 digits"
-        if (account.period !in 1..300) return "Period must be between 1 and 300 seconds"
-        if (account.algorithm.uppercase(Locale.ROOT) !in SUPPORTED_ALGORITHMS) return "Unsupported algorithm"
-        return runCatching {
+    internal fun validationError(account: OtpAccount): LocalizedMessage? {
+        if (account.issuer.isBlank()) return LocalizedMessage(R.string.validation_name_required)
+        if (account.digits !in setOf(6, 8)) return LocalizedMessage(R.string.validation_totp_digits)
+        if (account.period !in 1..300) return LocalizedMessage(R.string.validation_totp_period)
+        if (account.algorithm.uppercase(Locale.ROOT) !in SUPPORTED_ALGORITHMS) {
+            return LocalizedMessage(R.string.validation_totp_algorithm)
+        }
+        return runCatching<LocalizedMessage?> {
             require(base32Decode(account.secret).isNotEmpty())
             null
-        }.getOrElse { "Secret is not valid Base32" }
+        }.getOrElse { LocalizedMessage(R.string.validation_totp_secret) }
     }
 
     /** Current TOTP code, or a row of dashes if the secret is unusable. */
@@ -107,34 +109,35 @@ object Totp {
     }
 
     /** Parse an otpauth://totp/... URI (e.g. from a setup QR) into an account. */
-    fun parseOtpauth(raw: String): OtpAccount? {
-        return try {
+    fun parseOtpauth(raw: String, unknownIssuer: String = "Unknown"): OtpAccount? {
+        return runCatching {
             val uri = Uri.parse(raw)
-            if (!uri.scheme.equals("otpauth", ignoreCase = true) || !uri.host.equals("totp", ignoreCase = true)) return null
             val secret = uri.getQueryParameter("secret")?.replace(" ", "").orEmpty()
-            if (secret.isBlank()) return null
-            val label = Uri.decode(uri.path?.trimStart('/').orEmpty())
-            val issuerParam = uri.getQueryParameter("issuer")
-            val issuer: String
-            val account: String
-            if (label.contains(":")) {
-                issuer = issuerParam ?: label.substringBefore(":").trim()
-                account = label.substringAfter(":").trim()
+            val supported = uri.scheme.equals("otpauth", ignoreCase = true) &&
+                uri.host.equals("totp", ignoreCase = true) && secret.isNotBlank()
+            if (supported) {
+                val label = Uri.decode(uri.path?.trimStart('/').orEmpty())
+                val issuerParam = uri.getQueryParameter("issuer")
+                val issuer: String
+                val account: String
+                if (label.contains(":")) {
+                    issuer = issuerParam ?: label.substringBefore(":").trim()
+                    account = label.substringAfter(":").trim()
+                } else {
+                    issuer = issuerParam ?: label.trim()
+                    account = if (issuerParam != null) label.trim() else ""
+                }
+                OtpAccount(
+                    issuer = issuer.ifBlank { unknownIssuer },
+                    account = account,
+                    secret = secret,
+                    digits = uri.getQueryParameter("digits")?.toIntOrNull() ?: 6,
+                    period = uri.getQueryParameter("period")?.toIntOrNull() ?: 30,
+                    algorithm = uri.getQueryParameter("algorithm")?.uppercase(Locale.ROOT) ?: "SHA1",
+                ).takeIf { validationError(it) == null }
             } else {
-                issuer = issuerParam ?: label.trim()
-                account = if (issuerParam != null) label.trim() else ""
+                null
             }
-            val accountResult = OtpAccount(
-                issuer = issuer.ifBlank { "Unknown" },
-                account = account,
-                secret = secret,
-                digits = uri.getQueryParameter("digits")?.toIntOrNull() ?: 6,
-                period = uri.getQueryParameter("period")?.toIntOrNull() ?: 30,
-                algorithm = uri.getQueryParameter("algorithm")?.uppercase(Locale.ROOT) ?: "SHA1",
-            )
-            accountResult.takeIf { validationError(it) == null }
-        } catch (_: Exception) {
-            null
-        }
+        }.getOrNull()
     }
 }

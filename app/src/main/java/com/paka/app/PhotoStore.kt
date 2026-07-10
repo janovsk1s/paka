@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
-import android.util.LruCache
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -51,8 +50,7 @@ internal object PhotoStore {
 
     private val documentLocks = ConcurrentHashMap<String, Any>()
 
-    // Serialises work per photo so a viewer opened mid-prefetch waits for the
-    // prefetch result instead of decrypting and decoding the same photo twice.
+    // Serialises fallback display-copy creation and decryption per photo.
     private inline fun <T> withDocumentLock(documentId: String, block: () -> T): T =
         synchronized(documentLocks.getOrPut(documentId) { Any() }) { block() }
 
@@ -76,105 +74,47 @@ internal object PhotoStore {
         val documentId = photoDocumentId(bytes)
         val file = documentFile(context, documentId)
         val created = !file.exists()
-        encryptToFile(context, file, aad(documentId), bytes)
+        // inspect() and the content-derived identifier verify these bytes, so
+        // do not rotate a corrupt primary over an existing healthy backup.
+        encryptToFile(context, file, aad(documentId), bytes, replaceVerified = true)
         runCatching { writeDisplayCopy(context, documentId, bytes) }
         PhotoImport(PhotoPage(documentId, dimensions.first, dimensions.second), created)
     }
 
-    // Decoded display bitmaps for the current session, so opening a pass and
-    // flipping sides never repeats Keystore decryption and image decoding.
-    // Cleared when Paka leaves the foreground or the system trims memory.
-    private val memoryCache = object : LruCache<String, Bitmap>(
-        (Runtime.getRuntime().maxMemory() / 4).coerceAtMost(96L * 1024 * 1024).toInt(),
-    ) {
-        // Computed instead of byteCount, which hardware bitmaps do not report.
-        override fun sizeOf(key: String, value: Bitmap) = value.width * value.height * 4
-    }
-
-    private fun cacheKey(documentId: String, width: Int, height: Int) = "$documentId:${width}x$height"
-
+    /** Returns a decoded display bitmap owned by the active viewer or stack. */
     fun decode(context: Context, documentId: String, targetWidth: Int, targetHeight: Int): Bitmap {
-        val key = cacheKey(documentId, targetWidth, targetHeight)
-        memoryCache.get(key)?.takeIf { !it.isRecycled }?.let { return it }
         return withDocumentLock(documentId) {
-            memoryCache.get(key)?.takeIf { !it.isRecycled }?.let { return@withDocumentLock it }
             val bytes = displayPlaintext(context, documentId)
             try {
                 // Hardware bitmaps live in GPU memory, keeping pinch-zoom smooth.
                 decodeBytes(bytes, targetWidth, targetHeight, allowHardware = true)
-                    .second.also { memoryCache.put(key, it) }
+                    .second
             } finally {
                 bytes.fill(0)
             }
         }
     }
 
-    /**
-     * Delivers a quick low-resolution bitmap and then the sharp one from a
-     * single decrypt of the display copy, caching both for the session.
-     * A cached sharp bitmap short-circuits everything.
-     */
-    fun decodeProgressive(
-        context: Context,
-        documentId: String,
-        quickWidth: Int,
-        quickHeight: Int,
-        fullWidth: Int,
-        fullHeight: Int,
-        onDecoded: (Bitmap) -> Unit,
-    ) {
-        val fullKey = cacheKey(documentId, fullWidth, fullHeight)
-        memoryCache.get(fullKey)?.takeIf { !it.isRecycled }?.let {
-            onDecoded(it)
-            return
-        }
-        withDocumentLock(documentId) {
-            memoryCache.get(fullKey)?.takeIf { !it.isRecycled }?.let {
-                onDecoded(it)
-                return@withDocumentLock
-            }
-            val quickKey = cacheKey(documentId, quickWidth, quickHeight)
-            val cachedQuick = memoryCache.get(quickKey)?.takeIf { !it.isRecycled }
-            cachedQuick?.let(onDecoded)
-            val bytes = displayPlaintext(context, documentId)
-            try {
-                if (cachedQuick == null) {
-                    val quick = decodeBytes(bytes, quickWidth, quickHeight, allowHardware = true).second
-                    memoryCache.put(quickKey, quick)
-                    onDecoded(quick)
-                }
-                val full = decodeBytes(bytes, fullWidth, fullHeight, allowHardware = true).second
-                memoryCache.put(fullKey, full)
-                onDecoded(full)
-            } finally {
-                bytes.fill(0)
-            }
-        }
-    }
+    // Compatibility hook for MainActivity. Bitmap ownership now lives in the
+    // active viewer/stack, which clears itself on background and disposal.
+    fun trimMemory() = Unit
 
-    fun trimMemory() {
-        memoryCache.evictAll()
-    }
-
-    fun delete(context: Context, documentId: String) {
-        documentFile(context, documentId).delete()
-        AtomicStore.backupFile(documentFile(context, documentId)).delete()
-        displayFile(context, documentId).delete()
-        AtomicStore.backupFile(displayFile(context, documentId)).delete()
-        memoryCache.snapshot().keys
-            .filter { it.startsWith("$documentId:") }
-            .forEach { memoryCache.remove(it) }
-    }
+    fun delete(context: Context, documentId: String): Boolean =
+        listOf(documentFile(context, documentId), displayFile(context, documentId))
+            .map(AtomicStore::delete)
+            .all { it }
 
     fun deleteOrphans(context: Context, referencedIds: Set<String>) {
         File(context.filesDir, DIRECTORY).listFiles()?.forEach { file ->
-            val name = file.name.removeSuffix(".bak")
+            val name = file.name.removeSuffix(".bak").removeSuffix(".corrupt")
             val documentId = when {
                 name.endsWith(DISPLAY_SUFFIX) -> name.removeSuffix(DISPLAY_SUFFIX)
                 name.endsWith(SUFFIX) -> name.removeSuffix(SUFFIX)
                 else -> return@forEach
             }
-            if (documentId !in referencedIds) file.delete()
+            if (documentId !in referencedIds) {
+                if (documentId.matches(Regex("[0-9a-f]{64}"))) delete(context, documentId) else file.delete()
+            }
         }
     }
 
@@ -185,7 +125,13 @@ internal object PhotoStore {
         require(bytes.size <= MAX_PHOTO_BYTES) { "Photo is too large" }
         require(photoDocumentId(bytes) == documentId) { "Photo identifier does not match its content" }
         inspect(bytes)
-        encryptToFile(context, documentFile(context, documentId), aad(documentId), bytes)
+        encryptToFile(
+            context,
+            documentFile(context, documentId),
+            aad(documentId),
+            bytes,
+            replaceVerified = true,
+        )
         runCatching { writeDisplayCopy(context, documentId, bytes) }
     }
 
@@ -225,7 +171,10 @@ internal object PhotoStore {
     }
 
     private fun buildDisplayBytes(original: ByteArray): ByteArray {
-        val bitmap = decodeBytes(original, DISPLAY_MAX_DIMENSION, DISPLAY_MAX_DIMENSION).second
+        // BitmapFactory does not apply EXIF on API 26/27. Share review's
+        // orientation-aware bounded path so mirrored and rotated originals are
+        // displayed consistently without rewriting the encrypted original.
+        val bitmap = CapturedPhoto.decodePreview(original, DISPLAY_MAX_DIMENSION)
         return try {
             val output = ZeroableOutputStream()
             try {
@@ -244,8 +193,16 @@ internal object PhotoStore {
     internal fun inspect(bytes: ByteArray): Pair<Int, Int> {
         require(bytes.isNotEmpty() && bytes.size <= MAX_PHOTO_BYTES) { "Photo is too large" }
         require(hasSupportedHeader(bytes)) { "The selected file is not a supported image" }
-        val (dimensions, preview) = decodeBytes(bytes, 96, 96)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "The selected file is not a supported image" }
+        val (_, preview) = decodeBytes(bytes, 96, 96)
         preview.recycle()
+        val dimensions = CapturedPhoto.orientedDimensions(
+            bytes,
+            bounds.outWidth,
+            bounds.outHeight,
+        )
         require(dimensions.first in 1..MAX_DIMENSION && dimensions.second in 1..MAX_DIMENSION) {
             "Photo dimensions are unsupported"
         }
@@ -326,11 +283,19 @@ internal object PhotoStore {
         return File(File(context.filesDir, DIRECTORY), "$documentId$DISPLAY_SUFFIX")
     }
 
-    private fun encryptToFile(context: Context, file: File, aad: ByteArray, plaintext: ByteArray) {
+    private fun encryptToFile(
+        context: Context,
+        file: File,
+        aad: ByteArray,
+        plaintext: ByteArray,
+        replaceVerified: Boolean = false,
+    ) {
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.ENCRYPT_MODE, dataKey(context))
         cipher.updateAAD(aad)
-        AtomicStore.write(file, MAGIC_DEK + cipher.iv + cipher.doFinal(plaintext)).getOrThrow()
+        val encrypted = MAGIC_DEK + cipher.iv + cipher.doFinal(plaintext)
+        if (replaceVerified) AtomicStore.replaceVerified(file, encrypted).getOrThrow()
+        else AtomicStore.write(file, encrypted).getOrThrow()
     }
 
     private fun decryptFile(context: Context, file: File, aad: ByteArray): ByteArray {

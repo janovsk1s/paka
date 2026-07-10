@@ -32,6 +32,35 @@ class AtomicStoreTest {
 
         assertEquals("backup", recovered.value)
         assertTrue(recovered.fromBackup)
+        assertEquals("VALID:backup", file.readText())
+        assertEquals("truncated", AtomicStore.corruptFile(file).readText())
+    }
+
+    @Test
+    fun missingPrimaryRecoversAndPromotesBackup() = withTempDirectory { directory ->
+        val file = directory.resolve("cards.enc")
+        AtomicStore.backupFile(file).writeText("VALID:backup-only")
+
+        val recovered = AtomicStore.readWithBackup(file, ::decodeTestValue).getOrThrow()
+
+        assertEquals("backup-only", recovered.value)
+        assertTrue(recovered.fromBackup)
+        assertEquals("VALID:backup-only", file.readText())
+        assertFalse(AtomicStore.corruptFile(file).exists())
+    }
+
+    @Test
+    fun writeAfterRecoveryKeepsKnownGoodFallback() = withTempDirectory { directory ->
+        val file = directory.resolve("cards.enc")
+        file.writeText("broken primary")
+        AtomicStore.backupFile(file).writeText("VALID:known-good")
+        AtomicStore.readWithBackup(file, ::decodeTestValue).getOrThrow()
+
+        AtomicStore.write(file, "VALID:new-value".toByteArray()).getOrThrow()
+
+        assertEquals("new-value", AtomicStore.readWithBackup(file, ::decodeTestValue).getOrThrow().value)
+        assertEquals("VALID:known-good", AtomicStore.backupFile(file).readText())
+        assertFalse("corrupt evidence is removed only after a successful write", AtomicStore.corruptFile(file).exists())
     }
 
     @Test

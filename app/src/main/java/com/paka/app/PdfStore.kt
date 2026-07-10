@@ -8,6 +8,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.system.Os
 import android.system.OsConstants
@@ -58,12 +59,22 @@ internal class PdfDocumentSession private constructor(
             val width = (page.width * scale).toInt().coerceAtLeast(1)
             val height = (page.height * scale).toInt().coerceAtLeast(1)
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            // PDF pages conventionally sit on white paper, but many files do
-            // not paint that background themselves. Without this, transparent
-            // page areas disappear into Paka's black canvas.
-            bitmap.eraseColor(Color.WHITE)
-            page.render(bitmap, null, Matrix().apply { setScale(scale, scale) }, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            PdfPageBitmap(bitmap, page.width, page.height)
+            var completed = false
+            try {
+                // PDF pages conventionally sit on white paper, but many files do
+                // not paint that background themselves. Without this, transparent
+                // page areas disappear into Paka's black canvas.
+                bitmap.eraseColor(Color.WHITE)
+                page.render(
+                    bitmap,
+                    null,
+                    Matrix().apply { setScale(scale, scale) },
+                    PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY,
+                )
+                PdfPageBitmap(bitmap, page.width, page.height).also { completed = true }
+            } finally {
+                if (!completed) bitmap.recycle()
+            }
         }
     }
 
@@ -83,22 +94,27 @@ internal class PdfDocumentSession private constructor(
         require(index in 0 until pageCount)
         renderer.openPage(index).use { page ->
             val bitmap = Bitmap.createBitmap(viewportWidth, viewportHeight, Bitmap.Config.ARGB_8888)
-            val pageScale = baseScale * zoom
-            val pageX = pageLeft + translationX
-            val pageY = pageTop + translationY
-            Canvas(bitmap).drawRect(
-                pageX,
-                pageY,
-                pageX + page.width * pageScale,
-                pageY + page.height * pageScale,
-                Paint().apply { color = Color.WHITE },
-            )
-            val matrix = Matrix().apply {
-                setScale(pageScale, pageScale)
-                postTranslate(pageX, pageY)
+            var completed = false
+            try {
+                val pageScale = baseScale * zoom
+                val pageX = pageLeft + translationX
+                val pageY = pageTop + translationY
+                Canvas(bitmap).drawRect(
+                    pageX,
+                    pageY,
+                    pageX + page.width * pageScale,
+                    pageY + page.height * pageScale,
+                    Paint().apply { color = Color.WHITE },
+                )
+                val matrix = Matrix().apply {
+                    setScale(pageScale, pageScale)
+                    postTranslate(pageX, pageY)
+                }
+                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                bitmap.also { completed = true }
+            } finally {
+                if (!completed) bitmap.recycle()
             }
-            page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            bitmap
         }
     }
 
@@ -174,7 +190,10 @@ internal object PdfStore {
             }
             val file = documentFile(context, documentId)
             val created = !file.exists()
-            encryptToFile(file, documentId, bytes)
+            // The content hash and render validation above establish that the
+            // replacement is usable. Preserve any known-good backup if the
+            // current primary is corrupt or a replacement is interrupted.
+            encryptToFile(file, documentId, bytes, replaceVerified = true)
             PdfImport(documentId, pageCount, created)
         } finally {
             bytes.fill(0)
@@ -191,18 +210,18 @@ internal object PdfStore {
         }
     }
 
-    fun delete(context: Context, documentId: String) {
-        documentFile(context, documentId).delete()
-        AtomicStore.backupFile(documentFile(context, documentId)).delete()
-    }
+    fun delete(context: Context, documentId: String): Boolean =
+        AtomicStore.delete(documentFile(context, documentId))
 
     fun deleteOrphans(context: Context, referencedIds: Set<String>) {
         val directory = File(context.filesDir, DIRECTORY)
         directory.listFiles()?.forEach { file ->
-            val name = file.name.removeSuffix(".bak")
+            val name = file.name.removeSuffix(".bak").removeSuffix(".corrupt")
             if (!name.endsWith(SUFFIX)) return@forEach
             val id = name.removeSuffix(SUFFIX)
-            if (id !in referencedIds) file.delete()
+            if (id !in referencedIds) {
+                if (id.matches(Regex("[0-9a-f]{64}"))) AtomicStore.delete(documentFile(context, id)) else file.delete()
+            }
         }
     }
 
@@ -213,7 +232,32 @@ internal object PdfStore {
         require(pdfDocumentId(bytes) == documentId) { "PDF identifier does not match its content" }
         require(bytes.size <= MAX_PDF_BYTES) { "PDF is too large" }
         require(hasPdfHeader(bytes)) { "PDF header is invalid" }
-        encryptToFile(documentFile(context, documentId), documentId, bytes)
+        encryptToFile(documentFile(context, documentId), documentId, bytes, replaceVerified = true)
+    }
+
+    /** Applies the same open-and-render validation used by interactive import. */
+    suspend fun validateRestore(bytes: ByteArray, documentId: String, expectedPageCount: Int) {
+        require(pdfDocumentId(bytes) == documentId) { "PDF identifier does not match its content" }
+        require(bytes.size <= MAX_PDF_BYTES) { "PDF is too large" }
+        require(hasPdfHeader(bytes)) { "PDF header is invalid" }
+        require(expectedPageCount in 1..1_000) { "PDF page count is invalid" }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) error("PDF passes require Android 11 or newer")
+        // PdfRenderer is a platform-native service and is not implemented by
+        // the local JVM test runtime. Every real API 30+ restore still opens
+        // and renders page 1 before the transaction journal is created.
+        if (Build.FINGERPRINT != "robolectric") {
+            validateRenderable(bytes, expectedPageCount)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private suspend fun validateRenderable(bytes: ByteArray, expectedPageCount: Int) {
+        PdfDocumentSession.fromBytes(bytes).use { session ->
+            require(session.pageCount == expectedPageCount) {
+                "PDF page count does not match the backup"
+            }
+            session.renderPage(0, 320).bitmap.recycle()
+        }
     }
 
     private fun readUri(context: Context, uri: Uri): ByteArray = UriBytes.read(
@@ -243,13 +287,20 @@ internal object PdfStore {
         return File(File(context.filesDir, DIRECTORY), "$documentId$SUFFIX")
     }
 
-    private fun encryptToFile(file: File, documentId: String, plaintext: ByteArray) {
+    private fun encryptToFile(
+        file: File,
+        documentId: String,
+        plaintext: ByteArray,
+        replaceVerified: Boolean = false,
+    ) {
         require(plaintext.size <= MAX_PDF_BYTES) { "PDF is too large" }
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         cipher.updateAAD(aad(documentId))
         val ciphertext = cipher.doFinal(plaintext)
-        AtomicStore.write(file, MAGIC + cipher.iv + ciphertext).getOrThrow()
+        val encrypted = MAGIC + cipher.iv + ciphertext
+        if (replaceVerified) AtomicStore.replaceVerified(file, encrypted).getOrThrow()
+        else AtomicStore.write(file, encrypted).getOrThrow()
     }
 
     private fun decryptFile(file: File, documentId: String): ByteArray {

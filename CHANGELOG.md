@@ -2,7 +2,67 @@
 
 Notable changes to Paka are documented here.
 
-## 0.15.0 — Unreleased
+## 0.15.0 — 2026-07-11
+
+*Codename: Paperlight.*
+
+### Stable changes after Beta 3.3
+
+- Tagged-release checks now finish before the owner creates a GitHub release;
+  CI retains the unsigned comparison APK but no longer creates a bot-authored
+  draft with an inconsistent preview title.
+- About now identifies signed preview builds with the capture-preview label and
+  `versionCode`, while keeping their production package and signing identity.
+- Added production-path barcode render regression coverage across supported
+  formats, panel widths, dense binary payloads, integer module grids, and cache
+  reuse.
+- Added a per-candidate Light Phone III test-results template so hardware,
+  lifecycle, scanner, memory, and release sign-off status can be recorded
+  without treating an unfilled checklist as evidence.
+- Backup-only pass and 2FA stores now recover as writable stores. Recovery
+  promotes the known-good encrypted generation without rotating a corrupt
+  primary over it, and retains corrupt encrypted evidence until the next
+  successful save.
+- Portable restore now uses encrypted pre-restore snapshots and a durable
+  PREPARED/ROLLED_BACK/COMMITTED journal. Process or power loss rolls back before commit or
+  completes cleanup after commit before normal store loading and orphan removal;
+  terminal cleanup remains durably retryable if snapshot removal is interrupted.
+- Restore owns and clears decrypted PDF/photo arrays in the process-scoped
+  coordinator; Back and cancel are blocked while those buffers are in use.
+- Restored PDFs are opened and page 1 is rendered before any store changes on
+  API 30+, matching interactive PDF import validation.
+- Photo review, crop, display copies, and stored page geometry now agree on all
+  eight EXIF orientations, including mirrored images on Android 8/8.1. Edited
+  photos use one bounded decode and one encode; untouched imports retain their
+  original encrypted bytes.
+- The camera and torch now release before capture review, Back stays blocked
+  while plaintext work is active, and nested sensitive screens share secure
+  window ownership without clearing each other's screenshot protection.
+- Decoded identity photos are owned only by the open viewer or stack, prefetched
+  front/back there, and recycled on close or background; the pass list no longer
+  retains them through a process-global cache.
+- Data Matrix and Aztec now receive explicit quiet zones, linear formats keep
+  full per-side quiet zones, rectangular symbols retain their natural aspect
+  ratio, and DataBar is drawn directly on an integer module grid before decode
+  verification.
+- Aztec/PDF417 reject text that cannot be encoded byte-exactly as ISO-8859-1;
+  scanning now prefers their original bytes over decoder text, and GS1
+  verification preserves variable-field separators.
+- Manual barcode entry verifies against the real pass display width, and hard-cut
+  pages expose boundary-aware previous/next accessibility actions.
+- Paka now follows the first supported device language on first run, falling
+  back to English for unsupported locales. Developer settings offer an explicit,
+  persistent LTR-only choice of English, Latvian, Estonian, Lithuanian, Finnish,
+  Swedish, German, or Slovak; every menu, form, viewer state, warning, and
+  accessibility action is localized.
+- Menus and viewers now share full-slot touch targets, fixed centred top bars,
+  bounded translated labels, pinned confirmation actions, and consistent
+  loading/error/detail access without changing five-row paging or hard-cut swipes.
+- Two-sided photo passes retain their optional page caption and immediate
+  tap/swipe side changes without showing an edge scrollbar over the photo.
+- Manual entry now uses content-appropriate keyboards and stable validation
+  space; camera scanning has stronger monochrome framing, and document crop
+  rotation is an explicit action instead of a hidden tap-anywhere gesture.
 
 ### Beta 3.3 — changes since `v0.15.0-beta.3.1`
 
