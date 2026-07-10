@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">backup</string>
+    <string name="backup_export_title">export</string>
+    <string name="backup_unlock_title">unlock</string>
+    <string name="backup_restore_title">restore</string>
+    <string name="backup_passphrase_field">passphrase</string>
+    <string name="backup_repeat_field">repeat</string>
+    <string name="backup_encrypted_export">encrypted export</string>
+    <string name="backup_restore_backup">restore backup</string>
+    <string name="backup_offline_description">Backups are encrypted offline and contain all passes and 2FA secrets. External file references are not included.</string>
+    <string name="backup_new_passphrase_instructions">Use at least %1$d characters. This passphrase cannot be recovered.</string>
+    <string name="backup_photo_compatibility">This backup contains photo passes and can only be restored by Paka 0.14 or newer.</string>
+    <string name="backup_minimum_characters">%1$d+ characters</string>
+    <string name="backup_repeat_passphrase">repeat passphrase</string>
+    <string name="backup_passphrases_do_not_match">passphrases do not match</string>
+    <string name="backup_encrypting">encrypting…</string>
+    <string name="backup_save_encrypted">save encrypted backup</string>
+    <string name="backup_import_instructions">Enter the passphrase used when this backup was created.</string>
+    <string name="backup_passphrase_placeholder">backup passphrase</string>
+    <string name="backup_unlocking">unlocking…</string>
+    <string name="backup_unlock_action">unlock backup</string>
+    <string name="backup_replace_current_data">replace current data?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="one">%1$d pass</item>
+        <item quantity="other">%1$d passes</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="one">%1$d code</item>
+        <item quantity="other">%1$d codes</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="one">%1$d pass needs a newer Paka and will be dropped.</item>
+        <item quantity="other">%1$d passes need a newer Paka and will be dropped.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Current data will be replaced.</string>
+    <string name="backup_pdf_android_requirement">PDF passes in this backup require Android 11 or newer.</string>
+    <string name="backup_restoring">restoring…</string>
+    <string name="backup_restore_action">restore</string>
+    <string name="backup_cancel_restore_action">cancel restore</string>
+    <string name="backup_saved">Encrypted backup saved</string>
+    <string name="backup_save_failed">Backup could not be saved</string>
+    <string name="backup_read_failed">Backup could not be read</string>
+    <string name="backup_encrypt_failed">Backup could not be encrypted</string>
+    <string name="backup_too_large">Backup is too large</string>
+    <string name="backup_invalid_passphrase">Incorrect passphrase or invalid backup</string>
+    <string name="backup_restored">Backup restored</string>
+    <string name="backup_export_filename" translatable="false">paka-%1$s.paka</string>
+
+    <string name="detail_date_pattern">d MMM yyyy</string>
+    <string name="detail_reference_fallback">reference</string>
+    <string name="detail_delete_question">delete %1$s?</string>
+    <string name="detail_delete_action">delete</string>
+    <string name="detail_cancel_action">cancel</string>
+    <string name="detail_duplicate_pass_title">pass already added</string>
+    <string name="detail_duplicate_code_title">code already added</string>
+    <string name="detail_duplicate_match">matches %1$s</string>
+    <string name="detail_add_anyway">add anyway</string>
+    <string name="detail_discard_add_action">discard</string>
+    <string name="detail_reference_title">reference</string>
+    <string name="detail_reference_open">open</string>
+    <string name="detail_reference_replace">replace</string>
+    <string name="detail_reference_remove">remove</string>
+    <string name="detail_external_reference_file">file · %1$s</string>
+    <string name="detail_external_reference_warning">External file contents are not encrypted or backed up by Paka.</string>
+    <string name="detail_reference_access_many_failed">Paka could not keep access to those files</string>
+    <string name="detail_reference_access_one_failed">Paka could not keep access to that file</string>
+    <string name="detail_file_picker_failed">File picker could not be opened</string>
+    <string name="detail_file_open_failed">No app can open this file</string>
+    <string name="detail_name_field">name</string>
+    <string name="detail_stack_field">stack</string>
+    <string name="detail_notes_field">notes</string>
+    <string name="detail_title">details</string>
+    <string name="detail_none">none</string>
+    <string name="detail_sort_action">sort</string>
+    <string name="detail_sort_stack_description">Sort passes in this stack</string>
+    <string name="detail_format_label">format</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="one">PDF · %1$d page</item>
+        <item quantity="other">PDF · %1$d pages</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="one">photos · %1$d side</item>
+        <item quantity="other">photos · %1$d sides</item>
+    </plurals>
+    <string name="detail_added_label">added</string>
+    <string name="detail_code_label">code</string>
+    <string name="detail_document_label">document</string>
+    <string name="detail_photos_label">photos</string>
+    <string name="detail_encrypted_document">encrypted document · %1$s</string>
+    <string name="detail_encrypted_photos">encrypted photos · %1$s</string>
+    <string name="detail_add_note">add a note</string>
+    <string name="detail_reference_one">reference 1</string>
+    <string name="detail_reference_two">reference 2</string>
+    <string name="detail_references_description">Select up to two files at once. References stay external and are not encrypted or backed up by Paka.</string>
+    <string name="detail_save_action">save</string>
+</resources>

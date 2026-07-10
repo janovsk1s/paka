@@ -19,54 +19,66 @@ internal object CardStore {
     private val AAD = "paka-cards-v1".toByteArray(Charsets.UTF_8)
 
     fun load(context: Context): LoadOutcome<List<Card>> {
-        val encrypted = File(context.filesDir, FILE)
-        if (encrypted.exists()) return loadEncrypted(encrypted)
+        val encrypted = storageFile(context)
+        if (encrypted.exists() || AtomicStore.backupFile(encrypted).exists()) return loadEncrypted(context, encrypted)
 
         val legacy = File(context.filesDir, LEGACY_FILE)
         if (!legacy.exists() && !AtomicStore.backupFile(legacy).exists()) return LoadOutcome(emptyList())
-        val legacyLoad = loadLegacy(legacy)
+        val legacyLoad = loadLegacy(context, legacy)
         if (!legacyLoad.writable) return legacyLoad
 
         return if (save(context, legacyLoad.value).isSuccess) {
             erasePlaintext(legacy)
             erasePlaintext(AtomicStore.backupFile(legacy))
+            erasePlaintext(AtomicStore.corruptFile(legacy))
             LoadOutcome(
                 value = legacyLoad.value,
-                warning = listOfNotNull(legacyLoad.warning, "Passes were migrated to encrypted storage.").joinToString(" "),
+                warning = listOfNotNull(
+                    legacyLoad.warning,
+                    context.getString(R.string.store_passes_migrated),
+                ).joinToString(" "),
             )
         } else {
             LoadOutcome(
                 value = legacyLoad.value,
-                warning = "Passes were read but could not be encrypted. Plaintext was preserved and editing is disabled.",
+                warning = context.getString(R.string.store_passes_encrypt_failed),
                 writable = false,
             )
         }
     }
 
-    private fun loadEncrypted(file: File): LoadOutcome<List<Card>> {
+    private fun loadEncrypted(context: Context, file: File): LoadOutcome<List<Card>> {
         AtomicStore.readWithBackup(file, ::decrypt).getOrNull()?.let { recovered ->
             return LoadOutcome(
                 value = recovered.value,
-                warning = if (recovered.fromBackup) "Passes were recovered from the previous encrypted backup." else null,
+                warning = if (recovered.fromBackup) {
+                    context.getString(R.string.store_passes_encrypted_recovered)
+                } else {
+                    null
+                },
             )
         }
         return LoadOutcome(
             value = emptyList(),
-            warning = "Passes could not be decrypted. The encrypted file was preserved.",
+            warning = context.getString(R.string.store_passes_decrypt_failed),
             writable = false,
         )
     }
 
-    private fun loadLegacy(file: File): LoadOutcome<List<Card>> {
+    private fun loadLegacy(context: Context, file: File): LoadOutcome<List<Card>> {
         AtomicStore.readWithBackup(file) { parse(it.toString(Charsets.UTF_8)) }.getOrNull()?.let { recovered ->
             return LoadOutcome(
                 value = recovered.value,
-                warning = if (recovered.fromBackup) "Passes were recovered from the previous plaintext backup." else null,
+                warning = if (recovered.fromBackup) {
+                    context.getString(R.string.store_passes_plaintext_recovered)
+                } else {
+                    null
+                },
             )
         }
         return LoadOutcome(
             value = emptyList(),
-            warning = "Passes could not be read. The plaintext file was preserved.",
+            warning = context.getString(R.string.store_passes_read_failed),
             writable = false,
         )
     }
@@ -78,11 +90,13 @@ internal object CardStore {
             cipher.init(Cipher.ENCRYPT_MODE, secretKey())
             cipher.updateAAD(AAD)
             val cipherText = cipher.doFinal(plaintext)
-            AtomicStore.write(File(context.filesDir, FILE), MAGIC + cipher.iv + cipherText).getOrThrow()
+            AtomicStore.write(storageFile(context), MAGIC + cipher.iv + cipherText).getOrThrow()
         } finally {
             plaintext.fill(0)
         }
     }
+
+    internal fun storageFile(context: Context): File = File(context.filesDir, FILE)
 
     private fun decrypt(blob: ByteArray): List<Card> {
         require(blob.size > MAGIC.size + 12 + 16) { "Encrypted pass store is truncated" }

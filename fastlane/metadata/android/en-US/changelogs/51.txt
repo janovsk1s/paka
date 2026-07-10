@@ -1,0 +1,1 @@
+Rendered barcodes and QR codes now snap to an exact whole-module pixel grid, so every module is an identical width with no leftover quiet-zone pixels or sub-pixel draw drift; payload verification is unchanged. Raised the internal render cap so a future enlarged code view can be drawn at native resolution.

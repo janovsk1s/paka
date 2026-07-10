@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="language_name_english" translatable="false">English</string>
+    <string name="language_name_latvian" translatable="false">latviešu</string>
+    <string name="language_name_estonian" translatable="false">eesti</string>
+    <string name="language_name_lithuanian" translatable="false">lietuvių</string>
+    <string name="language_name_finnish" translatable="false">suomi</string>
+    <string name="language_name_swedish" translatable="false">svenska</string>
+    <string name="language_name_german" translatable="false">Deutsch</string>
+    <string name="language_name_slovak" translatable="false">slovenčina</string>
+
+    <string name="core_on">on</string>
+    <string name="core_off">off</string>
+    <string name="core_back">Back</string>
+    <string name="core_open_details">Open details</string>
+    <string name="core_settings">Settings</string>
+    <string name="core_add">Add</string>
+    <string name="core_manual_entry">Manual entry</string>
+    <string name="core_cards">Passes</string>
+    <string name="core_2fa_codes">2FA codes</string>
+    <string name="core_show_passes">Show passes</string>
+    <string name="core_show_2fa_codes">Show 2FA codes</string>
+    <string name="core_pass">pass</string>
+    <string name="core_code">code</string>
+    <string name="core_name">name</string>
+
+    <string name="settings_title">settings</string>
+    <string name="settings_reorder">reorder</string>
+    <string name="settings_reorder_passes">reorder passes</string>
+    <string name="settings_reorder_codes">reorder 2FA codes</string>
+    <string name="settings_backup">backup</string>
+    <string name="settings_vibration">vibration</string>
+    <string name="settings_about">about</string>
+    <string name="about_title">about</string>
+    <string name="about_description">Latvian for “package”. Saves passes and carries 2FA codes in a light way. Long-presses may reveal more options.</string>
+    <string name="about_byline">From a Latvian in Vienna.</string>
+    <string name="developer_title">developer</string>
+    <string name="developer_text_size">text size</string>
+    <string name="developer_text_size_value">%1$d sp</string>
+    <string name="developer_sample" translatable="false">KlimaTicket</string>
+    <string name="developer_text_smaller">smaller</string>
+    <string name="developer_text_larger">larger</string>
+    <string name="developer_language">language</string>
+    <string name="developer_return_home">return home</string>
+    <string name="developer_auto_light">auto light</string>
+    <string name="developer_max_brightness">max brightness</string>
+    <string name="developer_page_numbers">page numbers</string>
+    <string name="developer_official_font">official font</string>
+    <string name="developer_light_gear">light gear</string>
+    <string name="developer_demo_mode">demo mode</string>
+    <string name="language_title">language</string>
+    <string name="language_selected">selected</string>
+    <string name="reorder_title">reorder</string>
+    <string name="reorder_passes_title">reorder passes</string>
+    <string name="reorder_codes_title">reorder 2FA codes</string>
+    <string name="reorder_stack_title">reorder stack</string>
+    <string name="reorder_empty">nothing to reorder</string>
+    <string name="reorder_move_up">Move %1$s up</string>
+    <string name="reorder_move_down">Move %1$s down</string>
+
+    <string name="camera_start_failed">Camera could not be started</string>
+    <string name="camera_unavailable">Camera is unavailable</string>
+    <string name="camera_light_auto">light auto</string>
+    <string name="camera_light_on">light on</string>
+    <string name="camera_light">light</string>
+    <string name="camera_turn_light_off">Turn camera light off</string>
+    <string name="camera_turn_light_on">Turn camera light on</string>
+    <string name="camera_low_light">low light · use light</string>
+    <string name="camera_tap_to_focus">tap to focus</string>
+
+    <string name="restore_rolled_back_notice">An interrupted restore was rolled back safely.</string>
+    <string name="restore_completed_notice">An interrupted restore was completed safely.</string>
+    <string name="restore_failed_notice">An interrupted restore could not be recovered. Editing is disabled.</string>
+    <string name="cards_read_only">Passes are read-only until storage is recovered</string>
+    <string name="cards_queue_failed">Passes could not be queued for saving</string>
+    <string name="cards_save_failed">Passes could not be saved</string>
+    <string name="codes_read_only">2FA accounts are read-only until storage is recovered</string>
+    <string name="codes_queue_failed">2FA accounts could not be queued for saving</string>
+    <string name="codes_save_failed">2FA accounts could not be saved</string>
+    <string name="scan_camera_permission">Camera permission is needed to scan codes</string>
+    <string name="demo_enabled">Temporary demo data enabled</string>
+    <string name="demo_disabled">Real data restored</string>
+    <string name="restore_storage_unhealthy">Storage must be healthy before restoring</string>
+    <string name="restore_failed">Backup could not be restored</string>
+    <string name="restore_interrupted">Restore was interrupted; reopen Paka to verify data</string>
+    <string name="storage_read_only_notice">Storage is read-only until it is recovered.</string>
+    <string name="backup_demo_unavailable">Backup is unavailable in demo mode</string>
+    <string name="scan_not_2fa">Not a 2FA QR code</string>
+    <string name="home_demo_title">Paka · demo</string>
+    <string name="home_add_card_hint">tap + to add a pass</string>
+    <string name="home_add_code_hint">tap + to add a 2FA code</string>
+    <string name="clipboard_2fa_label">2FA code</string>
+    <string name="clipboard_copied">Copied</string>
+    <string name="status_opening_paka">Opening…</string>
+
+    <string name="onboarding_title">Welcome</string>
+    <string name="onboarding_summary">Passes and 2FA codes, encrypted on this phone.</string>
+    <string name="onboarding_scan">Tap + to scan. Hold + for manual entry.</string>
+    <string name="onboarding_privacy">Swipe pages. Hold an open pass for details.</string>
+    <string name="onboarding_start">start</string>
+
+    <string name="store_passes_migrated">Passes were migrated to encrypted storage.</string>
+    <string name="store_passes_encrypt_failed">Passes were read but could not be encrypted. Plaintext was preserved and editing is disabled.</string>
+    <string name="store_passes_encrypted_recovered">Passes were recovered from the previous encrypted backup.</string>
+    <string name="store_passes_decrypt_failed">Passes could not be decrypted. The encrypted file was preserved.</string>
+    <string name="store_passes_plaintext_recovered">Passes were recovered from the previous plaintext backup.</string>
+    <string name="store_passes_read_failed">Passes could not be read. The plaintext file was preserved.</string>
+    <string name="store_codes_recovered">2FA accounts were recovered from the previous backup.</string>
+    <string name="store_codes_decrypt_failed">2FA accounts could not be decrypted. The encrypted file was preserved.</string>
+
+    <string name="validation_required">Code content is required</string>
+    <string name="validation_digits_only">%1$s accepts digits only</string>
+    <string name="validation_length">%1$s requires %2$d or %3$d digits</string>
+    <string name="validation_itf_even">ITF requires an even number of digits</string>
+    <string name="validation_code39">Code 39 contains unsupported characters</string>
+    <string name="validation_codabar">Codabar must start and end with A, B, C, or D</string>
+    <string name="validation_latin1">%1$s content must be ISO-8859-1</string>
+    <string name="validation_name_required">Name is required</string>
+    <string name="validation_totp_digits">Codes must use 6 or 8 digits</string>
+    <string name="validation_totp_period">Period must be between 1 and 300 seconds</string>
+    <string name="validation_totp_algorithm">Unsupported algorithm</string>
+    <string name="validation_totp_secret">Secret is not valid Base32</string>
+    <string name="unknown_issuer">Unknown</string>
+
+    <string name="demo_museum">Museum</string>
+    <string name="demo_library">Library</string>
+    <string name="demo_day_ticket">Day ticket</string>
+    <string name="demo_night_ticket">Night ticket</string>
+    <string name="demo_transit">Transit</string>
+    <string name="demo_event">Event</string>
+    <string name="demo_rewards">Rewards</string>
+    <string name="demo_parcel">Parcel</string>
+    <string name="demo_northstar">Northstar</string>
+    <string name="demo_workshop">Workshop</string>
+    <string name="demo_archive">Archive</string>
+    <string name="demo_studio">Studio</string>
+    <string name="demo_cloud">Cloud</string>
+    <string name="demo_forum">Forum</string>
+</resources>

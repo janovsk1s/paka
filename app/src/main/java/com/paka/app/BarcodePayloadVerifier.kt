@@ -6,6 +6,7 @@ import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import uk.org.okapibarcode.util.Gs1
 
 /** Decodes rendered pixels again so Paka never presents an unchecked symbol. */
 internal object BarcodePayloadVerifier {
@@ -22,8 +23,13 @@ internal object BarcodePayloadVerifier {
         }.getOrDefault(false)
 
     internal fun payloadMatches(format: PakaFormat, expected: String, decoded: String): Boolean = when (format) {
-        PakaFormat.AZTEC, PakaFormat.PDF417 ->
-            decoded.toByteArray(Charsets.ISO_8859_1).contentEquals(expected.toByteArray(Charsets.ISO_8859_1))
+        PakaFormat.AZTEC, PakaFormat.PDF417 -> {
+            val expectedEncoder = Charsets.ISO_8859_1.newEncoder()
+            val decodedEncoder = Charsets.ISO_8859_1.newEncoder()
+            expectedEncoder.canEncode(expected) && decodedEncoder.canEncode(decoded) &&
+                decoded.toByteArray(Charsets.ISO_8859_1)
+                    .contentEquals(expected.toByteArray(Charsets.ISO_8859_1))
+        }
 
         PakaFormat.EAN13, PakaFormat.EAN8, PakaFormat.UPCA, PakaFormat.UPCE ->
             decoded == expected ||
@@ -32,13 +38,24 @@ internal object BarcodePayloadVerifier {
         PakaFormat.CODABAR -> decoded == expected ||
             (expected.length >= 2 && decoded == expected.substring(1, expected.lastIndex))
 
-        PakaFormat.DATABAR_EXPANDED -> canonicalGs1(decoded) == canonicalGs1(expected)
+        PakaFormat.DATABAR_EXPANDED -> runCatching {
+            canonicalGs1(decoded) == canonicalGs1(expected)
+        }.getOrDefault(false)
         else -> decoded == expected
     }
 
-    private fun canonicalGs1(value: String): String = value
-        .removePrefix("]e0")
-        .filterNot { it == '(' || it == ')' || it == '[' || it == ']' || it == '\u001D' }
+    private fun canonicalGs1(value: String): String {
+        val clean = value.removePrefix("]e0")
+        val bracketed = when {
+            clean.contains('[') -> clean
+            clean.contains('(') -> clean.replace(Regex("\\((\\d{2,4})\\)"), "[$1]")
+            else -> return clean
+        }
+        // Okapi's GS1 table validates every AI and inserts a group separator
+        // only after variable-length fields. Keeping those boundaries prevents
+        // two different AI/value sequences from comparing equal.
+        return Gs1.verify(bracketed, "\u001D")
+    }
 
     private fun possibleFormats(format: PakaFormat): List<BarcodeFormat> = when (format) {
         PakaFormat.QR -> listOf(BarcodeFormat.QR_CODE)

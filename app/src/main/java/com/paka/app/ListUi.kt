@@ -22,31 +22,71 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import kotlin.math.min
 
+private val TopBarSideLaneWidth = 64.dp
+
 @Composable
-internal fun SimpleTopBar(title: String, onBack: () -> Unit, trailing: String? = null) {
+internal fun SimpleTopBar(
+    title: String,
+    onBack: () -> Unit,
+    trailing: String? = null,
+    backEnabled: Boolean = true,
+    capitalizeTitle: Boolean = true,
+) {
+    val displayedTitle = if (capitalizeTitle) title.replaceFirstChar { it.uppercase() } else title
     Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
-        BackArrow(modifier = Modifier.align(Alignment.CenterStart).offset(x = (-30).dp), onBack = onBack)
-        Text(title.replaceFirstChar { it.uppercase() }, color = White, fontSize = 16.sp, fontWeight = FontWeight.Normal)
+        BackArrow(
+            modifier = Modifier.align(Alignment.CenterStart).offset(x = (-30).dp),
+            enabled = backEnabled,
+            onBack = onBack,
+        )
+        Text(
+            text = displayedTitle,
+            color = White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = TopBarSideLaneWidth),
+        )
         if (trailing != null) {
-            Text(trailing, color = White, fontSize = 14.sp, modifier = Modifier.align(Alignment.CenterEnd))
+            Text(
+                text = trailing,
+                color = White,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                textAlign = TextAlign.End,
+                modifier = Modifier.align(Alignment.CenterEnd).width(TopBarSideLaneWidth),
+            )
         }
     }
 }
@@ -124,6 +164,37 @@ private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
     }
 }
 
+/**
+ * Single-line label that steps its font size down until the text fits,
+ * instead of ellipsizing. Longer translations (Latvian, German, …) routinely
+ * overflow the widths the English labels were designed for.
+ */
+@Composable
+internal fun AutoFitText(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    maxFontSize: TextUnit = 30.sp,
+    minFontSize: TextUnit = 18.sp,
+    fontWeight: FontWeight = FontWeight.Normal,
+) {
+    var fontSize by remember(text, maxFontSize) { mutableFloatStateOf(maxFontSize.value) }
+    Text(
+        text,
+        color = color,
+        fontSize = fontSize.sp,
+        fontWeight = fontWeight,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        onTextLayout = { result ->
+            if (result.hasVisualOverflow && fontSize > minFontSize.value) {
+                fontSize = (fontSize - 2f).coerceAtLeast(minFontSize.value)
+            }
+        },
+        modifier = modifier,
+    )
+}
+
 private const val ITEMS_PER_PAGE = 5
 
 /** Five fixed row slots per page. Swipes replace the page instantly on release. */
@@ -165,6 +236,7 @@ internal fun HardCutPager(
     indicatorOffset: Dp = 18.dp,
     showIndicator: Boolean = true,
     gesturesEnabled: Boolean = true,
+    contentKind: PagerContentKind = PagerContentKind.PAGE,
     onPageChange: ((Int) -> Unit)? = null,
     content: @Composable (Int, () -> Unit) -> Unit,
 ) {
@@ -173,6 +245,21 @@ internal fun HardCutPager(
     val haptics = LocalHapticFeedback.current
     var page by remember { mutableIntStateOf(0) }
     val currentPage = page.coerceIn(0, pageCount - 1)
+    val pagePosition = when (contentKind) {
+        PagerContentKind.PAGE -> stringResource(R.string.accessibility_page_position, currentPage + 1, pageCount)
+        PagerContentKind.PASS -> stringResource(R.string.accessibility_pass_position, currentPage + 1, pageCount)
+        PagerContentKind.SIDE -> stringResource(R.string.accessibility_side_position, currentPage + 1, pageCount)
+    }
+    val previousPage = when (contentKind) {
+        PagerContentKind.PAGE -> stringResource(R.string.accessibility_previous_page)
+        PagerContentKind.PASS -> stringResource(R.string.accessibility_previous_pass)
+        PagerContentKind.SIDE -> stringResource(R.string.accessibility_previous_side)
+    }
+    val nextPage = when (contentKind) {
+        PagerContentKind.PAGE -> stringResource(R.string.accessibility_next_page)
+        PagerContentKind.PASS -> stringResource(R.string.accessibility_next_pass)
+        PagerContentKind.SIDE -> stringResource(R.string.accessibility_next_side)
+    }
 
     LaunchedEffect(pageCount) {
         if (page >= pageCount) page = pageCount - 1
@@ -181,8 +268,36 @@ internal fun HardCutPager(
         onPageChange?.invoke(currentPage)
     }
 
+    val pageSemantics = if (gesturesEnabled && pageCount > 1) {
+        Modifier.semantics {
+            stateDescription = pagePosition
+            customActions = buildList {
+                if (currentPage > 0) {
+                    add(
+                        CustomAccessibilityAction(previousPage) {
+                            page = currentPage - 1
+                            performPakaHaptic(context, haptics)
+                            true
+                        },
+                    )
+                }
+                if (currentPage < pageCount - 1) {
+                    add(
+                        CustomAccessibilityAction(nextPage) {
+                            page = currentPage + 1
+                            performPakaHaptic(context, haptics)
+                            true
+                        },
+                    )
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
+
     Box(
-        modifier = modifier.fillMaxSize().then(
+        modifier = modifier.fillMaxSize().then(pageSemantics).then(
             if (gesturesEnabled) Modifier.pointerInput(pageCount, currentPage) {
                 val threshold = 24.dp.toPx()
                 var dragDistance = 0f

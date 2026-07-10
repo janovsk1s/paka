@@ -3,12 +3,15 @@ package com.paka.app
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -23,8 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,11 +40,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private enum class ManageGlyph { UP, DOWN }
+private enum class SettingsAction { REORDER, BACKUP, VIBRATION, ABOUT }
+private enum class DeveloperItem {
+    TEXT_SIZE, LANGUAGE, RETURN_HOME, AUTO_LIGHT,
+    MAX_BRIGHTNESS, PAGE_NUMBERS, OFFICIAL_FONT, LIGHT_GEAR, DEMO_MODE,
+}
+private enum class TextSizeItem { SAMPLE, SMALLER, LARGER }
+
+internal enum class DeveloperRoute { MENU, TEXT_SIZE, LANGUAGE }
+internal enum class ManageKind { PASSES, CODES, STACK }
 
 internal data class ManageRow(val id: String, val name: String)
 
 @Composable
 internal fun SettingsScreen(
+    manageKind: ManageKind,
     onReorder: () -> Unit,
     onBackup: () -> Unit,
     vibrationEnabled: Boolean,
@@ -48,22 +66,37 @@ internal fun SettingsScreen(
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("settings", onBack)
+        SimpleTopBar(stringResource(R.string.settings_title), onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            PagedList(listOf("reorder", "backup", "vibration", "about")) { item ->
+            PagedList(SettingsAction.entries) { item ->
                 SettingsItem(
-                    label = item,
-                    trailing = if (item == "vibration") if (vibrationEnabled) "on" else "off" else null,
+                    label = when (item) {
+                        SettingsAction.REORDER -> stringResource(
+                            if (manageKind == ManageKind.CODES) {
+                                R.string.settings_reorder_codes
+                            } else {
+                                R.string.settings_reorder_passes
+                            },
+                        )
+                        SettingsAction.BACKUP -> stringResource(R.string.settings_backup)
+                        SettingsAction.VIBRATION -> stringResource(R.string.settings_vibration)
+                        SettingsAction.ABOUT -> stringResource(R.string.settings_about)
+                    },
+                    trailing = if (item == SettingsAction.VIBRATION) {
+                        stringResource(if (vibrationEnabled) R.string.core_on else R.string.core_off)
+                    } else {
+                        null
+                    },
                     onClick = {
                         when (item) {
-                            "reorder" -> onReorder()
-                            "backup" -> onBackup()
-                            "vibration" -> {
+                            SettingsAction.REORDER -> onReorder()
+                            SettingsAction.BACKUP -> onBackup()
+                            SettingsAction.VIBRATION -> {
                                 val enabled = !vibrationEnabled
                                 onVibration(enabled)
                                 if (enabled) performPakaHaptic(context, haptics)
                             }
-                            else -> onAbout()
+                            SettingsAction.ABOUT -> onAbout()
                         }
                     },
                 )
@@ -76,53 +109,74 @@ internal fun SettingsScreen(
 internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
-    val hiddenDeveloperTap = {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val hiddenDeveloperTap: () -> Unit = {
         val now = System.currentTimeMillis()
         taps = if (now - lastTap < 600) taps + 1 else 1
         lastTap = now
         if (taps >= 3) {
             taps = 0
+            performPakaHaptic(context, haptics)
             onDev()
         }
     }
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("about", onBack)
+        SimpleTopBar(stringResource(R.string.about_title), onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            Column(modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = 14.dp, bottom = 8.dp)) {
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().then(tapModifier(hiddenDeveloperTap)),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+            ScrollList(topPadding = 20.dp, spacing = 36.dp) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { hiddenDeveloperTap() })
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.app_name),
+                        color = White,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 1,
+                    )
+                    // The name measures first; the version column takes the rest and
+                    // wraps its long channel label instead of squeezing the name.
+                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
                         Text(
-                            "Paka",
-                            color = White,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            "v${BuildConfig.VERSION_NAME}",
+                            "v${BuildConfig.VERSION_NAME} · ${BuildConfig.VERSION_CODE}",
                             color = Grey,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Light,
+                            textAlign = TextAlign.End,
                         )
+                        if (BuildConfig.RELEASE_CHANNEL_LABEL.isNotBlank()) {
+                            Text(
+                                BuildConfig.RELEASE_CHANNEL_LABEL,
+                                color = Grey,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Light,
+                                textAlign = TextAlign.End,
+                            )
+                        }
                     }
                 }
-                Box(Modifier.weight(3f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                Text(
+                    stringResource(R.string.about_description),
+                    color = White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Normal,
+                )
+                Column {
                     Text(
-                        "Latvian for “package”. Saves passes and carries 2FA codes in a light way. Long-presses may reveal more options.",
+                        stringResource(R.string.about_byline),
                         color = White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Normal,
                     )
-                }
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                    Column {
-                        Text("From a Latvian in Vienna.", color = White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
-                        Text("@janovsk1s", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
-                    }
+                    Text("@janovsk1s", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
                 }
             }
         }
@@ -130,12 +184,23 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
 }
 
 @Composable
-internal fun SettingsItem(label: String, trailing: String? = null, onClick: () -> Unit) {
+internal fun SettingsItem(label: String, trailing: String? = null, onClick: (() -> Unit)?) {
     Row(
-        modifier = Modifier.fillMaxWidth().then(tapModifier(onClick)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight()
+            .then(
+                onClick?.let { action ->
+                    tapModifier(onClick = action, clickLabel = label)
+                } ?: Modifier,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal, modifier = Modifier.weight(1f))
+        AutoFitText(
+            label,
+            color = if (onClick == null) Grey else White,
+            modifier = Modifier.weight(1f),
+        )
         if (trailing != null) Text(trailing, color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
     }
 }
@@ -144,6 +209,8 @@ internal fun SettingsItem(label: String, trailing: String? = null, onClick: () -
 internal fun DevScreen(
     textSize: Float,
     onTextSize: (Float) -> Unit,
+    language: AppLanguage,
+    onLanguage: (AppLanguage) -> Unit,
     returnHomeEnabled: Boolean,
     onReturnHome: (Boolean) -> Unit,
     autoLightEnabled: Boolean,
@@ -152,68 +219,114 @@ internal fun DevScreen(
     onMaxCodeBrightness: (Boolean) -> Unit,
     pageNumbersEnabled: Boolean,
     onPageNumbers: (Boolean) -> Unit,
+    officialFontEnabled: Boolean,
+    onOfficialFont: (Boolean) -> Unit,
+    lightGearEnabled: Boolean,
+    onLightGear: (Boolean) -> Unit,
     demoModeEnabled: Boolean,
     onDemoMode: (Boolean) -> Unit,
+    initialRoute: DeveloperRoute = DeveloperRoute.MENU,
     onBack: () -> Unit,
 ) {
-    BackHandler { onBack() }
+    var route by remember(initialRoute) { mutableStateOf(initialRoute) }
+    val navigateBack = { if (route == DeveloperRoute.MENU) onBack() else route = DeveloperRoute.MENU }
+    BackHandler { navigateBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("developer", onBack)
+        SimpleTopBar(
+            when (route) {
+                DeveloperRoute.MENU -> stringResource(R.string.developer_title)
+                DeveloperRoute.TEXT_SIZE -> stringResource(R.string.developer_text_size)
+                DeveloperRoute.LANGUAGE -> stringResource(R.string.language_title)
+            },
+            navigateBack,
+        )
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            PagedList(listOf(0, 1, 2, 3, 4, 5, 6, 7)) { item ->
-                when (item) {
-                    0 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("text size", color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light, modifier = Modifier.weight(1f))
-                        Text("${textSize.toInt()} sp", color = White, fontSize = 18.sp, fontWeight = FontWeight.Normal)
-                    }
-                    1 -> Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "−",
-                            color = White,
-                            fontSize = 30.sp,
-                            textAlign = TextAlign.Start,
-                            modifier = Modifier.weight(1f).then(tapModifier { onTextSize((textSize - 1f).coerceAtLeast(16f)) }),
+            when (route) {
+                DeveloperRoute.MENU -> PagedList(DeveloperItem.entries) { item ->
+                    val enabled = stringResource(R.string.core_on)
+                    val disabled = stringResource(R.string.core_off)
+                    SettingsItem(
+                        label = when (item) {
+                            DeveloperItem.TEXT_SIZE -> stringResource(R.string.developer_text_size)
+                            DeveloperItem.LANGUAGE -> stringResource(R.string.developer_language)
+                            DeveloperItem.RETURN_HOME -> stringResource(R.string.developer_return_home)
+                            DeveloperItem.AUTO_LIGHT -> stringResource(R.string.developer_auto_light)
+                            DeveloperItem.MAX_BRIGHTNESS -> stringResource(R.string.developer_max_brightness)
+                            DeveloperItem.PAGE_NUMBERS -> stringResource(R.string.developer_page_numbers)
+                            DeveloperItem.OFFICIAL_FONT -> stringResource(R.string.developer_official_font)
+                            DeveloperItem.LIGHT_GEAR -> stringResource(R.string.developer_light_gear)
+                            DeveloperItem.DEMO_MODE -> stringResource(R.string.developer_demo_mode)
+                        },
+                        trailing = when (item) {
+                            DeveloperItem.TEXT_SIZE -> stringResource(
+                                R.string.developer_text_size_value,
+                                textSize.toInt(),
+                            )
+                            DeveloperItem.LANGUAGE -> stringResource(language.displayNameRes)
+                            DeveloperItem.RETURN_HOME -> if (returnHomeEnabled) enabled else disabled
+                            DeveloperItem.AUTO_LIGHT -> if (autoLightEnabled) enabled else disabled
+                            DeveloperItem.MAX_BRIGHTNESS -> if (maxCodeBrightnessEnabled) enabled else disabled
+                            DeveloperItem.PAGE_NUMBERS -> if (pageNumbersEnabled) enabled else disabled
+                            DeveloperItem.OFFICIAL_FONT -> if (officialFontEnabled) enabled else disabled
+                            DeveloperItem.LIGHT_GEAR -> if (lightGearEnabled) enabled else disabled
+                            DeveloperItem.DEMO_MODE -> if (demoModeEnabled) enabled else disabled
+                        },
+                        onClick = {
+                            when (item) {
+                                DeveloperItem.TEXT_SIZE -> route = DeveloperRoute.TEXT_SIZE
+                                DeveloperItem.LANGUAGE -> route = DeveloperRoute.LANGUAGE
+                                DeveloperItem.RETURN_HOME -> onReturnHome(!returnHomeEnabled)
+                                DeveloperItem.AUTO_LIGHT -> onAutoLight(!autoLightEnabled)
+                                DeveloperItem.MAX_BRIGHTNESS -> onMaxCodeBrightness(!maxCodeBrightnessEnabled)
+                                DeveloperItem.PAGE_NUMBERS -> onPageNumbers(!pageNumbersEnabled)
+                                DeveloperItem.OFFICIAL_FONT -> onOfficialFont(!officialFontEnabled)
+                                DeveloperItem.LIGHT_GEAR -> onLightGear(!lightGearEnabled)
+                                DeveloperItem.DEMO_MODE -> onDemoMode(!demoModeEnabled)
+                            }
+                        },
+                    )
+                }
+                DeveloperRoute.TEXT_SIZE -> PagedList(TextSizeItem.entries) { item ->
+                    when (item) {
+                        TextSizeItem.SAMPLE -> Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                stringResource(R.string.developer_sample),
+                                color = White,
+                                fontSize = textSize.sp,
+                                fontWeight = FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                stringResource(R.string.developer_text_size_value, textSize.toInt()),
+                                color = Grey,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Light,
+                            )
+                        }
+                        TextSizeItem.SMALLER -> SettingsItem(
+                            label = stringResource(R.string.developer_text_smaller),
+                            onClick = if (textSize > Prefs.MIN_TEXT_SIZE) {
+                                { onTextSize((textSize - 1f).coerceAtLeast(Prefs.MIN_TEXT_SIZE)) }
+                            } else null,
                         )
-                        Text(
-                            "+",
-                            color = White,
-                            fontSize = 30.sp,
-                            textAlign = TextAlign.End,
-                            modifier = Modifier.weight(1f).then(tapModifier { onTextSize((textSize + 1f).coerceAtMost(64f)) }),
+                        TextSizeItem.LARGER -> SettingsItem(
+                            label = stringResource(R.string.developer_text_larger),
+                            onClick = if (textSize < Prefs.MAX_TEXT_SIZE) {
+                                { onTextSize((textSize + 1f).coerceAtMost(Prefs.MAX_TEXT_SIZE)) }
+                            } else null,
                         )
                     }
-                    2 -> Text(
-                        "KlimaTicket",
-                        color = White,
-                        fontSize = textSize.sp,
-                        fontWeight = FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    3 -> SettingsItem(
-                        label = "return home",
-                        trailing = if (returnHomeEnabled) "on" else "off",
-                        onClick = { onReturnHome(!returnHomeEnabled) },
-                    )
-                    4 -> SettingsItem(
-                        label = "auto light",
-                        trailing = if (autoLightEnabled) "on" else "off",
-                        onClick = { onAutoLight(!autoLightEnabled) },
-                    )
-                    5 -> SettingsItem(
-                        label = "max brightness",
-                        trailing = if (maxCodeBrightnessEnabled) "on" else "off",
-                        onClick = { onMaxCodeBrightness(!maxCodeBrightnessEnabled) },
-                    )
-                    6 -> SettingsItem(
-                        label = "page numbers",
-                        trailing = if (pageNumbersEnabled) "on" else "off",
-                        onClick = { onPageNumbers(!pageNumbersEnabled) },
-                    )
-                    else -> SettingsItem(
-                        label = "demo mode",
-                        trailing = if (demoModeEnabled) "on" else "off",
-                        onClick = { onDemoMode(!demoModeEnabled) },
+                }
+                DeveloperRoute.LANGUAGE -> PagedList(AppLanguage.entries) { item ->
+                    SettingsItem(
+                        label = stringResource(item.displayNameRes),
+                        trailing = if (item == language) stringResource(R.string.language_selected) else null,
+                        onClick = if (item == language) null else { { onLanguage(item) } },
                     )
                 }
             }
@@ -224,17 +337,27 @@ internal fun DevScreen(
 @Composable
 internal fun ManageScreen(
     rows: List<ManageRow>,
+    kind: ManageKind = ManageKind.STACK,
     onUp: (String) -> Unit,
     onDown: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
-        SimpleTopBar("reorder", onBack)
-        PagedList(rows, endPadding = 0.dp) { row ->
+        val title = stringResource(
+            when (kind) {
+                ManageKind.PASSES -> R.string.reorder_passes_title
+                ManageKind.CODES -> R.string.reorder_codes_title
+                ManageKind.STACK -> R.string.reorder_stack_title
+            },
+        )
+        SimpleTopBar(title, onBack)
+        if (rows.isEmpty()) {
+            EmptyHint(stringResource(R.string.reorder_empty))
+        } else PagedList(rows, endPadding = 0.dp) { row ->
                 val index = rows.indexOfFirst { it.id == row.id }
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -246,8 +369,18 @@ internal fun ManageScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    ManageGlyphAction(ManageGlyph.UP, "Move ${row.name} up", Modifier.width(48.dp), enabled = index > 0) { onUp(row.id) }
-                    ManageGlyphAction(ManageGlyph.DOWN, "Move ${row.name} down", Modifier.width(48.dp), enabled = index < rows.lastIndex) { onDown(row.id) }
+                    ManageGlyphAction(
+                        ManageGlyph.UP,
+                        stringResource(R.string.reorder_move_up, row.name),
+                        Modifier.width(48.dp),
+                        enabled = index > 0,
+                    ) { onUp(row.id) }
+                    ManageGlyphAction(
+                        ManageGlyph.DOWN,
+                        stringResource(R.string.reorder_move_down, row.name),
+                        Modifier.width(48.dp),
+                        enabled = index < rows.lastIndex,
+                    ) { onDown(row.id) }
                 }
         }
     }
@@ -267,7 +400,11 @@ private fun ManageGlyphAction(
     Box(
         modifier = modifier
             .height(48.dp)
-            .then(if (enabled) tapModifier(onClick, description) else Modifier),
+            .semantics {
+                contentDescription = description
+                if (!enabled) disabled()
+            }
+            .then(if (enabled) tapModifier(onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(24.dp)) {

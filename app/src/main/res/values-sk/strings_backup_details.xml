@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">záloha</string>
+    <string name="backup_export_title">export</string>
+    <string name="backup_unlock_title">odomknúť</string>
+    <string name="backup_restore_title">obnoviť</string>
+    <string name="backup_passphrase_field">heslo</string>
+    <string name="backup_repeat_field">zopakovať</string>
+    <string name="backup_encrypted_export">šifrovaný export</string>
+    <string name="backup_restore_backup">obnoviť zálohu</string>
+    <string name="backup_offline_description">Zálohy sa šifrujú offline a obsahujú všetky preukazy a tajomstvá 2FA. Odkazy na externé súbory nie sú zahrnuté.</string>
+    <string name="backup_new_passphrase_instructions">Použite aspoň %1$d znakov. Toto heslo nie je možné obnoviť.</string>
+    <string name="backup_photo_compatibility">Táto záloha obsahuje fotografické preukazy a možno ju obnoviť iba v Paka 0.14 alebo novšej.</string>
+    <string name="backup_minimum_characters">aspoň %1$d znakov</string>
+    <string name="backup_repeat_passphrase">zopakovať heslo</string>
+    <string name="backup_passphrases_do_not_match">heslá sa nezhodujú</string>
+    <string name="backup_encrypting">šifruje sa…</string>
+    <string name="backup_save_encrypted">uložiť šifrovanú zálohu</string>
+    <string name="backup_import_instructions">Zadajte heslo tejto zálohy.</string>
+    <string name="backup_passphrase_placeholder">heslo zálohy</string>
+    <string name="backup_unlocking">odomykanie…</string>
+    <string name="backup_unlock_action">odomknúť zálohu</string>
+    <string name="backup_replace_current_data">Nahradiť aktuálne údaje?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="one">%1$d preukaz</item>
+        <item quantity="few">%1$d preukazy</item>
+        <item quantity="many">%1$d preukazu</item>
+        <item quantity="other">%1$d preukazov</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="one">%1$d kód</item>
+        <item quantity="few">%1$d kódy</item>
+        <item quantity="many">%1$d kódu</item>
+        <item quantity="other">%1$d kódov</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="one">%1$d preukaz vyžaduje novšiu verziu Paka a bude vynechaný.</item>
+        <item quantity="few">%1$d preukazy vyžadujú novšiu verziu Paka a budú vynechané.</item>
+        <item quantity="many">%1$d preukazu vyžaduje novšiu verziu Paka a bude vynechaného.</item>
+        <item quantity="other">%1$d preukazov vyžaduje novšiu verziu Paka a bude vynechaných.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Aktuálne údaje budú nahradené.</string>
+    <string name="backup_pdf_android_requirement">Preukazy PDF v tejto zálohe vyžadujú Android 11 alebo novší.</string>
+    <string name="backup_restoring">obnovuje sa…</string>
+    <string name="backup_restore_action">obnoviť</string>
+    <string name="backup_cancel_restore_action">zrušiť obnovenie</string>
+    <string name="backup_saved">Šifrovaná záloha uložená</string>
+    <string name="backup_save_failed">Zálohu sa nepodarilo uložiť</string>
+    <string name="backup_read_failed">Zálohu sa nepodarilo načítať</string>
+    <string name="backup_encrypt_failed">Zálohu sa nepodarilo zašifrovať</string>
+    <string name="backup_too_large">Záloha je príliš veľká</string>
+    <string name="backup_invalid_passphrase">Nesprávne heslo alebo neplatná záloha</string>
+    <string name="backup_restored">Záloha obnovená</string>
+
+    <string name="detail_date_pattern">d. M. yyyy</string>
+    <string name="detail_reference_fallback">odkaz</string>
+    <string name="detail_delete_question">Odstrániť %1$s?</string>
+    <string name="detail_delete_action">odstrániť</string>
+    <string name="detail_cancel_action">zrušiť</string>
+    <string name="detail_duplicate_pass_title">preukaz už bol pridaný</string>
+    <string name="detail_duplicate_code_title">kód už bol pridaný</string>
+    <string name="detail_duplicate_match">zhoduje sa s %1$s</string>
+    <string name="detail_add_anyway">napriek tomu pridať</string>
+    <string name="detail_discard_add_action">zrušiť pridanie</string>
+    <string name="detail_reference_title">odkaz</string>
+    <string name="detail_reference_open">otvoriť</string>
+    <string name="detail_reference_replace">nahradiť</string>
+    <string name="detail_reference_remove">odstrániť</string>
+    <string name="detail_external_reference_file">súbor · %1$s</string>
+    <string name="detail_external_reference_warning">Paka nešifruje ani nezálohuje obsah externého súboru.</string>
+    <string name="detail_reference_access_many_failed">Paka nedokázala zachovať prístup k týmto súborom</string>
+    <string name="detail_reference_access_one_failed">Paka nedokázala zachovať prístup k tomuto súboru</string>
+    <string name="detail_file_picker_failed">Výber súborov sa nepodarilo otvoriť</string>
+    <string name="detail_file_open_failed">Tento súbor nedokáže otvoriť žiadna aplikácia</string>
+    <string name="detail_name_field">názov</string>
+    <string name="detail_stack_field">skupina</string>
+    <string name="detail_notes_field">poznámky</string>
+    <string name="detail_title">podrobnosti</string>
+    <string name="detail_none">žiadna</string>
+    <string name="detail_sort_action">zoradiť</string>
+    <string name="detail_sort_stack_description">Zoradiť preukazy v tejto skupine</string>
+    <string name="detail_format_label">formát</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="one">PDF · %1$d strana</item>
+        <item quantity="few">PDF · %1$d strany</item>
+        <item quantity="many">PDF · %1$d strany</item>
+        <item quantity="other">PDF · %1$d strán</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="one">fotografie · %1$d strana</item>
+        <item quantity="few">fotografie · %1$d strany</item>
+        <item quantity="many">fotografie · %1$d strany</item>
+        <item quantity="other">fotografie · %1$d strán</item>
+    </plurals>
+    <string name="detail_added_label">pridané</string>
+    <string name="detail_code_label">kód</string>
+    <string name="detail_document_label">dokument</string>
+    <string name="detail_photos_label">fotografie</string>
+    <string name="detail_encrypted_document">šifrovaný dokument · %1$s</string>
+    <string name="detail_encrypted_photos">šifrované fotografie · %1$s</string>
+    <string name="detail_add_note">pridať poznámku</string>
+    <string name="detail_reference_one">odkaz 1</string>
+    <string name="detail_reference_two">odkaz 2</string>
+    <string name="detail_references_description">Vyberte naraz najviac dva súbory. Odkazy zostávajú externé a Paka ich nešifruje ani nezálohuje.</string>
+    <string name="detail_save_action">uložiť</string>
+</resources>

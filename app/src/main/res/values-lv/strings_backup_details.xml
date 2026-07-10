@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">dublējums</string>
+    <string name="backup_export_title">eksports</string>
+    <string name="backup_unlock_title">atbloķēt</string>
+    <string name="backup_restore_title">atjaunot</string>
+    <string name="backup_passphrase_field">paroles frāze</string>
+    <string name="backup_repeat_field">atkārtot</string>
+    <string name="backup_encrypted_export">šifrēts eksports</string>
+    <string name="backup_restore_backup">atjaunot dublējumu</string>
+    <string name="backup_offline_description">Dublējumi tiek šifrēti bezsaistē un ietver visas caurlaides un 2FA atslēgas. Ārējo failu atsauces netiek iekļautas.</string>
+    <string name="backup_new_passphrase_instructions">Izmanto vismaz %1$d rakstzīmes. Šo paroles frāzi nevar atgūt.</string>
+    <string name="backup_photo_compatibility">Šajā dublējumā ir foto caurlaides — to var atjaunot tikai ar Paka 0.14 vai jaunāku versiju.</string>
+    <string name="backup_minimum_characters">vismaz %1$d rakstzīmes</string>
+    <string name="backup_repeat_passphrase">atkārtot paroles frāzi</string>
+    <string name="backup_passphrases_do_not_match">paroles frāzes nesakrīt</string>
+    <string name="backup_encrypting">šifrē…</string>
+    <string name="backup_save_encrypted">saglabāt šifrētu dublējumu</string>
+    <string name="backup_import_instructions">Ievadi šī dublējuma paroles frāzi.</string>
+    <string name="backup_passphrase_placeholder">dublējuma paroles frāze</string>
+    <string name="backup_unlocking">atbloķē…</string>
+    <string name="backup_unlock_action">atbloķēt dublējumu</string>
+    <string name="backup_replace_current_data">Aizstāt pašreizējos datus?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="zero">%1$d caurlaižu</item>
+        <item quantity="one">%1$d caurlaide</item>
+        <item quantity="other">%1$d caurlaides</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="zero">%1$d kodu</item>
+        <item quantity="one">%1$d kods</item>
+        <item quantity="other">%1$d kodi</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="zero">%1$d caurlaidēm vajadzīga jaunāka Paka versija, un tās tiks izlaistas.</item>
+        <item quantity="one">%1$d caurlaidei vajadzīga jaunāka Paka versija, un tā tiks izlaista.</item>
+        <item quantity="other">%1$d caurlaidēm vajadzīga jaunāka Paka versija, un tās tiks izlaistas.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Pašreizējie dati tiks aizstāti.</string>
+    <string name="backup_pdf_android_requirement">PDF caurlaidēm šajā dublējumā vajadzīga Android 11 vai jaunāka versija.</string>
+    <string name="backup_restoring">atjauno…</string>
+    <string name="backup_restore_action">atjaunot</string>
+    <string name="backup_cancel_restore_action">atcelt atjaunošanu</string>
+    <string name="backup_saved">Šifrētais dublējums saglabāts</string>
+    <string name="backup_save_failed">Dublējumu neizdevās saglabāt</string>
+    <string name="backup_read_failed">Dublējumu neizdevās nolasīt</string>
+    <string name="backup_encrypt_failed">Dublējumu neizdevās šifrēt</string>
+    <string name="backup_too_large">Dublējums ir pārāk liels</string>
+    <string name="backup_invalid_passphrase">Nepareiza paroles frāze vai nederīgs dublējums</string>
+    <string name="backup_restored">Dublējums atjaunots</string>
+
+    <string name="detail_date_pattern">dd.MM.yyyy</string>
+    <string name="detail_reference_fallback">atsauce</string>
+    <string name="detail_delete_question">Dzēst %1$s?</string>
+    <string name="detail_delete_action">dzēst</string>
+    <string name="detail_cancel_action">atcelt</string>
+    <string name="detail_duplicate_pass_title">caurlaide jau ir pievienota</string>
+    <string name="detail_duplicate_code_title">kods jau ir pievienots</string>
+    <string name="detail_duplicate_match">atbilst %1$s</string>
+    <string name="detail_add_anyway">tomēr pievienot</string>
+    <string name="detail_discard_add_action">atmest pievienošanu</string>
+    <string name="detail_reference_title">atsauce</string>
+    <string name="detail_reference_open">atvērt</string>
+    <string name="detail_reference_replace">aizstāt</string>
+    <string name="detail_reference_remove">noņemt</string>
+    <string name="detail_external_reference_file">fails · %1$s</string>
+    <string name="detail_external_reference_warning">Paka nešifrē ārējā faila saturu un neiekļauj to dublējumos.</string>
+    <string name="detail_reference_access_many_failed">Paka nevarēja saglabāt piekļuvi šiem failiem</string>
+    <string name="detail_reference_access_one_failed">Paka nevarēja saglabāt piekļuvi šim failam</string>
+    <string name="detail_file_picker_failed">Failu izvēli neizdevās atvērt</string>
+    <string name="detail_file_open_failed">Neviena lietotne nevar atvērt šo failu</string>
+    <string name="detail_name_field">nosaukums</string>
+    <string name="detail_stack_field">kopa</string>
+    <string name="detail_notes_field">piezīmes</string>
+    <string name="detail_title">informācija</string>
+    <string name="detail_none">nav</string>
+    <string name="detail_sort_action">kārtot</string>
+    <string name="detail_sort_stack_description">Kārtot caurlaides šajā kopā</string>
+    <string name="detail_format_label">formāts</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="zero">PDF · %1$d lapu</item>
+        <item quantity="one">PDF · %1$d lapa</item>
+        <item quantity="other">PDF · %1$d lapas</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="zero">fotoattēli · %1$d pušu</item>
+        <item quantity="one">fotoattēli · %1$d puse</item>
+        <item quantity="other">fotoattēli · %1$d puses</item>
+    </plurals>
+    <string name="detail_added_label">pievienots</string>
+    <string name="detail_code_label">kods</string>
+    <string name="detail_document_label">dokuments</string>
+    <string name="detail_photos_label">fotoattēli</string>
+    <string name="detail_encrypted_document">šifrēts dokuments · %1$s</string>
+    <string name="detail_encrypted_photos">šifrēti fotoattēli · %1$s</string>
+    <string name="detail_add_note">pievienot piezīmi</string>
+    <string name="detail_reference_one">1. atsauce</string>
+    <string name="detail_reference_two">2. atsauce</string>
+    <string name="detail_references_description">Izvēlies ne vairāk kā divus failus. Atsauces paliek ārējas — Paka tās nešifrē un neiekļauj dublējumos.</string>
+    <string name="detail_save_action">saglabāt</string>
+</resources>

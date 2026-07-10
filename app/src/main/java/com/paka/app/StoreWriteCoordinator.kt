@@ -77,7 +77,8 @@ internal object StoreWriteCoordinator {
         value: List<Card>,
         deletePdfIds: Set<String> = emptySet(),
         deletePhotoIds: Set<String> = emptySet(),
-    ): Deferred<StoreWriteStatus>? {
+    ): Deferred<StoreWriteStatus>? = synchronized(this) {
+        if (activeRestore?.isActive == true) return@synchronized null
         val completion = CompletableDeferred<StoreWriteStatus>()
         val task = CardTask.Write(
             context = context.applicationContext,
@@ -87,10 +88,11 @@ internal object StoreWriteCoordinator {
             generation = cardGeneration.get(),
             completion = completion,
         )
-        return completion.takeIf { cardQueue.trySend(task).isSuccess }
+        completion.takeIf { cardQueue.trySend(task).isSuccess }
     }
 
-    fun saveCodes(context: Context, value: List<OtpAccount>): Deferred<StoreWriteStatus>? {
+    fun saveCodes(context: Context, value: List<OtpAccount>): Deferred<StoreWriteStatus>? = synchronized(this) {
+        if (activeRestore?.isActive == true) return@synchronized null
         val completion = CompletableDeferred<StoreWriteStatus>()
         val task = CodeTask.Write(
             context = context.applicationContext,
@@ -98,7 +100,41 @@ internal object StoreWriteCoordinator {
             generation = codeGeneration.get(),
             completion = completion,
         )
-        return completion.takeIf { codeQueue.trySend(task).isSuccess }
+        completion.takeIf { codeQueue.trySend(task).isSuccess }
+    }
+
+    fun isRestoreActive(): Boolean = synchronized(this) { activeRestore?.isActive == true }
+
+    /**
+     * Process-owned cleanup for imports abandoned as their Compose route closes.
+     * Recheck committed references under the card mutex so delayed cleanup can
+     * never remove content that was saved or restored in the meantime.
+     */
+    fun deleteUnreferencedImports(
+        context: Context,
+        pdfIds: Set<String> = emptySet(),
+        photoIds: Set<String> = emptySet(),
+    ): Deferred<Unit>? {
+        if (pdfIds.isEmpty() && photoIds.isEmpty()) return null
+        val appContext = context.applicationContext
+        return scope.async {
+            // A duplicate candidate can refer to a card whose optimistic save
+            // was already queued but has not acquired cardMutex yet. Put a
+            // barrier behind every earlier card write before checking durable
+            // references, otherwise cleanup can race that save and remove a
+            // document it is about to commit.
+            val queuedWritesDone = CompletableDeferred<Unit>()
+            if (cardQueue.trySend(CardTask.Barrier(queuedWritesDone)).isFailure) return@async
+            queuedWritesDone.await()
+            cardMutex.withLock {
+                val loaded = CardStore.load(appContext)
+                if (!loaded.writable) return@withLock
+                val referencedPdfs = loaded.value.mapNotNull { it.pdfContent?.documentId }.toSet()
+                val referencedPhotos = loaded.value.photoDocumentIds()
+                (pdfIds - referencedPdfs).forEach { PdfStore.delete(appContext, it) }
+                (photoIds - referencedPhotos).forEach { PhotoStore.delete(appContext, it) }
+            }
+        }
     }
 
     /** Wait until every write queued before this call has reached stable storage. */
@@ -113,11 +149,15 @@ internal object StoreWriteCoordinator {
         activeRestore?.await()
     }
 
+    /** Resolves a process-death restore marker before startup reads any store. */
+    suspend fun recoverInterruptedRestore(context: Context): RestoreRecoveryOutcome =
+        codeMutex.withLock {
+            cardMutex.withLock { RestoreJournal.recover(context.applicationContext) }
+        }
+
     /** Restore also outlives its calling Activity once it has begun. */
     fun restore(
         context: Context,
-        oldCards: List<Card>,
-        oldCodes: List<OtpAccount>,
         restored: BackupData,
     ): Deferred<RestoreOutcome> {
         return synchronized(this) {
@@ -128,7 +168,7 @@ internal object StoreWriteCoordinator {
             scope.async {
                 codeMutex.withLock {
                     cardMutex.withLock {
-                        performRestore(appContext, oldCards, oldCodes, restored)
+                        performRestore(appContext, restored)
                     }
                 }
             }.also { restoreJob ->
@@ -142,62 +182,74 @@ internal object StoreWriteCoordinator {
         }
     }
 
-    private fun performRestore(
+    @Suppress("CyclomaticComplexMethod", "LongMethod")
+    private suspend fun performRestore(
         context: Context,
-        oldCards: List<Card>,
-        oldCodes: List<OtpAccount>,
         restored: BackupData,
     ): RestoreOutcome {
-        val oldIds = oldCards.mapNotNull { it.pdfContent?.documentId }.toSet()
-        val restoredIds = restored.cards.mapNotNull { it.pdfContent?.documentId }.toSet()
-        val oldPhotoIds = oldCards.photoDocumentIds()
-        val restoredPhotoIds = restored.cards.photoDocumentIds()
-        val oldDocuments = linkedMapOf<String, ByteArray>()
-        val oldPhotos = linkedMapOf<String, ByteArray>()
-        val oldLoaded = runCatching {
-            oldIds.forEach { id -> oldDocuments[id] = PdfStore.readPlaintext(context, id) }
-            oldPhotoIds.forEach { id -> oldPhotos[id] = PhotoStore.readPlaintext(context, id) }
-        }.isSuccess
-        if (!oldLoaded) {
-            oldDocuments.values.forEach { it.fill(0) }
-            oldPhotos.values.forEach { it.fill(0) }
-            return RestoreOutcome.FAILED_ROLLED_BACK
-        }
-
-        fun rollbackDocuments(): Boolean {
-            var success = true
-            oldDocuments.forEach { (id, bytes) ->
-                if (runCatching { PdfStore.writePlaintext(context, id, bytes) }.isFailure) success = false
+        var journal: RestoreJournalState? = null
+        val result = runCatching {
+            // Queued optimistic UI writes may have been superseded when restore
+            // advanced the generations. Snapshot and journal the committed
+            // stores under both mutexes instead of trusting caller-held state.
+            val currentCards = CardStore.load(context).also { check(it.writable) }.value
+            val currentCodes = SecureStore.loadAccounts(context).also { check(it.writable) }.value
+            val restoredIds = restored.cards.mapNotNull { it.pdfContent?.documentId }.toSet()
+            val restoredPhotoIds = restored.cards.photoDocumentIds()
+            require(restored.documents.keys == restoredIds) { "Restore is missing PDF data" }
+            require(restored.photos.keys == restoredPhotoIds) { "Restore is missing photo data" }
+            val pdfPageCounts = restored.cards.mapNotNull { it.pdfContent }.groupBy(
+                keySelector = { it.documentId },
+                valueTransform = { it.pageCount },
+            )
+            restored.documents.forEach { (id, bytes) ->
+                val counts = pdfPageCounts.getValue(id).toSet()
+                require(counts.size == 1) { "PDF page count metadata is inconsistent" }
+                PdfStore.validateRestore(bytes, id, counts.single())
             }
-            (restoredIds - oldIds).forEach { PdfStore.delete(context, it) }
-            oldPhotos.forEach { (id, bytes) ->
-                if (runCatching { PhotoStore.writePlaintext(context, id, bytes) }.isFailure) success = false
+            val photoPages = restored.cards
+                .flatMap { (it.content as? PassContent.Photos)?.pages.orEmpty() }
+                .groupBy { it.documentId }
+            restored.photos.forEach { (id, bytes) ->
+                require(photoDocumentId(bytes) == id) { "Photo identifier does not match its content" }
+                val dimensions = PhotoStore.inspect(bytes)
+                require(
+                    photoPages.getValue(id).all {
+                        it.width == dimensions.first && it.height == dimensions.second
+                    },
+                ) {
+                    "Photo dimensions do not match the backup"
+                }
             }
-            (restoredPhotoIds - oldPhotoIds).forEach { PhotoStore.delete(context, it) }
-            return success
-        }
 
+            journal = RestoreJournal.begin(context, currentCards, currentCodes.size, restored.cards).getOrThrow()
+            restored.documents.forEach { (id, bytes) ->
+                PdfStore.writePlaintext(context, id, bytes)
+            }
+            restored.photos.forEach { (id, bytes) ->
+                PhotoStore.writePlaintext(context, id, bytes)
+            }
+            SecureStore.saveAccounts(context, restored.accounts).getOrThrow()
+            CardStore.save(context, restored.cards).getOrThrow()
+            val committed = RestoreJournal.markCommitted(context, checkNotNull(journal)).getOrThrow()
+            check(RestoreJournal.finishCommit(context, committed)) { "Restore cleanup could not be completed" }
+            RestoreOutcome.SUCCESS
+        }
         return try {
-            val documentsSaved = runCatching {
-                restored.documents.forEach { (id, bytes) -> PdfStore.writePlaintext(context, id, bytes) }
-                restored.photos.forEach { (id, bytes) -> PhotoStore.writePlaintext(context, id, bytes) }
-            }.isSuccess
-            if (!documentsSaved) {
-                if (rollbackDocuments()) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
-            } else if (SecureStore.saveAccounts(context, restored.accounts).isFailure) {
-                if (rollbackDocuments()) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
-            } else if (CardStore.save(context, restored.cards).isSuccess) {
-                PdfStore.deleteOrphans(context, restoredIds)
-                PhotoStore.deleteOrphans(context, restoredPhotoIds)
-                RestoreOutcome.SUCCESS
-            } else {
-                val codesRolledBack = SecureStore.saveAccounts(context, oldCodes).isSuccess
-                val documentsRolledBack = rollbackDocuments()
-                if (codesRolledBack && documentsRolledBack) RestoreOutcome.FAILED_ROLLED_BACK else RestoreOutcome.FAILED_PARTIAL
+            result.getOrElse {
+                // begin() can fail after durably writing PREPARED but before
+                // returning its state. Always inspect disk, not just the local
+                // assignment, before allowing later edits.
+                when (RestoreJournal.recover(context)) {
+                    RestoreRecoveryOutcome.ROLLED_BACK, RestoreRecoveryOutcome.NONE ->
+                        RestoreOutcome.FAILED_ROLLED_BACK
+                    RestoreRecoveryOutcome.COMMITTED ->
+                        if (journal != null) RestoreOutcome.SUCCESS else RestoreOutcome.FAILED_ROLLED_BACK
+                    RestoreRecoveryOutcome.FAILED -> RestoreOutcome.FAILED_PARTIAL
+                }
             }
         } finally {
-            oldDocuments.values.forEach { it.fill(0) }
-            oldPhotos.values.forEach { it.fill(0) }
+            restored.clearDocuments()
         }
     }
 

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">varukoopia</string>
+    <string name="backup_export_title">eksport</string>
+    <string name="backup_unlock_title">ava</string>
+    <string name="backup_restore_title">taasta</string>
+    <string name="backup_passphrase_field">parool</string>
+    <string name="backup_repeat_field">korda</string>
+    <string name="backup_encrypted_export">krüptitud eksport</string>
+    <string name="backup_restore_backup">taasta varukoopia</string>
+    <string name="backup_offline_description">Varukoopiad krüptitakse võrguühenduseta ning sisaldavad kõiki pääsmeid ja 2FA saladusi. Väliste failide viiteid ei lisata.</string>
+    <string name="backup_new_passphrase_instructions">Kasuta vähemalt %1$d märki. Seda parooli ei saa taastada.</string>
+    <string name="backup_photo_compatibility">See varukoopia sisaldab fotopääsmeid ja seda saab taastada ainult Paka 0.14 või uuemaga.</string>
+    <string name="backup_minimum_characters">vähemalt %1$d märki</string>
+    <string name="backup_repeat_passphrase">korda parooli</string>
+    <string name="backup_passphrases_do_not_match">paroolid ei ühti</string>
+    <string name="backup_encrypting">krüptimine…</string>
+    <string name="backup_save_encrypted">salvesta krüptitud varukoopia</string>
+    <string name="backup_import_instructions">Sisesta selle varukoopia parool.</string>
+    <string name="backup_passphrase_placeholder">varukoopia parool</string>
+    <string name="backup_unlocking">avamine…</string>
+    <string name="backup_unlock_action">ava varukoopia</string>
+    <string name="backup_replace_current_data">Kas asendada praegused andmed?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="one">%1$d pääse</item>
+        <item quantity="other">%1$d pääset</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="one">%1$d kood</item>
+        <item quantity="other">%1$d koodi</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="one">%1$d pääse vajab uuemat Paka versiooni ja jäetakse välja.</item>
+        <item quantity="other">%1$d pääset vajavad uuemat Paka versiooni ja jäetakse välja.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Praegused andmed asendatakse.</string>
+    <string name="backup_pdf_android_requirement">Selle varukoopia PDF-pääsmed vajavad Android 11 või uuemat.</string>
+    <string name="backup_restoring">taastamine…</string>
+    <string name="backup_restore_action">taasta</string>
+    <string name="backup_cancel_restore_action">katkesta taastamine</string>
+    <string name="backup_saved">Krüptitud varukoopia salvestatud</string>
+    <string name="backup_save_failed">Varukoopiat ei õnnestunud salvestada</string>
+    <string name="backup_read_failed">Varukoopiat ei õnnestunud lugeda</string>
+    <string name="backup_encrypt_failed">Varukoopiat ei õnnestunud krüptida</string>
+    <string name="backup_too_large">Varukoopia on liiga suur</string>
+    <string name="backup_invalid_passphrase">Vale parool või vigane varukoopia</string>
+    <string name="backup_restored">Varukoopia taastatud</string>
+
+    <string name="detail_date_pattern">d. MMM yyyy</string>
+    <string name="detail_reference_fallback">viide</string>
+    <string name="detail_delete_question">Kas kustutada %1$s?</string>
+    <string name="detail_delete_action">kustuta</string>
+    <string name="detail_cancel_action">loobu</string>
+    <string name="detail_duplicate_pass_title">pääse on juba lisatud</string>
+    <string name="detail_duplicate_code_title">kood on juba lisatud</string>
+    <string name="detail_duplicate_match">vastab kirjele %1$s</string>
+    <string name="detail_add_anyway">lisa siiski</string>
+    <string name="detail_discard_add_action">loobu lisamisest</string>
+    <string name="detail_reference_title">viide</string>
+    <string name="detail_reference_open">ava</string>
+    <string name="detail_reference_replace">asenda</string>
+    <string name="detail_reference_remove">eemalda</string>
+    <string name="detail_external_reference_file">fail · %1$s</string>
+    <string name="detail_external_reference_warning">Paka ei krüpti ega varunda välise faili sisu.</string>
+    <string name="detail_reference_access_many_failed">Pakal ei õnnestunud säilitada juurdepääsu nendele failidele</string>
+    <string name="detail_reference_access_one_failed">Pakal ei õnnestunud säilitada juurdepääsu sellele failile</string>
+    <string name="detail_file_picker_failed">Failivalijat ei õnnestunud avada</string>
+    <string name="detail_file_open_failed">Ükski rakendus ei saa seda faili avada</string>
+    <string name="detail_name_field">nimi</string>
+    <string name="detail_stack_field">virn</string>
+    <string name="detail_notes_field">märkmed</string>
+    <string name="detail_title">üksikasjad</string>
+    <string name="detail_none">puudub</string>
+    <string name="detail_sort_action">järjesta</string>
+    <string name="detail_sort_stack_description">Järjesta selle virna pääsmed</string>
+    <string name="detail_format_label">vorming</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="one">PDF · %1$d lehekülg</item>
+        <item quantity="other">PDF · %1$d lehekülge</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="one">fotod · %1$d külg</item>
+        <item quantity="other">fotod · %1$d külge</item>
+    </plurals>
+    <string name="detail_added_label">lisatud</string>
+    <string name="detail_code_label">kood</string>
+    <string name="detail_document_label">dokument</string>
+    <string name="detail_photos_label">fotod</string>
+    <string name="detail_encrypted_document">krüptitud dokument · %1$s</string>
+    <string name="detail_encrypted_photos">krüptitud fotod · %1$s</string>
+    <string name="detail_add_note">lisa märge</string>
+    <string name="detail_reference_one">viide 1</string>
+    <string name="detail_reference_two">viide 2</string>
+    <string name="detail_references_description">Vali korraga kuni kaks faili. Viited jäävad väliseks ning Paka ei krüpti ega varunda neid.</string>
+    <string name="detail_save_action">salvesta</string>
+</resources>

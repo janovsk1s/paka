@@ -1,0 +1,1 @@
+Documentation and release-hygiene pass: added a security policy, security contact, threat model, format registry, device-testing and release checklists, and a security roadmap. CI now guards APK permissions so any network permission fails the build. Corrected the photo format registry and hardened the APK verification scripts.

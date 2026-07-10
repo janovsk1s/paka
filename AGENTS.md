@@ -14,7 +14,9 @@ high-contrast character of LightOS without copying proprietary source or assets.
 The product goal is not to become a general Android wallet. Paka should remain
 fast, legible, monochrome, local-first, and unusually restrained.
 
-Current PDF feature baseline: **0.13.0**, 2026-07-02. Consult `CHANGELOG.md` for recent work.
+Current stable feature baseline: **0.15.0**, 2026-07-11. It adds in-app
+document capture and crop review, full supported-language localization, and
+restore/storage hardening. Consult `CHANGELOG.md` for recent work.
 
 ## Non-negotiable design language
 
@@ -36,6 +38,11 @@ Current PDF feature baseline: **0.13.0**, 2026-07-02. Consult `CHANGELOG.md` for
   Never show an indicator when there is only one page.
 - Top bars use a centred, capitalised screen title and the custom back glyph at
   the far left. Back means one level back, not “jump to home.”
+- On first run, Paka follows the first supported device language from the fixed,
+  left-to-right allowlist: English, Latvian, Estonian, Lithuanian, Finnish,
+  Swedish, German, and Slovak. Unsupported device languages fall back to English.
+  A language explicitly selected in hidden Developer options remains authoritative.
+  Never offer Hebrew, Arabic, or another RTL locale.
 - Bottom controls and reorder controls use the existing custom-drawn glyph
   language. Avoid importing a mismatched icon pack for convenience.
 - Hidden long-press actions are intentional. Long-press `+` opens manual entry.
@@ -50,10 +57,10 @@ Current PDF feature baseline: **0.13.0**, 2026-07-02. Consult `CHANGELOG.md` for
 
 ## Navigation behaviour
 
-The current explicit route/state structure in `MainActivity.kt` is intentional.
-Do not migrate it to Navigation Compose or redesign the navigation unless the
-owner explicitly asks. Small internal extraction is fine if behaviour remains
-identical.
+The current explicit route/state structure is intentional. `MainActivity.kt`
+now coordinates focused screen files; do not migrate it to Navigation Compose
+or redesign the navigation unless the owner explicitly asks. Small internal
+extraction is fine if behaviour remains identical.
 
 - Android back and the drawn back arrow must agree and return one screen level.
 - Leaving the app returns Paka to its pass home by default.
@@ -105,6 +112,13 @@ barcode is not sufficient: scanners must receive the exact original payload.
   they are not external `PassReference` links and are not disguised barcodes.
 - Import at most two images per pass. Enforce the 10 MB per-image limit, decoded
   dimension and pixel-count caps, and a successful bounded decode before save.
+- Chosen and captured photos must pass through the same review/crop step before
+  they enter the encrypted photo store. If review is cancelled, no newly chosen
+  photo should remain stored.
+- In-app capture travels camera sensor → RAM → review/crop → encrypted store.
+  Do not write a temporary capture file, gallery entry, media-store item, or
+  thumbnail. Re-encode captures before storage so sensor rotation is baked in,
+  dimensions are bounded, and camera metadata is stripped.
 - Persist only AES-256-GCM ciphertext under the dedicated photo Keystore key.
   Never write a plaintext image cache.
 - Decoded photo bitmaps are viewer-scoped, prefetched front/back, and released
@@ -123,8 +137,10 @@ barcode is not sufficient: scanners must receive the exact original payload.
 
 ## Security and privacy invariants
 
-- Paka has no internet permission, analytics, advertising, accounts, or cloud
-  service. Do not add any silently.
+- Paka has no internet permission, network-state permission, analytics,
+  advertising, accounts, or cloud service. Do not add any silently. If a
+  dependency contributes network permissions through manifest merge, remove them
+  explicitly and verify the merged APK permissions.
 - Passes and TOTP accounts are encrypted separately with AES-256-GCM keys held
   by Android Keystore. Atomic replacement and recovery behaviour must survive
   failed writes and corrupted primary files.
@@ -172,8 +188,12 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 
 ## Important files
 
-- `app/src/main/java/com/paka/app/MainActivity.kt` — screen state, routing, lists,
-  manual entry, settings, backup UI, and pass/code presentation.
+- `app/src/main/java/com/paka/app/MainActivity.kt` — top-level state, routing,
+  store loading, and screen coordination.
+- `app/src/main/java/com/paka/app/ListUi.kt`, `HomeLists.kt`, `PassScreens.kt`,
+  `SettingsScreens.kt`, `EntryScreens.kt`, `DetailScreens.kt`, and
+  `BackupScreens.kt` — extracted UI screens and list/page behaviour. Keep their
+  behaviour aligned with the explicit route flags in `MainActivity.kt`.
 - `app/src/main/java/com/paka/app/Ui.kt` — colours, haptics, click semantics, and
   shared custom interaction modifiers.
 - `app/src/main/java/com/paka/app/Barcodes.kt` — barcode validation, exact render,
@@ -191,14 +211,46 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
   `PdfRenderer` sessions, validation, and page rendering.
 - `app/src/main/java/com/paka/app/PdfViewer.kt` — fitted pages, hard-cut paging,
   GPU gestures, and sharp settled viewport layers.
-- `app/src/main/java/com/paka/app/PhotoStore.kt` and `PhotoViewer.kt` — encrypted
-  document-photo originals, bounded decode, front/back paging, and zoom.
+- `app/src/main/java/com/paka/app/PhotoStore.kt`, `PhotoViewer.kt`,
+  `PhotoCapture.kt`, `CapturedPhoto.kt`, and `CropGeometry.kt` — encrypted
+  document-photo originals, in-app capture, review/crop, bounded decode,
+  front/back paging, and zoom.
 - `app/src/main/java/com/paka/app/BackupStore.kt` — encrypted portable backups.
 - `app/src/main/java/com/paka/app/Totp.kt` — URI parsing and RFC 6238 generation.
 - `app/src/main/java/com/paka/app/DemoData.kt` — synthetic in-memory demo data.
 - `app/src/main/java/com/paka/app/Prefs.kt` — intentionally small local settings.
-- `README.md`, `CHANGELOG.md`, `NOTICE`, and `ADDITIONAL_TERMS.md` — public-facing
-  behaviour, history, authorship, and licensing.
+- `config/detekt/detekt.yml` and `app/detekt-baseline.xml` — detekt is a
+  ratchet. Do not casually regenerate the baseline; fix new findings unless the
+  owner explicitly accepts a debt update.
+- `README.md`, `CHANGELOG.md`, `SECURITY.md`, `NOTICE`, and
+  `ADDITIONAL_TERMS.md` — public-facing behaviour, history, security contact,
+  authorship, and licensing.
+- `docs/THREAT_MODEL.md`, `docs/FORMATS.md`, `docs/DEVICE_TESTING.md`,
+  `docs/RELEASE_CHECKLIST.md`, and `docs/SECURITY_ROADMAP.md` — security model,
+  persistence boundaries, hardware testing, release ritual, and future work.
+- `tools/check_apk_permissions.sh` and `tools/verify_release_apk.sh` — CI
+  permission guard and local release APK certificate/permission verifier.
+
+## Release naming
+
+Keep release titles, tags, APK assets, and the version-bump commit consistent so
+the history and the GitHub Releases page stay legible. Match the established
+pattern exactly:
+
+- Stable: title `Paka <version>` (e.g. `Paka 0.14.0`), tag `v<version>`, asset
+  `Paka-v<version>.apk`. Marked as the latest release, not a pre-release.
+- Preview: title `Paka <version> <objective> preview <N>`, where `<objective>`
+  names the preview line's focus — e.g. `Paka 0.15.0 capture preview 3.2`. Tag
+  `v<version>-beta.<N>` (e.g. `v0.15.0-beta.3.2`), asset
+  `Paka-v<version>-beta.<N>.apk`. Marked as a pre-release, never latest, cut
+  from the active preview branch (currently `preview/document-capture`).
+- Version-bump commit subject: `Bump versionCode to <code> for <objective>
+  preview <N>` — e.g. `Bump versionCode to 50 for capture preview 3.2` — using
+  the same objective and number as the preview title.
+- The release author must be the owner's GitHub account, not
+  `github-actions[bot]`, and commits must use the owner's GitHub-linked identity
+  (`81934547+janovsk1s@users.noreply.github.com`), not a personal email GitHub
+  will not attribute to the profile.
 
 ## Working rules for future AI agents
 
@@ -216,11 +268,12 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
    `CHANGELOG.md` and the README release number, then run:
 
    ```sh
-   ./gradlew test lint assembleDebug assembleRelease
+   ./gradlew test lint detekt assembleDebug assemblePreview assembleRelease
+   tools/verify_release_apk.sh app/build/outputs/apk/release/app-release.apk
    ```
 
-8. Verify the release APK with Android `apksigner` and confirm it uses the same
-   release certificate. The known certificate SHA-256 is:
+8. Verify the release APK uses the same release certificate and expected
+   permissions. The known certificate SHA-256 is:
 
    ```text
    098fbb0a5455ec00dbafae93f16bff74b048e5bde7a824fac9ecf42effad0019
@@ -234,8 +287,8 @@ On `feature/pdf-passes`, the debug variant deliberately uses the
 `com.paka.app.pdfpreview` application ID and “Paka PDF Test” label. Keep feature
 testing isolated from the owner's real encrypted Paka installation.
 
-On `feature/encrypted-document-photos`, the corresponding isolated debug ID is
-`com.paka.app.photopreview` and the label is “Paka Photo Test.”
+On document-photo preview branches, the corresponding isolated debug/preview ID
+is `com.paka.app.photopreview` and the label is “Paka Photo Test.”
 
 When a proposed improvement conflicts with this document, pause and explain the
 trade-off. The owner’s explicit instruction wins; otherwise preserve Paka’s core:

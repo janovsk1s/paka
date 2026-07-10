@@ -1,0 +1,1 @@
+Battery/lifecycle pass: the 2FA tick and capture focus loop pause when Paka is backgrounded, open PDFs release memory on background and reopen on return, stack PDF previews stop leaking bitmaps, and the camera light label no longer lies after returning from the background. Kotlin updated to 2.4.0.

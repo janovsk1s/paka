@@ -2,6 +2,124 @@
 
 Notable changes to Paka are documented here.
 
+## 0.15.0 — 2026-07-11
+
+*Codename: Paperlight.*
+
+### Stable changes after Beta 3.3
+
+- Tagged-release checks now finish before the owner creates a GitHub release;
+  CI retains the unsigned comparison APK but no longer creates a bot-authored
+  draft with an inconsistent preview title.
+- About now identifies signed preview builds with the capture-preview label and
+  `versionCode`, while keeping their production package and signing identity.
+- Added production-path barcode render regression coverage across supported
+  formats, panel widths, dense binary payloads, integer module grids, and cache
+  reuse.
+- Added a per-candidate Light Phone III test-results template so hardware,
+  lifecycle, scanner, memory, and release sign-off status can be recorded
+  without treating an unfilled checklist as evidence.
+- Backup-only pass and 2FA stores now recover as writable stores. Recovery
+  promotes the known-good encrypted generation without rotating a corrupt
+  primary over it, and retains corrupt encrypted evidence until the next
+  successful save.
+- Portable restore now uses encrypted pre-restore snapshots and a durable
+  PREPARED/ROLLED_BACK/COMMITTED journal. Process or power loss rolls back before commit or
+  completes cleanup after commit before normal store loading and orphan removal;
+  terminal cleanup remains durably retryable if snapshot removal is interrupted.
+- Restore owns and clears decrypted PDF/photo arrays in the process-scoped
+  coordinator; Back and cancel are blocked while those buffers are in use.
+- Restored PDFs are opened and page 1 is rendered before any store changes on
+  API 30+, matching interactive PDF import validation.
+- Photo review, crop, display copies, and stored page geometry now agree on all
+  eight EXIF orientations, including mirrored images on Android 8/8.1. Edited
+  photos use one bounded decode and one encode; untouched imports retain their
+  original encrypted bytes.
+- The camera and torch now release before capture review, Back stays blocked
+  while plaintext work is active, and nested sensitive screens share secure
+  window ownership without clearing each other's screenshot protection.
+- Decoded identity photos are owned only by the open viewer or stack, prefetched
+  front/back there, and recycled on close or background; the pass list no longer
+  retains them through a process-global cache.
+- Data Matrix and Aztec now receive explicit quiet zones, linear formats keep
+  full per-side quiet zones, rectangular symbols retain their natural aspect
+  ratio, and DataBar is drawn directly on an integer module grid before decode
+  verification.
+- Aztec/PDF417 reject text that cannot be encoded byte-exactly as ISO-8859-1;
+  scanning now prefers their original bytes over decoder text, and GS1
+  verification preserves variable-field separators.
+- Manual barcode entry verifies against the real pass display width, and hard-cut
+  pages expose boundary-aware previous/next accessibility actions.
+- Paka now follows the first supported device language on first run, falling
+  back to English for unsupported locales. Developer settings offer an explicit,
+  persistent LTR-only choice of English, Latvian, Estonian, Lithuanian, Finnish,
+  Swedish, German, or Slovak; every menu, form, viewer state, warning, and
+  accessibility action is localized.
+- Menus and viewers now share full-slot touch targets, fixed centred top bars,
+  bounded translated labels, pinned confirmation actions, and consistent
+  loading/error/detail access without changing five-row paging or hard-cut swipes.
+- Two-sided photo passes retain their optional page caption and immediate
+  tap/swipe side changes without showing an edge scrollbar over the photo.
+- Manual entry now uses content-appropriate keyboards and stable validation
+  space; camera scanning has stronger monochrome framing, and document crop
+  rotation is an explicit action instead of a hidden tap-anywhere gesture.
+
+### Beta 3.3 — changes since `v0.15.0-beta.3.1`
+
+- Rendered barcodes and QR codes now snap to an exact whole-module pixel grid,
+  so every module is an identical width with no leftover quiet-zone pixels and
+  no sub-pixel draw drift. Payload verification is unchanged.
+- Raised the internal render cap so a future enlarged/zoom code view can be
+  drawn at native resolution instead of upscaling.
+- Added a security policy, security contact metadata, threat model, persistence
+  format registry, device testing checklist, release checklist, and
+  security/longevity roadmap.
+- Added a CI APK-permission guard so debug, preview, and unsigned release APKs
+  fail checks if internet, network-state, or any unexpected permission appears.
+- Corrected the photo format registry to list every supported image header
+  (JPEG, PNG, GIF, WebP, HEIF/HEIC, AVIF).
+- Hardened the APK verification scripts: `aapt2` fallback and version-ordered
+  build-tools selection.
+
+### Beta 3.1 — changes since `v0.15.0-beta.3`
+
+- Kotlin updated to 2.4.0 (dependency-verification checksums regenerated); no behavior change.
+- Battery/lifecycle pass: work now pauses when Paka is backgrounded instead of relying on Compose keeping effects alive.
+  - The per-second 2FA code tick and the capture screen's focus-retry loop stop while Paka is not in the foreground.
+  - An open PDF releases its decrypted session and native memory when backgrounded (like photos already do) and reopens on return.
+  - Stack previews now recycle their rendered PDF page bitmaps instead of leaking them until garbage collection.
+  - The scanner and capture light label no longer reads "on" after returning from the background, where the torch was actually switched off.
+
+### Beta 3 — changes since `v0.15.0-beta.2`
+
+- Chosen/imported photos now use the same review and crop screen before they are saved, including two-photo front/back batches.
+- Crop corners use larger invisible touch targets so resizing feels snappier on the Light Phone III.
+- While cropping, tapping the photo rotates the working image 90° counter-clockwise with an immediate hard-cut preview, and rapid repeated taps no longer crash the crop screen.
+- Details, manual entry, settings, and submenus now share the app typography more consistently, with an optional official-font toggle in hidden Developer settings.
+- The bottom controls were sharpened and rebalanced without changing their original sizes: gear, plus, barcode, and code/asterisk glyphs now snap more cleanly to the same visual envelope.
+- The original Paka gear is again the default settings icon; the Light SDK gear is available only as an optional Developer setting.
+- The transitive `ACCESS_NETWORK_STATE` permission from CameraX/Media3 is explicitly removed from Paka's merged manifest; the APK should request camera only.
+- Before stable 0.15.0, beta 3 still needs a hardware battery/lifecycle pass covering camera, torch, brightness, TOTP ticking, and PDF/photo rerender cleanup.
+
+### Added
+
+- Document photos can be taken directly inside Paka when creating a photo pass, alongside choosing existing images.
+- The capture screen reuses the scanner's camera: tap to focus, a manual light toggle, and a retake/use confirmation before anything is stored.
+- Passes inside a stack can be reordered from a pass's Details: a sort action next to the stack field opens the familiar reorder screen scoped to that stack.
+- Captured photos can be cropped before saving: drag the scanner-style corner frame or move the whole selection, then confirm. Cropping happens entirely in memory before encryption, and the buffers of the uncropped capture are zeroed.
+- Chosen/imported photos now use the same review and crop screen before they are saved, including two-photo front/back batches.
+- Crop corners use larger invisible touch targets so resizing feels snappier on the Light Phone III.
+- While cropping, tapping the photo rotates the working image 90° counter-clockwise with an immediate hard-cut preview.
+- The capture screen keeps nudging centre focus on the scanner's retry cadence, so close-up documents settle without repeated manual taps; a tap-to-focus still takes priority.
+
+### Security
+
+- Captured frames travel sensor → RAM → encrypted store; no temporary file, media-store entry, or gallery thumbnail is ever created.
+- Captures are re-encoded in memory before storage, which bakes in the sensor rotation, bounds the longest edge, and strips all camera metadata (EXIF timestamps and device identifiers).
+- The capture screen blocks screenshots and screen recording while a document is in front of the camera.
+- Every intermediate capture buffer is zeroed, including on failure paths.
+- The transitive `ACCESS_NETWORK_STATE` permission from CameraX/Media3 is explicitly removed from Paka's merged manifest; the APK should request camera only.
+
 ## 0.14.0 — 2026-07-04
 
 ### Security

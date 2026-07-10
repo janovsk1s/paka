@@ -24,23 +24,23 @@ internal object SecureStore {
     private fun secretKey(): SecretKey = KeystoreKeys.getOrCreateAes256(KEY_ALIAS)
 
     fun loadAccounts(context: Context): LoadOutcome<List<OtpAccount>> {
-        val file = File(context.filesDir, FILE)
-        if (!file.exists()) return LoadOutcome(emptyList())
+        val file = storageFile(context)
+        if (!file.exists() && !AtomicStore.backupFile(file).exists()) return LoadOutcome(emptyList())
 
         AtomicStore.readWithBackup(file, ::decrypt).getOrNull()?.let { recovered ->
             // A pre-versioned store carries no AAD binding. Re-encrypt it in the
             // current layout now instead of waiting for the next user edit.
-            if (!recovered.value.versioned && !recovered.fromBackup) {
+            if (!recovered.value.versioned) {
                 saveAccounts(context, recovered.value.accounts)
             }
             return LoadOutcome(
                 value = recovered.value.accounts,
-                warning = if (recovered.fromBackup) "2FA accounts were recovered from the previous backup." else null,
+                warning = if (recovered.fromBackup) context.getString(R.string.store_codes_recovered) else null,
             )
         }
         return LoadOutcome(
             value = emptyList(),
-            warning = "2FA accounts could not be decrypted. The encrypted file was preserved.",
+            warning = context.getString(R.string.store_codes_decrypt_failed),
             writable = false,
         )
     }
@@ -56,7 +56,12 @@ internal object SecureStore {
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
         if (versioned) cipher.updateAAD(AAD)
-        return DecodedStore(parse(String(cipher.doFinal(cipherText), Charsets.UTF_8)), versioned)
+        val plaintext = cipher.doFinal(cipherText)
+        return try {
+            DecodedStore(parse(String(plaintext, Charsets.UTF_8)), versioned)
+        } finally {
+            plaintext.fill(0)
+        }
     }
 
     fun saveAccounts(context: Context, accounts: List<OtpAccount>): Result<Unit> =
@@ -65,9 +70,16 @@ internal object SecureStore {
             cipher.init(Cipher.ENCRYPT_MODE, secretKey())
             cipher.updateAAD(AAD)
             val iv = cipher.iv // 12 bytes for GCM
-            val cipherText = cipher.doFinal(serialize(accounts).toByteArray(Charsets.UTF_8))
-            AtomicStore.write(File(context.filesDir, FILE), MAGIC + iv + cipherText).getOrThrow()
+            val plaintext = serialize(accounts).toByteArray(Charsets.UTF_8)
+            try {
+                val cipherText = cipher.doFinal(plaintext)
+                AtomicStore.write(storageFile(context), MAGIC + iv + cipherText).getOrThrow()
+            } finally {
+                plaintext.fill(0)
+            }
         }
+
+    internal fun storageFile(context: Context): File = File(context.filesDir, FILE)
 
     private fun serialize(accounts: List<OtpAccount>): String {
         val arr = JSONArray()

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_back">Zurück</string>
+    <string name="accessibility_open_details">Details öffnen</string>
+    <string name="accessibility_page_position">Seite %1$d von %2$d</string>
+    <string name="accessibility_previous_page">Vorherige Seite</string>
+    <string name="accessibility_next_page">Nächste Seite</string>
+    <string name="accessibility_pass_position">Pass %1$d von %2$d</string>
+    <string name="accessibility_previous_pass">Vorheriger Pass</string>
+    <string name="accessibility_next_pass">Nächster Pass</string>
+    <string name="accessibility_side_position">Seite %1$d von %2$d</string>
+    <string name="accessibility_previous_side">Vorherige Seite</string>
+    <string name="accessibility_next_side">Nächste Seite</string>
+    <string name="accessibility_pdf_page">PDF-Seite %1$d</string>
+    <string name="accessibility_pdf_document">PDF-Dokument</string>
+    <string name="accessibility_named_photo_side">%1$s, Seite %2$d von %3$d</string>
+    <string name="accessibility_copy_code">Code kopieren</string>
+
+    <plurals name="accessibility_seconds_remaining">
+        <item quantity="one">Noch %1$d Sekunde</item>
+        <item quantity="other">Noch %1$d Sekunden</item>
+    </plurals>
+
+    <string name="page_fraction">%1$d/%2$d</string>
+    <string name="pass_stack_position">%1$s · %2$d/%3$d</string>
+
+    <string name="status_rendering">Wird gerendert…</string>
+    <string name="status_opening_pdf">PDF wird geöffnet…</string>
+    <string name="status_opening_photo">Foto wird geöffnet…</string>
+    <string name="error_code_render">Code konnte nicht gerendert werden</string>
+    <string name="error_pdf_render">PDF konnte nicht gerendert werden</string>
+    <string name="error_pdf_open">PDF konnte nicht geöffnet werden</string>
+    <string name="error_photo_open">Foto konnte nicht geöffnet werden</string>
+    <string name="pdf_requires_android_11">PDF-Pässe erfordern Android 11 oder neuer</string>
+</resources>

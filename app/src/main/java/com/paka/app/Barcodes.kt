@@ -1,25 +1,57 @@
 package com.paka.app
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.util.LruCache
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
+import com.google.zxing.WriterException
+import com.google.zxing.common.BitMatrix
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
-import uk.org.okapibarcode.backend.DataBarExpanded
 import java.security.MessageDigest
+import java.util.Locale
 
 /** Every symbology Paka can render. */
-enum class PakaFormat {
-    QR, AZTEC, PDF417, DATA_MATRIX,
-    CODE128, CODE39, CODE93, CODABAR, EAN13, EAN8, UPCA, UPCE, ITF,
-    DATABAR_EXPANDED,
+enum class PakaFormat(private val displayLabel: String) {
+    QR("QR"),
+    AZTEC("Aztec"),
+    PDF417("PDF417"),
+    DATA_MATRIX("Data Matrix"),
+    CODE128("Code 128"),
+    CODE39("Code 39"),
+    CODE93("Code 93"),
+    CODABAR("Codabar"),
+    EAN13("EAN-13"),
+    EAN8("EAN-8"),
+    UPCA("UPC-A"),
+    UPCE("UPC-E"),
+    ITF("ITF"),
+    DATABAR_EXPANDED("GS1 DataBar"),
+    ;
+
+    internal fun label(): String = displayLabel
 }
 
-private val SQUARE_FORMATS = setOf(PakaFormat.QR, PakaFormat.AZTEC, PakaFormat.DATA_MATRIX)
+private val SQUARE_FORMATS = setOf(PakaFormat.QR, PakaFormat.AZTEC)
+private val LINEAR_ZXING_FORMATS = setOf(
+    BarcodeFormat.CODE_128,
+    BarcodeFormat.CODE_39,
+    BarcodeFormat.CODE_93,
+    BarcodeFormat.CODABAR,
+    BarcodeFormat.EAN_13,
+    BarcodeFormat.EAN_8,
+    BarcodeFormat.UPC_A,
+    BarcodeFormat.UPC_E,
+    BarcodeFormat.ITF,
+)
+private const val ZXING_PROBE_SIZE = 1
+private const val PDF417_LANDSCAPE_PROBE_WIDTH = 2
+private const val QR_MARGIN_MODULES = 4
+private const val COMPACT_MATRIX_MARGIN_MODULES = 2
+private const val LINEAR_MARGIN_MODULES = 10
+private const val QUIET_ZONE_SIDE_COUNT = 2
+private const val BLACK_PIXEL = 0xFF000000.toInt()
+private const val WHITE_PIXEL = 0xFFFFFFFF.toInt()
 
 private fun PakaFormat.zxing(): BarcodeFormat? = when (this) {
     PakaFormat.QR -> BarcodeFormat.QR_CODE
@@ -38,59 +70,98 @@ private fun PakaFormat.zxing(): BarcodeFormat? = when (this) {
     PakaFormat.DATABAR_EXPANDED -> null // handled by OkapiBarcode
 }
 
-object Barcodes {
+internal object Barcodes {
     private const val CACHE_KIB = 12 * 1024
+    // Render cap. Raised beyond a typical panel so an enlarged/zoom view can be
+    // drawn at native resolution instead of upscaling a smaller bitmap.
+    private const val MAX_RENDER_PX = 2160
     private val bitmapCache = object : LruCache<String, Bitmap>(CACHE_KIB) {
         override fun sizeOf(key: String, value: Bitmap): Int = (value.allocationByteCount / 1024).coerceAtLeast(1)
     }
+    private val digitLengths = mapOf(
+        PakaFormat.EAN13 to Triple(12, 13, "EAN-13"),
+        PakaFormat.EAN8 to Triple(7, 8, "EAN-8"),
+        PakaFormat.UPCA to Triple(11, 12, "UPC-A"),
+        PakaFormat.UPCE to Triple(7, 8, "UPC-E"),
+    )
 
-    fun validationError(format: PakaFormat, data: String): String? {
-        if (data.isBlank()) return "Code content is required"
+    fun validationError(format: PakaFormat, data: String): LocalizedMessage? {
+        if (data.isBlank()) return LocalizedMessage(R.string.validation_required)
+        digitLengths[format]?.let { (short, full, label) ->
+            return digitLengthError(data, short, full, label)
+        }
         return when (format) {
-            PakaFormat.EAN13 -> digitLengthError(data, 12, 13, "EAN-13")
-            PakaFormat.EAN8 -> digitLengthError(data, 7, 8, "EAN-8")
-            PakaFormat.UPCA -> digitLengthError(data, 11, 12, "UPC-A")
-            PakaFormat.UPCE -> digitLengthError(data, 7, 8, "UPC-E")
-            PakaFormat.ITF -> when {
-                !data.all(Char::isDigit) -> "ITF accepts digits only"
-                data.length % 2 != 0 -> "ITF requires an even number of digits"
-                else -> null
-            }
-            PakaFormat.CODE39 -> if (data.uppercase() != data || data.any { it !in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%" }) {
-                "Code 39 contains unsupported characters"
-            } else null
-            PakaFormat.CODABAR -> if (data.length < 2 || data.first().uppercaseChar() !in "ABCD" || data.last().uppercaseChar() !in "ABCD") {
-                "Codabar must start and end with A, B, C, or D"
-            } else null
+            PakaFormat.ITF -> itfValidationError(data)
+            PakaFormat.CODE39 -> code39ValidationError(data)
+            PakaFormat.CODABAR -> codabarValidationError(data)
+            PakaFormat.AZTEC, PakaFormat.PDF417 -> latin1ValidationError(format, data)
             else -> null
         }
     }
 
-    private fun digitLengthError(data: String, short: Int, full: Int, label: String): String? = when {
-        !data.all(Char::isDigit) -> "$label accepts digits only"
-        data.length != short && data.length != full -> "$label requires $short or $full digits"
+    private fun itfValidationError(data: String): LocalizedMessage? = when {
+        !data.all(Char::isDigit) -> LocalizedMessage(R.string.validation_digits_only, listOf("ITF"))
+        data.length % 2 != 0 -> LocalizedMessage(R.string.validation_itf_even)
         else -> null
     }
+
+    private fun code39ValidationError(data: String): LocalizedMessage? =
+        if (
+            data.uppercase(Locale.ROOT) != data ||
+            data.any { it !in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%" }
+        ) {
+            LocalizedMessage(R.string.validation_code39)
+        } else {
+            null
+        }
+
+    private fun codabarValidationError(data: String): LocalizedMessage? =
+        if (
+            data.length < 2 ||
+            data.first().uppercaseChar() !in "ABCD" ||
+            data.last().uppercaseChar() !in "ABCD"
+        ) {
+            LocalizedMessage(R.string.validation_codabar)
+        } else {
+            null
+        }
+
+    private fun latin1ValidationError(format: PakaFormat, data: String): LocalizedMessage? =
+        if (Charsets.ISO_8859_1.newEncoder().canEncode(data)) {
+            null
+        } else {
+            LocalizedMessage(R.string.validation_latin1, listOf(format.label()))
+        }
 
     /** Render at the actual available display width so modules are never smoothly rescaled. */
     fun generate(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
         if (validationError(format, data) != null) return null
-        val width = targetWidthPx.coerceIn(240, 1440)
+        val width = targetWidthPx.coerceIn(240, MAX_RENDER_PX)
         return if (format == PakaFormat.DATABAR_EXPANDED) {
             generateDataBar(data, width)
         } else {
+            val zx = format.zxing() ?: return null
+            val rawMatrix = zxingRawMatrix(zx, data) ?: return null
+            // A symbol that cannot fit at one pixel per module would be scaled
+            // by Compose and lose the exact module grid. Refuse it instead.
+            if (rawMatrix.width > width) return null
+            // Snap to an exact integer multiple of the module count: every module
+            // is identical width and the quiet zone carries no leftover pixels.
+            val snapped = snappedWidth(rawMatrix.width, width)
+            val modulePx = snapped / rawMatrix.width
             val height = when {
-                format in SQUARE_FORMATS -> width
-                format == PakaFormat.PDF417 -> (width * 0.42f).toInt().coerceAtLeast(240)
-                else -> (width * 0.30f).toInt().coerceAtLeast(180)
+                format in SQUARE_FORMATS -> snapped
+                format == PakaFormat.DATA_MATRIX -> rawMatrix.height * modulePx
+                format == PakaFormat.PDF417 -> rawMatrix.height * modulePx
+                else -> (snapped * 0.30f).toInt().coerceAtLeast(180)
             }
-            generateZxing(format.zxing() ?: return null, data, width, height)
+            generateRawMatrix(rawMatrix, snapped, height, format, data)
         }
     }
 
     /** Bounded cache for passes already verified by [generate]. */
     fun generateCached(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
-        val width = targetWidthPx.coerceIn(240, 1440)
+        val width = targetWidthPx.coerceIn(240, MAX_RENDER_PX)
         val key = cacheKey(format, data, width)
         synchronized(bitmapCache) { bitmapCache.get(key) }?.let { return it }
         val generated = generate(format, data, width) ?: return null
@@ -104,105 +175,112 @@ object Barcodes {
         return generated
     }
 
-    private fun cacheKey(format: PakaFormat, data: String, width: Int): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(data.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
-        return "${format.name}:$width:$digest"
+    /** Largest exact integer-module width that fits [targetWidth]. */
+    internal fun snappedWidth(moduleCount: Int, targetWidth: Int): Int {
+        require(moduleCount in 1..targetWidth) { "Symbol modules must fit the target width" }
+        val modulePx = targetWidth / moduleCount
+        return moduleCount * modulePx
     }
+}
 
-    private fun generateZxing(format: BarcodeFormat, data: String, width: Int, height: Int): Bitmap? {
-        return try {
-            val hints = HashMap<EncodeHintType, Any>()
-            hints[EncodeHintType.MARGIN] = when (format) {
-                BarcodeFormat.QR_CODE -> 4
-                BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> 2
-                BarcodeFormat.PDF_417 -> 4
-                else -> 10
+private fun digitLengthError(data: String, short: Int, full: Int, label: String): LocalizedMessage? = when {
+    !data.all(Char::isDigit) -> LocalizedMessage(R.string.validation_digits_only, listOf(label))
+    data.length != short && data.length != full ->
+        LocalizedMessage(R.string.validation_length, listOf(label, short, full))
+    else -> null
+}
+
+private fun cacheKey(format: PakaFormat, data: String, width: Int): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(data.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    return "${format.name}:$width:$digest"
+}
+
+/** Encoder hints shared by the raw module-count probe and the final render. */
+private fun zxingHints(format: BarcodeFormat): HashMap<EncodeHintType, Any> {
+    val hints = HashMap<EncodeHintType, Any>()
+    hints[EncodeHintType.MARGIN] = when (format) {
+        BarcodeFormat.QR_CODE -> QR_MARGIN_MODULES
+        BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> COMPACT_MATRIX_MARGIN_MODULES
+        BarcodeFormat.PDF_417 -> QR_MARGIN_MODULES
+        // OneDimensionalCodeWriter treats MARGIN as a total allowance rather
+        // than a per-side quiet zone. Pad linear symbols explicitly below.
+        else -> 0
+    }
+    // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
+    when (format) {
+        BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
+        BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
+        else -> Unit
+    }
+    if (format == BarcodeFormat.QR_CODE) hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M
+    return hints
+}
+
+/** Raw module matrix (incl. quiet zone); reused for exact integer scaling. */
+private fun zxingRawMatrix(format: BarcodeFormat, data: String): BitMatrix? = try {
+    val probeWidth = if (format == BarcodeFormat.PDF_417) PDF417_LANDSCAPE_PROBE_WIDTH else ZXING_PROBE_SIZE
+    MultiFormatWriter().encode(data, format, probeWidth, ZXING_PROBE_SIZE, zxingHints(format))
+        .takeIf { it.width > 0 && it.height > 0 }
+        ?.let { matrix ->
+            // AztecWriter and DataMatrixWriter ignore EncodeHintType.MARGIN.
+            // Add the requested quiet zone explicitly without changing the
+            // symbol's natural (possibly rectangular) aspect ratio.
+            when {
+                format == BarcodeFormat.AZTEC || format == BarcodeFormat.DATA_MATRIX ->
+                    matrix.withQuietZone(COMPACT_MATRIX_MARGIN_MODULES)
+                format in LINEAR_ZXING_FORMATS -> matrix.withHorizontalQuietZone(LINEAR_MARGIN_MODULES)
+                else -> matrix
             }
-            // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
-            when (format) {
-                BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
-                BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
-                else -> Unit
-            }
-            if (format == BarcodeFormat.QR_CODE) hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M
-            val matrix = MultiFormatWriter().encode(data, format, width, height, hints)
-            val w = matrix.width
-            val h = matrix.height
-            val pixels = IntArray(w * h) { i ->
-                if (matrix.get(i % w, i / w)) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-            }
-            if (!BarcodePayloadVerifier.verify(w, h, pixels, format.paka(), data)) return null
-            Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565).apply { setPixels(pixels, 0, w, 0, 0, w, h) }
-        } catch (e: Exception) {
-            null
         }
-    }
+} catch (_: WriterException) {
+    null
+} catch (_: IllegalArgumentException) {
+    null
+}
 
-    /**
-     * GS1 DataBar Expanded Stacked via OkapiBarcode (pure Java, no Google, no native).
-     * Data arrives as HRI "(01)…(21)…" and is converted to Okapi's "[01]…[21]…" form.
-     * Two columns lays a typical jö payload out in two rows, matching the printed card.
-     */
-    // Parenthesized HRI may contain alphanumeric variable-length values (for
-    // example batch AI 10 and serial AI 21). Preserve those values verbatim.
-    private fun gs1ToBrackets(raw: String): String {
-        val sb = StringBuilder()
-        Regex("""\((\d{2,4})\)(.*?)(?=\(\d{2,4}\)|$)""", RegexOption.DOT_MATCHES_ALL).findAll(raw).forEach {
-            val value = it.groupValues[2].trimEnd('\u001D')
-            sb.append('[').append(it.groupValues[1]).append(']').append(value)
-        }
-        return if (sb.isNotEmpty()) sb.toString() else raw
-    }
-
-    private fun generateDataBar(data: String, targetWidthPx: Int): Bitmap? {
-        return try {
-            val symbol = DataBarExpanded()
-            symbol.setStacked(true)
-            symbol.setPreferredColumns(4) // 4 data columns lays a jö payload out in 2 rows
-            symbol.content = gs1ToBrackets(data)
-
-            val quietModules = 4
-            val modulePx = (targetWidthPx / (symbol.width + quietModules * 2)).coerceAtLeast(1)
-            val marginPx = quietModules * modulePx
-            val w = symbol.width * modulePx + marginPx * 2
-            val h = symbol.height * modulePx + marginPx * 2
-            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
-            val canvas = Canvas(bmp)
-            canvas.drawColor(Color.WHITE)
-            val paint = Paint().apply { color = Color.BLACK; isAntiAlias = false }
-            for (r in symbol.rectangles) {
-                val left = (r.x * modulePx + marginPx).toFloat()
-                val top = (r.y * modulePx + marginPx).toFloat()
-                canvas.drawRect(left, top, left + (r.width * modulePx).toFloat(), top + (r.height * modulePx).toFloat(), paint)
+private fun BitMatrix.withQuietZone(quietModules: Int): BitMatrix {
+    return BitMatrix(
+        width + quietModules * QUIET_ZONE_SIDE_COUNT,
+        height + quietModules * QUIET_ZONE_SIDE_COUNT,
+    ).also { padded ->
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (get(x, y)) padded.set(quietModules + x, quietModules + y)
             }
-            val pixels = IntArray(w * h)
-            bmp.getPixels(pixels, 0, w, 0, 0, w, h)
-            if (!BarcodePayloadVerifier.verify(w, h, pixels, PakaFormat.DATABAR_EXPANDED, data)) {
-                bmp.recycle()
-                return null
-            }
-            bmp
-        } catch (e: Exception) {
-            null
         }
     }
 }
 
-private fun BarcodeFormat.paka(): PakaFormat = when (this) {
-    BarcodeFormat.QR_CODE -> PakaFormat.QR
-    BarcodeFormat.AZTEC -> PakaFormat.AZTEC
-    BarcodeFormat.PDF_417 -> PakaFormat.PDF417
-    BarcodeFormat.DATA_MATRIX -> PakaFormat.DATA_MATRIX
-    BarcodeFormat.CODE_128 -> PakaFormat.CODE128
-    BarcodeFormat.CODE_39 -> PakaFormat.CODE39
-    BarcodeFormat.CODE_93 -> PakaFormat.CODE93
-    BarcodeFormat.CODABAR -> PakaFormat.CODABAR
-    BarcodeFormat.EAN_13 -> PakaFormat.EAN13
-    BarcodeFormat.EAN_8 -> PakaFormat.EAN8
-    BarcodeFormat.UPC_A -> PakaFormat.UPCA
-    BarcodeFormat.UPC_E -> PakaFormat.UPCE
-    BarcodeFormat.ITF -> PakaFormat.ITF
-    else -> error("Unsupported Paka barcode format: $this")
+private fun BitMatrix.withHorizontalQuietZone(quietModules: Int): BitMatrix {
+    return BitMatrix(width + quietModules * QUIET_ZONE_SIDE_COUNT, height).also { padded ->
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (get(x, y)) padded.set(quietModules + x, y)
+            }
+        }
+    }
+}
+
+private fun generateRawMatrix(
+    raw: BitMatrix,
+    width: Int,
+    height: Int,
+    format: PakaFormat,
+    data: String,
+): Bitmap? {
+    val modulePx = width / raw.width
+    if (modulePx < 1) return null
+    val stretchVertically = format !in SQUARE_FORMATS &&
+        format != PakaFormat.DATA_MATRIX &&
+        format != PakaFormat.PDF417
+    val pixels = IntArray(width * height) { index ->
+        val x = index % width
+        val y = index / width
+        val rawX = x / modulePx
+        val rawY = if (stretchVertically) y * raw.height / height else y / modulePx
+        if (raw.get(rawX, rawY)) BLACK_PIXEL else WHITE_PIXEL
+    }
+    return verifiedBitmap(width, height, pixels, format, data)
 }

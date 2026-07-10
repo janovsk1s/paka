@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_back">Tagasi</string>
+    <string name="accessibility_open_details">Ava üksikasjad</string>
+    <string name="accessibility_page_position">Lehekülg %1$d/%2$d</string>
+    <string name="accessibility_previous_page">Eelmine lehekülg</string>
+    <string name="accessibility_next_page">Järgmine lehekülg</string>
+    <string name="accessibility_pass_position">Pääse %1$d/%2$d</string>
+    <string name="accessibility_previous_pass">Eelmine pääse</string>
+    <string name="accessibility_next_pass">Järgmine pääse</string>
+    <string name="accessibility_side_position">Külg %1$d/%2$d</string>
+    <string name="accessibility_previous_side">Eelmine külg</string>
+    <string name="accessibility_next_side">Järgmine külg</string>
+    <string name="accessibility_pdf_page">PDF-i lehekülg %1$d</string>
+    <string name="accessibility_pdf_document">PDF-dokument</string>
+    <string name="accessibility_named_photo_side">%1$s, külg %2$d/%3$d</string>
+    <string name="accessibility_copy_code">Kopeeri kood</string>
+
+    <plurals name="accessibility_seconds_remaining">
+        <item quantity="one">%1$d sekund jäänud</item>
+        <item quantity="other">%1$d sekundit jäänud</item>
+    </plurals>
+
+    <string name="page_fraction">%1$d/%2$d</string>
+    <string name="pass_stack_position">%1$s · %2$d/%3$d</string>
+
+    <string name="status_rendering">Renderdamine…</string>
+    <string name="status_opening_pdf">PDF-i avamine…</string>
+    <string name="status_opening_photo">Foto avamine…</string>
+    <string name="error_code_render">Koodi ei õnnestunud renderdada</string>
+    <string name="error_pdf_render">PDF-i ei õnnestunud renderdada</string>
+    <string name="error_pdf_open">PDF-i ei õnnestunud avada</string>
+    <string name="error_photo_open">Fotot ei õnnestunud avada</string>
+    <string name="pdf_requires_android_11">PDF-pääsmed vajavad Android 11 või uuemat</string>
+</resources>

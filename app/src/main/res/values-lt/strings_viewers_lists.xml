@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_back">Atgal</string>
+    <string name="accessibility_open_details">Atverti informaciją</string>
+    <string name="accessibility_page_position">Puslapis %1$d iš %2$d</string>
+    <string name="accessibility_previous_page">Ankstesnis puslapis</string>
+    <string name="accessibility_next_page">Kitas puslapis</string>
+    <string name="accessibility_pass_position">Leidimas %1$d iš %2$d</string>
+    <string name="accessibility_previous_pass">Ankstesnis leidimas</string>
+    <string name="accessibility_next_pass">Kitas leidimas</string>
+    <string name="accessibility_side_position">Pusė %1$d iš %2$d</string>
+    <string name="accessibility_previous_side">Ankstesnė pusė</string>
+    <string name="accessibility_next_side">Kita pusė</string>
+    <string name="accessibility_pdf_page">PDF puslapis %1$d</string>
+    <string name="accessibility_pdf_document">PDF dokumentas</string>
+    <string name="accessibility_named_photo_side">%1$s, %2$d pusė iš %3$d</string>
+    <string name="accessibility_copy_code">Kopijuoti kodą</string>
+
+    <plurals name="accessibility_seconds_remaining">
+        <item quantity="one">Liko %1$d sekundė</item>
+        <item quantity="few">Liko %1$d sekundės</item>
+        <item quantity="many">Liko %1$d sekundės</item>
+        <item quantity="other">Liko %1$d sekundžių</item>
+    </plurals>
+
+    <string name="page_fraction">%1$d/%2$d</string>
+    <string name="pass_stack_position">%1$s · %2$d/%3$d</string>
+
+    <string name="status_rendering">Atvaizduojama…</string>
+    <string name="status_opening_pdf">Atidaromas PDF…</string>
+    <string name="status_opening_photo">Atidaroma nuotrauka…</string>
+    <string name="error_code_render">Nepavyko atvaizduoti kodo</string>
+    <string name="error_pdf_render">Nepavyko atvaizduoti PDF</string>
+    <string name="error_pdf_open">Nepavyko atidaryti PDF</string>
+    <string name="error_photo_open">Nepavyko atidaryti nuotraukos</string>
+    <string name="pdf_requires_android_11">PDF leidimams reikia „Android 11“ arba naujesnės versijos</string>
+</resources>

@@ -25,3 +25,9 @@ jobs:
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
       - name: Run tests, lint, and debug/preview/release builds
         run: ./gradlew test lint detekt assembleDebug assemblePreview assembleRelease --stacktrace
+      - name: Verify APK permissions
+        run: |
+          tools/check_apk_permissions.sh \
+            app/build/outputs/apk/debug/app-debug.apk \
+            app/build/outputs/apk/preview/app-preview.apk \
+            app/build/outputs/apk/release/app-release-unsigned.apk

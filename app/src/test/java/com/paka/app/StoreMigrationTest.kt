@@ -25,6 +25,8 @@ class StoreMigrationTest {
     fun setUp() {
         TestKeys.install()
         context = ApplicationProvider.getApplicationContext()
+        context.filesDir.deleteRecursively()
+        context.filesDir.mkdirs()
     }
 
     @Test
@@ -66,6 +68,54 @@ class StoreMigrationTest {
         assertTrue(loaded.writable)
         assertEquals(cards, loaded.value)
         assertTrue("recovery should be reported", loaded.warning.orEmpty().contains("recovered"))
+    }
+
+    @Test
+    fun backupOnlyEncryptedCardsRecoverAsWritable() {
+        val cards = listOf(Card(name = "Konzertkarte", data = "PAKA-1", format = PakaFormat.QR))
+        assertTrue(CardStore.save(context, cards).isSuccess)
+        val store = CardStore.storageFile(context)
+        store.copyTo(AtomicStore.backupFile(store), overwrite = true)
+        assertTrue(store.delete())
+
+        val loaded = CardStore.load(context)
+
+        assertTrue(loaded.writable)
+        assertEquals(cards, loaded.value)
+        assertTrue(store.exists())
+        assertTrue(loaded.warning.orEmpty().contains("recovered"))
+    }
+
+    @Test
+    fun backupOnly2faStoreRecoversAsWritable() {
+        val accounts = listOf(OtpAccount(issuer = "GitHub", account = "adrians", secret = "JBSWY3DPEHPK3PXP"))
+        assertTrue(SecureStore.saveAccounts(context, accounts).isSuccess)
+        val store = SecureStore.storageFile(context)
+        store.copyTo(AtomicStore.backupFile(store), overwrite = true)
+        assertTrue(store.delete())
+
+        val loaded = SecureStore.loadAccounts(context)
+
+        assertTrue(loaded.writable)
+        assertEquals(accounts, loaded.value)
+        assertTrue(store.exists())
+        assertTrue(loaded.warning.orEmpty().contains("recovered"))
+    }
+
+    @Test
+    fun plaintextCorruptEvidenceIsErasedAfterMigration() {
+        val legacy = File(context.filesDir, "cards.json")
+        legacy.writeText("broken plaintext")
+        AtomicStore.backupFile(legacy).writeText(
+            """[{"name":"Billa","data":"9120012345678","format":"EAN13"}]""",
+        )
+
+        val loaded = CardStore.load(context)
+
+        assertTrue(loaded.writable)
+        assertFalse(legacy.exists())
+        assertFalse(AtomicStore.backupFile(legacy).exists())
+        assertFalse(AtomicStore.corruptFile(legacy).exists())
     }
 
     @Test

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">säkerhetskopia</string>
+    <string name="backup_export_title">exportera</string>
+    <string name="backup_unlock_title">lås upp</string>
+    <string name="backup_restore_title">återställ</string>
+    <string name="backup_passphrase_field">lösenfras</string>
+    <string name="backup_repeat_field">upprepa</string>
+    <string name="backup_encrypted_export">krypterad export</string>
+    <string name="backup_restore_backup">återställ säkerhetskopia</string>
+    <string name="backup_offline_description">Säkerhetskopior krypteras offline och innehåller alla kort och 2FA-hemligheter. Externa filreferenser ingår inte.</string>
+    <string name="backup_new_passphrase_instructions">Använd minst %1$d tecken. Lösenfrasen kan inte återställas.</string>
+    <string name="backup_photo_compatibility">Säkerhetskopian innehåller fotokort och kan bara återställas med Paka 0.14 eller senare.</string>
+    <string name="backup_minimum_characters">minst %1$d tecken</string>
+    <string name="backup_repeat_passphrase">upprepa lösenfrasen</string>
+    <string name="backup_passphrases_do_not_match">lösenfraserna stämmer inte</string>
+    <string name="backup_encrypting">krypterar…</string>
+    <string name="backup_save_encrypted">spara krypterad säkerhetskopia</string>
+    <string name="backup_import_instructions">Ange säkerhetskopians lösenfras.</string>
+    <string name="backup_passphrase_placeholder">säkerhetskopians lösenfras</string>
+    <string name="backup_unlocking">låser upp…</string>
+    <string name="backup_unlock_action">lås upp säkerhetskopia</string>
+    <string name="backup_replace_current_data">Ersätta aktuella data?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="one">%1$d kort</item>
+        <item quantity="other">%1$d kort</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="one">%1$d kod</item>
+        <item quantity="other">%1$d koder</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="one">%1$d kort kräver en nyare Paka-version och utelämnas.</item>
+        <item quantity="other">%1$d kort kräver en nyare Paka-version och utelämnas.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Aktuella data kommer att ersättas.</string>
+    <string name="backup_pdf_android_requirement">PDF-kort i säkerhetskopian kräver Android 11 eller senare.</string>
+    <string name="backup_restoring">återställer…</string>
+    <string name="backup_restore_action">återställ</string>
+    <string name="backup_cancel_restore_action">avbryt återställning</string>
+    <string name="backup_saved">Krypterad säkerhetskopia sparad</string>
+    <string name="backup_save_failed">Säkerhetskopian gick inte att spara</string>
+    <string name="backup_read_failed">Säkerhetskopian gick inte att läsa</string>
+    <string name="backup_encrypt_failed">Säkerhetskopian gick inte att kryptera</string>
+    <string name="backup_too_large">Säkerhetskopian är för stor</string>
+    <string name="backup_invalid_passphrase">Fel lösenfras eller ogiltig säkerhetskopia</string>
+    <string name="backup_restored">Säkerhetskopia återställd</string>
+
+    <string name="detail_date_pattern">d MMM yyyy</string>
+    <string name="detail_reference_fallback">referens</string>
+    <string name="detail_delete_question">Radera %1$s?</string>
+    <string name="detail_delete_action">radera</string>
+    <string name="detail_cancel_action">avbryt</string>
+    <string name="detail_duplicate_pass_title">kortet har redan lagts till</string>
+    <string name="detail_duplicate_code_title">koden har redan lagts till</string>
+    <string name="detail_duplicate_match">matchar %1$s</string>
+    <string name="detail_add_anyway">lägg till ändå</string>
+    <string name="detail_discard_add_action">kassera tillägget</string>
+    <string name="detail_reference_title">referens</string>
+    <string name="detail_reference_open">öppna</string>
+    <string name="detail_reference_replace">ersätt</string>
+    <string name="detail_reference_remove">ta bort</string>
+    <string name="detail_external_reference_file">fil · %1$s</string>
+    <string name="detail_external_reference_warning">Innehållet i externa filer krypteras eller säkerhetskopieras inte av Paka.</string>
+    <string name="detail_reference_access_many_failed">Paka kunde inte behålla åtkomsten till filerna</string>
+    <string name="detail_reference_access_one_failed">Paka kunde inte behålla åtkomsten till filen</string>
+    <string name="detail_file_picker_failed">Filväljaren gick inte att öppna</string>
+    <string name="detail_file_open_failed">Ingen app kan öppna filen</string>
+    <string name="detail_name_field">namn</string>
+    <string name="detail_stack_field">stapel</string>
+    <string name="detail_notes_field">anteckningar</string>
+    <string name="detail_title">detaljer</string>
+    <string name="detail_none">ingen</string>
+    <string name="detail_sort_action">sortera</string>
+    <string name="detail_sort_stack_description">Sortera korten i stapeln</string>
+    <string name="detail_format_label">format</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="one">PDF · %1$d sida</item>
+        <item quantity="other">PDF · %1$d sidor</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="one">foton · %1$d sida</item>
+        <item quantity="other">foton · %1$d sidor</item>
+    </plurals>
+    <string name="detail_added_label">tillagd</string>
+    <string name="detail_code_label">kod</string>
+    <string name="detail_document_label">dokument</string>
+    <string name="detail_photos_label">foton</string>
+    <string name="detail_encrypted_document">krypterat dokument · %1$s</string>
+    <string name="detail_encrypted_photos">krypterade foton · %1$s</string>
+    <string name="detail_add_note">lägg till en anteckning</string>
+    <string name="detail_reference_one">referens 1</string>
+    <string name="detail_reference_two">referens 2</string>
+    <string name="detail_references_description">Välj upp till två filer samtidigt. Referenser förblir externa och krypteras eller säkerhetskopieras inte av Paka.</string>
+    <string name="detail_save_action">spara</string>
+</resources>

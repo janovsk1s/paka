@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">atsarginė kopija</string>
+    <string name="backup_export_title">eksportas</string>
+    <string name="backup_unlock_title">atrakinti</string>
+    <string name="backup_restore_title">atkurti</string>
+    <string name="backup_passphrase_field">slaptafrazė</string>
+    <string name="backup_repeat_field">pakartoti</string>
+    <string name="backup_encrypted_export">šifruotas eksportas</string>
+    <string name="backup_restore_backup">atkurti kopiją</string>
+    <string name="backup_offline_description">Atsarginės kopijos šifruojamos neprisijungus ir jose yra visi leidimai bei 2FA paslaptys. Išorinių failų nuorodos neįtraukiamos.</string>
+    <string name="backup_new_passphrase_instructions">Naudokite bent %1$d simbolių. Šios slaptafrazės atkurti negalima.</string>
+    <string name="backup_photo_compatibility">Šioje atsarginėje kopijoje yra nuotraukų leidimų. Ją galima atkurti tik naudojant Paka 0.14 ar naujesnę versiją.</string>
+    <string name="backup_minimum_characters">bent %1$d simbolių</string>
+    <string name="backup_repeat_passphrase">pakartokite slaptafrazę</string>
+    <string name="backup_passphrases_do_not_match">slaptafrazės nesutampa</string>
+    <string name="backup_encrypting">šifruojama…</string>
+    <string name="backup_save_encrypted">išsaugoti šifruotą kopiją</string>
+    <string name="backup_import_instructions">Įveskite šios atsarginės kopijos slaptafrazę.</string>
+    <string name="backup_passphrase_placeholder">atsarginės kopijos slaptafrazė</string>
+    <string name="backup_unlocking">atrakinama…</string>
+    <string name="backup_unlock_action">atrakinti kopiją</string>
+    <string name="backup_replace_current_data">Pakeisti dabartinius duomenis?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="one">%1$d leidimas</item>
+        <item quantity="few">%1$d leidimai</item>
+        <item quantity="many">%1$d leidimo</item>
+        <item quantity="other">%1$d leidimų</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="one">%1$d kodas</item>
+        <item quantity="few">%1$d kodai</item>
+        <item quantity="many">%1$d kodo</item>
+        <item quantity="other">%1$d kodų</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="one">%1$d leidimui reikia naujesnės Paka versijos, todėl jis bus praleistas.</item>
+        <item quantity="few">%1$d leidimams reikia naujesnės Paka versijos, todėl jie bus praleisti.</item>
+        <item quantity="many">%1$d leidimo reikia naujesnės Paka versijos, todėl jis bus praleistas.</item>
+        <item quantity="other">%1$d leidimų reikia naujesnės Paka versijos, todėl jie bus praleisti.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Dabartiniai duomenys bus pakeisti.</string>
+    <string name="backup_pdf_android_requirement">Šios atsarginės kopijos PDF leidimams reikia Android 11 ar naujesnės versijos.</string>
+    <string name="backup_restoring">atkuriama…</string>
+    <string name="backup_restore_action">atkurti</string>
+    <string name="backup_cancel_restore_action">atšaukti atkūrimą</string>
+    <string name="backup_saved">Šifruota atsarginė kopija išsaugota</string>
+    <string name="backup_save_failed">Nepavyko išsaugoti atsarginės kopijos</string>
+    <string name="backup_read_failed">Nepavyko perskaityti atsarginės kopijos</string>
+    <string name="backup_encrypt_failed">Nepavyko užšifruoti atsarginės kopijos</string>
+    <string name="backup_too_large">Atsarginė kopija per didelė</string>
+    <string name="backup_invalid_passphrase">Neteisinga slaptafrazė arba netinkama atsarginė kopija</string>
+    <string name="backup_restored">Atsarginė kopija atkurta</string>
+
+    <string name="detail_date_pattern">yyyy-MM-dd</string>
+    <string name="detail_reference_fallback">nuoroda</string>
+    <string name="detail_delete_question">Ištrinti %1$s?</string>
+    <string name="detail_delete_action">ištrinti</string>
+    <string name="detail_cancel_action">atšaukti</string>
+    <string name="detail_duplicate_pass_title">leidimas jau pridėtas</string>
+    <string name="detail_duplicate_code_title">kodas jau pridėtas</string>
+    <string name="detail_duplicate_match">sutampa su %1$s</string>
+    <string name="detail_add_anyway">vis tiek pridėti</string>
+    <string name="detail_discard_add_action">atmesti pridėjimą</string>
+    <string name="detail_reference_title">nuoroda</string>
+    <string name="detail_reference_open">atidaryti</string>
+    <string name="detail_reference_replace">pakeisti</string>
+    <string name="detail_reference_remove">pašalinti</string>
+    <string name="detail_external_reference_file">failas · %1$s</string>
+    <string name="detail_external_reference_warning">Paka nešifruoja išorinio failo turinio ir neįtraukia jo į atsargines kopijas.</string>
+    <string name="detail_reference_access_many_failed">Paka nepavyko išsaugoti prieigos prie šių failų</string>
+    <string name="detail_reference_access_one_failed">Paka nepavyko išsaugoti prieigos prie šio failo</string>
+    <string name="detail_file_picker_failed">Nepavyko atidaryti failų parinkiklio</string>
+    <string name="detail_file_open_failed">Jokia programa negali atidaryti šio failo</string>
+    <string name="detail_name_field">pavadinimas</string>
+    <string name="detail_stack_field">grupė</string>
+    <string name="detail_notes_field">pastabos</string>
+    <string name="detail_title">informacija</string>
+    <string name="detail_none">nėra</string>
+    <string name="detail_sort_action">rikiuoti</string>
+    <string name="detail_sort_stack_description">Rikiuoti šios grupės leidimus</string>
+    <string name="detail_format_label">formatas</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="one">PDF · %1$d puslapis</item>
+        <item quantity="few">PDF · %1$d puslapiai</item>
+        <item quantity="many">PDF · %1$d puslapio</item>
+        <item quantity="other">PDF · %1$d puslapių</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="one">nuotraukos · %1$d pusė</item>
+        <item quantity="few">nuotraukos · %1$d pusės</item>
+        <item quantity="many">nuotraukos · %1$d pusės</item>
+        <item quantity="other">nuotraukos · %1$d pusių</item>
+    </plurals>
+    <string name="detail_added_label">pridėta</string>
+    <string name="detail_code_label">kodas</string>
+    <string name="detail_document_label">dokumentas</string>
+    <string name="detail_photos_label">nuotraukos</string>
+    <string name="detail_encrypted_document">šifruotas dokumentas · %1$s</string>
+    <string name="detail_encrypted_photos">šifruotos nuotraukos · %1$s</string>
+    <string name="detail_add_note">pridėti pastabą</string>
+    <string name="detail_reference_one">1 nuoroda</string>
+    <string name="detail_reference_two">2 nuoroda</string>
+    <string name="detail_references_description">Vienu metu pasirinkite iki dviejų failų. Nuorodos lieka išorinės, o Paka jų nešifruoja ir neįtraukia į atsargines kopijas.</string>
+    <string name="detail_save_action">išsaugoti</string>
+</resources>

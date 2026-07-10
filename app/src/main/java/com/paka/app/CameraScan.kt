@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,10 +30,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -49,6 +53,7 @@ data class ScanResult(val data: String, val format: PakaFormat)
 @Composable
 fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val haptics = LocalHapticFeedback.current
     val lifecycleOwner = context as? LifecycleOwner
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -94,6 +99,18 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
     val torchRef = remember { AtomicBoolean(false) }
     val manualLightOverride = remember { AtomicBoolean(false) }
     val lastFocusRetry = remember { AtomicLong(SystemClock.elapsedRealtime()) }
+    val foreground by rememberIsForeground()
+
+    // CameraX drops the torch when it unbinds on background; clear the mirrored
+    // state so the label and auto-light logic restart honestly on return.
+    LaunchedEffect(foreground) {
+        if (!foreground) {
+            torchRef.set(false)
+            manualLightOverride.set(false)
+            torchEnabled = false
+            autoLight = false
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -180,7 +197,11 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                                                 ) {
                                                     previewView.post {
                                                         val activeCamera = cameraRef.get()
-                                                        if (activeCamera != null && previewView.width > 0 && previewView.height > 0) {
+                                                        if (
+                                                            activeCamera != null &&
+                                                            previewView.width > 0 &&
+                                                            previewView.height > 0
+                                                        ) {
                                                             focusAt(
                                                                 activeCamera,
                                                                 previewView,
@@ -192,18 +213,17 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                                                 }
 
                                                 val result = readers.firstNotNullOfOrNull { reader ->
-                                                    reader.read(image).firstOrNull { it.text != null || it.bytes != null }
+                                                    reader.read(image).firstOrNull {
+                                                        it.text != null || it.bytes != null
+                                                    }
                                                 }
                                                 val format = result?.let { mapFormat(it.format) }
-                                                if (result != null && format != null && handled.compareAndSet(false, true)) {
-                                                    val bytes = result.bytes
-                                                    val data = when {
-                                                        result.format == BarcodeReader.Format.AZTEC && bytes != null ->
-                                                            String(bytes, Charsets.ISO_8859_1)
-                                                        result.text != null -> result.text!!
-                                                        bytes != null -> String(bytes, Charsets.ISO_8859_1)
-                                                        else -> ""
-                                                    }
+                                                if (
+                                                    result != null &&
+                                                    format != null &&
+                                                    handled.compareAndSet(false, true)
+                                                ) {
+                                                    val data = selectScanPayload(format, result.text, result.bytes)
                                                     previewView.post {
                                                         performPakaHaptic(context, haptics)
                                                         onScanned(ScanResult(data, format))
@@ -233,7 +253,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                                 focusAt(camera, previewView, previewView.width / 2f, previewView.height / 2f)
                             }
                         } catch (_: Exception) {
-                            errorMessage = "Camera could not be started"
+                            errorMessage = resources.getString(R.string.scanner_error_camera_start)
                         }
                     }, ContextCompat.getMainExecutor(ctx))
                     previewView
@@ -255,7 +275,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
 
         if (lifecycleOwner == null || errorMessage != null) {
             Text(
-                text = errorMessage ?: "Camera is unavailable",
+                text = errorMessage ?: stringResource(R.string.scanner_error_camera_unavailable),
                 color = White,
                 modifier = Modifier.align(Alignment.Center).padding(28.dp),
             )
@@ -269,15 +289,14 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
         if (hasFlash) {
             Text(
                 text = when {
-                    autoLight -> "light auto"
-                    torchEnabled -> "light on"
-                    else -> "light"
+                    autoLight -> stringResource(R.string.scanner_label_light_auto)
+                    torchEnabled -> stringResource(R.string.scanner_label_light_on)
+                    else -> stringResource(R.string.scanner_label_light)
                 },
                 color = if (torchEnabled) White else Grey,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 22.dp)
                     .then(
                         tapModifier({
                             manualLightOverride.set(true)
@@ -286,14 +305,23 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                             torchRef.set(enabled)
                             torchEnabled = enabled
                             autoLight = false
-                        }, "Toggle camera light"),
-                    ),
+                        }, if (torchEnabled) {
+                            stringResource(R.string.scanner_cd_turn_light_off)
+                        } else {
+                            stringResource(R.string.scanner_cd_turn_light_on)
+                        }),
+                    )
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
             )
         }
 
         if (errorMessage == null && lifecycleOwner != null) {
             Text(
-                text = if (lowLight && !torchEnabled) "low light · use light" else "tap to focus",
+                text = if (lowLight && !torchEnabled) {
+                    stringResource(R.string.scanner_hint_low_light)
+                } else {
+                    stringResource(R.string.scanner_hint_tap_focus)
+                },
                 color = White.copy(alpha = 0.72f),
                 modifier = Modifier.align(Alignment.BottomCenter).systemBarsPadding().padding(bottom = 24.dp),
             )
@@ -304,7 +332,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
 private const val LOW_LIGHT_LUMA = 48
 private const val LOW_LIGHT_FRAMES = 6
 private const val BRIGHT_LIGHT_FRAMES = 4
-private const val FOCUS_RETRY_MS = 2_200L
+internal const val FOCUS_RETRY_MS = 2_200L
 
 /** Samples the central image area without allocating a full luminance copy. */
 private fun averageLuma(image: ImageProxy): Int {
@@ -348,6 +376,12 @@ private fun ScanGuide() {
         val arm = frame * 0.14f
         val stroke = 2.dp.toPx()
         val color = White.copy(alpha = 0.75f)
+        val scrim = Black.copy(alpha = 0.52f)
+
+        drawRect(scrim, Offset.Zero, ComposeSize(size.width, top))
+        drawRect(scrim, Offset(0f, bottom), ComposeSize(size.width, size.height - bottom))
+        drawRect(scrim, Offset(0f, top), ComposeSize(left, frame))
+        drawRect(scrim, Offset(right, top), ComposeSize(size.width - right, frame))
 
         drawLine(color, Offset(left, top), Offset(left + arm, top), stroke, StrokeCap.Square)
         drawLine(color, Offset(left, top), Offset(left, top + arm), stroke, StrokeCap.Square)
@@ -360,7 +394,7 @@ private fun ScanGuide() {
     }
 }
 
-private fun focusAt(camera: Camera, preview: PreviewView, x: Float, y: Float) {
+internal fun focusAt(camera: Camera, preview: PreviewView, x: Float, y: Float) {
     val point = preview.meteringPointFactory.createPoint(x, y)
     val action = FocusMeteringAction.Builder(
         point,
@@ -369,6 +403,15 @@ private fun focusAt(camera: Camera, preview: PreviewView, x: Float, y: Float) {
         .setAutoCancelDuration(3, TimeUnit.SECONDS)
         .build()
     camera.cameraControl.startFocusAndMetering(action)
+}
+
+/** Preserve arbitrary binary payloads for the two byte-oriented pass formats. */
+internal fun selectScanPayload(format: PakaFormat, text: String?, bytes: ByteArray?): String = when {
+    format == PakaFormat.AZTEC && bytes != null -> String(bytes, Charsets.ISO_8859_1)
+    format == PakaFormat.PDF417 && bytes != null -> String(bytes, Charsets.ISO_8859_1)
+    text != null -> text
+    bytes != null -> String(bytes, Charsets.ISO_8859_1)
+    else -> ""
 }
 
 private fun mapFormat(f: BarcodeReader.Format): PakaFormat? = when (f) {

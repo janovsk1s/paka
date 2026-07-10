@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_title">varmuuskopio</string>
+    <string name="backup_export_title">vienti</string>
+    <string name="backup_unlock_title">avaa</string>
+    <string name="backup_restore_title">palauta</string>
+    <string name="backup_passphrase_field">salasana</string>
+    <string name="backup_repeat_field">toista</string>
+    <string name="backup_encrypted_export">salattu vienti</string>
+    <string name="backup_restore_backup">palauta varmuuskopio</string>
+    <string name="backup_offline_description">Varmuuskopiot salataan ilman verkkoyhteyttä. Ne sisältävät kaikki kortit ja 2FA-salaisuudet. Ulkoisten tiedostojen viitteitä ei sisällytetä.</string>
+    <string name="backup_new_passphrase_instructions">Käytä vähintään %1$d merkkiä. Tätä salasanaa ei voi palauttaa.</string>
+    <string name="backup_photo_compatibility">Tämä varmuuskopio sisältää kuvakortteja, ja sen voi palauttaa vain Paka 0.14:llä tai uudemmalla.</string>
+    <string name="backup_minimum_characters">vähintään %1$d merkkiä</string>
+    <string name="backup_repeat_passphrase">toista salasana</string>
+    <string name="backup_passphrases_do_not_match">salasanat eivät täsmää</string>
+    <string name="backup_encrypting">salataan…</string>
+    <string name="backup_save_encrypted">tallenna salattu varmuuskopio</string>
+    <string name="backup_import_instructions">Anna tämän varmuuskopion salasana.</string>
+    <string name="backup_passphrase_placeholder">varmuuskopion salasana</string>
+    <string name="backup_unlocking">avataan…</string>
+    <string name="backup_unlock_action">avaa varmuuskopio</string>
+    <string name="backup_replace_current_data">Korvataanko nykyiset tiedot?</string>
+    <string name="backup_restore_counts">%1$s · %2$s</string>
+    <plurals name="backup_pass_count">
+        <item quantity="one">%1$d kortti</item>
+        <item quantity="other">%1$d korttia</item>
+    </plurals>
+    <plurals name="backup_code_count">
+        <item quantity="one">%1$d koodi</item>
+        <item quantity="other">%1$d koodia</item>
+    </plurals>
+    <plurals name="backup_skipped_passes">
+        <item quantity="one">%1$d kortti vaatii uudemman Paka-version ja ohitetaan.</item>
+        <item quantity="other">%1$d korttia vaatii uudemman Paka-version ja ohitetaan.</item>
+    </plurals>
+    <string name="backup_current_data_replaced">Nykyiset tiedot korvataan.</string>
+    <string name="backup_pdf_android_requirement">Tämän varmuuskopion PDF-kortit vaativat Android 11:n tai uudemman.</string>
+    <string name="backup_restoring">palautetaan…</string>
+    <string name="backup_restore_action">palauta</string>
+    <string name="backup_cancel_restore_action">peruuta palautus</string>
+    <string name="backup_saved">Salattu varmuuskopio tallennettu</string>
+    <string name="backup_save_failed">Varmuuskopiota ei voitu tallentaa</string>
+    <string name="backup_read_failed">Varmuuskopiota ei voitu lukea</string>
+    <string name="backup_encrypt_failed">Varmuuskopiota ei voitu salata</string>
+    <string name="backup_too_large">Varmuuskopio on liian suuri</string>
+    <string name="backup_invalid_passphrase">Väärä salasana tai virheellinen varmuuskopio</string>
+    <string name="backup_restored">Varmuuskopio palautettu</string>
+
+    <string name="detail_date_pattern">d.M.yyyy</string>
+    <string name="detail_reference_fallback">viite</string>
+    <string name="detail_delete_question">Poistetaanko %1$s?</string>
+    <string name="detail_delete_action">poista</string>
+    <string name="detail_cancel_action">peruuta</string>
+    <string name="detail_duplicate_pass_title">kortti on jo lisätty</string>
+    <string name="detail_duplicate_code_title">koodi on jo lisätty</string>
+    <string name="detail_duplicate_match">vastaa kohdetta %1$s</string>
+    <string name="detail_add_anyway">lisää silti</string>
+    <string name="detail_discard_add_action">hylkää lisäys</string>
+    <string name="detail_reference_title">viite</string>
+    <string name="detail_reference_open">avaa</string>
+    <string name="detail_reference_replace">korvaa</string>
+    <string name="detail_reference_remove">poista</string>
+    <string name="detail_external_reference_file">tiedosto · %1$s</string>
+    <string name="detail_external_reference_warning">Paka ei salaa eikä varmuuskopioi ulkoisen tiedoston sisältöä.</string>
+    <string name="detail_reference_access_many_failed">Paka ei voinut säilyttää näiden tiedostojen käyttöoikeutta</string>
+    <string name="detail_reference_access_one_failed">Paka ei voinut säilyttää tämän tiedoston käyttöoikeutta</string>
+    <string name="detail_file_picker_failed">Tiedostovalitsinta ei voitu avata</string>
+    <string name="detail_file_open_failed">Mikään sovellus ei voi avata tätä tiedostoa</string>
+    <string name="detail_name_field">nimi</string>
+    <string name="detail_stack_field">pino</string>
+    <string name="detail_notes_field">muistiinpanot</string>
+    <string name="detail_title">tiedot</string>
+    <string name="detail_none">ei pinoa</string>
+    <string name="detail_sort_action">järjestä</string>
+    <string name="detail_sort_stack_description">Järjestä tämän pinon kortit</string>
+    <string name="detail_format_label">muoto</string>
+    <plurals name="detail_pdf_page_count">
+        <item quantity="one">PDF · %1$d sivu</item>
+        <item quantity="other">PDF · %1$d sivua</item>
+    </plurals>
+    <plurals name="detail_photo_side_count">
+        <item quantity="one">kuvat · %1$d puoli</item>
+        <item quantity="other">kuvat · %1$d puolta</item>
+    </plurals>
+    <string name="detail_added_label">lisätty</string>
+    <string name="detail_code_label">koodi</string>
+    <string name="detail_document_label">asiakirja</string>
+    <string name="detail_photos_label">kuvat</string>
+    <string name="detail_encrypted_document">salattu asiakirja · %1$s</string>
+    <string name="detail_encrypted_photos">salatut kuvat · %1$s</string>
+    <string name="detail_add_note">lisää muistiinpano</string>
+    <string name="detail_reference_one">viite 1</string>
+    <string name="detail_reference_two">viite 2</string>
+    <string name="detail_references_description">Valitse enintään kaksi tiedostoa kerralla. Viitteet pysyvät ulkoisina, eikä Paka salaa tai varmuuskopioi niitä.</string>
+    <string name="detail_save_action">tallenna</string>
+</resources>

@@ -40,11 +40,22 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 
 private data class SharpPdfLayer(
@@ -68,22 +79,32 @@ internal fun PdfDocumentPreview(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val openDetailsLabel = stringResource(R.string.accessibility_open_details)
+    val nextPassLabel = stringResource(R.string.accessibility_next_pass)
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(420.dp)
             .padding(horizontal = 8.dp)
             .background(White)
-            .then(tapLongModifier(onClick, onLongPress, card.name))
+            .then(
+                tapLongModifier(
+                    onClick = onClick,
+                    onLongClick = onLongPress,
+                    label = card.name,
+                    longClickLabel = openDetailsLabel,
+                    clickLabel = nextPassLabel,
+                ),
+            )
             .padding(8.dp),
         contentAlignment = Alignment.Center,
     ) {
         when {
             Build.VERSION.SDK_INT < Build.VERSION_CODES.R ->
-                Text("PDF passes require Android 11 or newer", color = Grey, fontSize = 16.sp)
+                Text(stringResource(R.string.pdf_requires_android_11), color = Grey, fontSize = 16.sp)
             render != null -> Image(
                 bitmap = render.asImageBitmap(),
-                contentDescription = card.name,
+                contentDescription = null,
                 filterQuality = FilterQuality.None,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.size(
@@ -91,8 +112,8 @@ internal fun PdfDocumentPreview(
                     with(density) { render.height.toDp() },
                 ),
             )
-            renderPending -> Text("Rendering…", color = Grey, fontSize = 16.sp)
-            else -> Text("Couldn't render this PDF", color = Grey, fontSize = 16.sp)
+            renderPending -> Text(stringResource(R.string.status_rendering), color = Grey, fontSize = 16.sp)
+            else -> Text(stringResource(R.string.error_pdf_render), color = Grey, fontSize = 16.sp)
         }
     }
 }
@@ -105,9 +126,11 @@ internal fun PdfDocumentViewer(
     onPageChanged: (page: Int, pageCount: Int) -> Unit = { _, _ -> },
 ) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("PDF passes require Android 11 or newer", color = Grey, fontSize = 16.sp)
-        }
+        PdfStatusBox(
+            message = stringResource(R.string.pdf_requires_android_11),
+            modifier = modifier,
+            onLongPress = onLongPress,
+        )
         return
     }
     PdfDocumentViewerApi30(content, onLongPress, modifier, onPageChanged)
@@ -122,10 +145,16 @@ private fun PdfDocumentViewerApi30(
     onPageChanged: (page: Int, pageCount: Int) -> Unit,
 ) {
     val context = LocalContext.current
+    val foreground by rememberIsForeground()
     var session by remember(content.documentId) { mutableStateOf<PdfDocumentSession?>(null) }
     var error by remember(content.documentId) { mutableStateOf<String?>(null) }
+    val openError = stringResource(R.string.error_pdf_open)
 
-    LaunchedEffect(content.documentId) {
+    // Open only while foregrounded; release the session (a memfd + PdfRenderer)
+    // and its native memory when backgrounded, matching how decoded photos are
+    // freed on stop. It reopens on return.
+    LaunchedEffect(content.documentId, foreground) {
+        if (!foreground || session != null) return@LaunchedEffect
         var opened: PdfDocumentSession? = null
         try {
             // The holder is assigned inside the IO block so a cancellation that
@@ -137,15 +166,17 @@ private fun PdfDocumentViewerApi30(
                 session = it
                 opened = null
             }.onFailure {
-                error = "PDF could not be opened"
+                error = openError
             }
         } finally {
             opened?.close()
         }
     }
-    val sessionToClose = session
-    DisposableEffect(sessionToClose) {
-        onDispose { sessionToClose?.close() }
+    DisposableEffect(content.documentId, foreground) {
+        onDispose {
+            session?.close()
+            session = null
+        }
     }
 
     val document = session
@@ -156,6 +187,7 @@ private fun PdfDocumentViewerApi30(
             HardCutPager(
                 pageCount = pageCount,
                 modifier = modifier,
+                indicatorOffset = 0.dp,
                 showIndicator = content.pageCount > 1,
                 gesturesEnabled = !pageZoomed,
                 onPageChange = { onPageChanged(it, pageCount) },
@@ -163,12 +195,30 @@ private fun PdfDocumentViewerApi30(
                 PdfZoomPage(document, page, onLongPress) { pageZoomed = it }
             }
         }
-        error != null -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(checkNotNull(error), color = Grey, fontSize = 16.sp)
-        }
-        else -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Opening PDF…", color = Grey, fontSize = 16.sp)
-        }
+        error != null -> PdfStatusBox(checkNotNull(error), modifier, onLongPress)
+        else -> PdfStatusBox(stringResource(R.string.status_opening_pdf), modifier, onLongPress)
+    }
+}
+
+@Composable
+private fun PdfStatusBox(
+    message: String,
+    modifier: Modifier,
+    onLongPress: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                longPressModifier(
+                    onLongClick = onLongPress,
+                    label = stringResource(R.string.accessibility_pdf_document),
+                    longClickLabel = stringResource(R.string.accessibility_open_details),
+                ),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(message, color = Grey, fontSize = 16.sp)
     }
 }
 
@@ -183,6 +233,8 @@ private fun PdfZoomPage(
     val density = LocalDensity.current
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
+    val openDetailsLabel = stringResource(R.string.accessibility_open_details)
+    val pageDescription = stringResource(R.string.accessibility_pdf_page, pageIndex + 1)
     var viewportWidth by remember { mutableStateOf(0) }
     var viewportHeight by remember { mutableStateOf(0) }
     var basePage by remember(pageIndex) { mutableStateOf<PdfPageBitmap?>(null) }
@@ -194,13 +246,17 @@ private fun PdfZoomPage(
 
     LaunchedEffect(session, pageIndex, viewportWidth, viewportHeight) {
         if (viewportWidth <= 0 || viewportHeight <= 0) return@LaunchedEffect
-        val rendered = withContext(Dispatchers.Default) {
-            runCatching {
+        val rendered = try {
+            loadOwnedPdfPage {
                 // Fit the complete page into the full viewer without changing
                 // its aspect ratio. Movement is reserved for the zoomed state.
                 session.renderPage(pageIndex, viewportWidth, viewportHeight)
             }
-        }.getOrNull()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
         if (rendered == null) {
             renderFailed = true
             return@LaunchedEffect
@@ -248,8 +304,8 @@ private fun PdfZoomPage(
             return@LaunchedEffect
         }
         delay(140)
-        val bitmap = withContext(Dispatchers.Default) {
-            runCatching {
+        val bitmap = try {
+            loadOwnedPdfBitmap {
                 session.renderViewport(
                     index = pageIndex,
                     viewportWidth = viewportWidth,
@@ -262,7 +318,11 @@ private fun PdfZoomPage(
                     translationY = translationY,
                 )
             }
-        }.getOrNull() ?: return@LaunchedEffect
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        } ?: return@LaunchedEffect
         sharpLayer = SharpPdfLayer(bitmap, zoom, translationX, translationY)
     }
 
@@ -270,6 +330,15 @@ private fun PdfZoomPage(
         modifier = Modifier
             .fillMaxSize()
             .background(Black)
+            .semantics(mergeDescendants = true) {
+                contentDescription = pageDescription
+                role = Role.Button
+                onClick(label = openDetailsLabel) {
+                    performPakaHaptic(context, haptics)
+                    onLongPress()
+                    true
+                }
+            }
             .onSizeChanged {
                 viewportWidth = it.width
                 viewportHeight = it.height
@@ -317,27 +386,32 @@ private fun PdfZoomPage(
                 }
             }
             .pointerInput(page, viewportWidth, viewportHeight) {
-                if (page == null) return@pointerInput
                 detectTapGestures(
                     onLongPress = {
                         performPakaHaptic(context, haptics)
                         onLongPress()
                     },
-                    onDoubleTap = { point ->
-                        if (zoom > 1.05f) {
-                            zoom = 1f
-                            onZoomChanged(false)
-                            translationX = 0f
-                            translationY = 0f
-                        } else {
-                            val target = 3f
-                            val anchoredX = translationX + (point.x - pageLeft - translationX) * (1f - target / zoom)
-                            val anchoredY = translationY + (point.y - pageTop - translationY) * (1f - target / zoom)
-                            zoom = target
-                            onZoomChanged(true)
-                            translationX = clampX(anchoredX, target)
-                            translationY = clampY(anchoredY, target)
+                    onDoubleTap = if (page != null) {
+                        { point ->
+                            if (zoom > 1.05f) {
+                                zoom = 1f
+                                onZoomChanged(false)
+                                translationX = 0f
+                                translationY = 0f
+                            } else {
+                                val target = 3f
+                                val anchoredX = translationX +
+                                    (point.x - pageLeft - translationX) * (1f - target / zoom)
+                                val anchoredY = translationY +
+                                    (point.y - pageTop - translationY) * (1f - target / zoom)
+                                zoom = target
+                                onZoomChanged(true)
+                                translationX = clampX(anchoredX, target)
+                                translationY = clampY(anchoredY, target)
+                            }
                         }
+                    } else {
+                        null
                     },
                 )
             },
@@ -346,7 +420,7 @@ private fun PdfZoomPage(
         if (page != null) {
             Image(
                 bitmap = page.bitmap.asImageBitmap(),
-                contentDescription = "PDF page ${pageIndex + 1}",
+                contentDescription = null,
                 filterQuality = FilterQuality.Low,
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier
@@ -377,9 +451,46 @@ private fun PdfZoomPage(
                 )
             }
         } else if (renderFailed) {
-            Text("Couldn't render this PDF", color = Grey, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center))
+            Text(
+                stringResource(R.string.error_pdf_render),
+                color = Grey,
+                fontSize = 16.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
         } else {
-            Text("Rendering…", color = Grey, fontSize = 16.sp, modifier = Modifier.align(Alignment.Center))
+            Text(
+                stringResource(R.string.status_rendering),
+                color = Grey,
+                fontSize = 16.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
+    }
+}
+
+/** Native PDF rendering is not cancellable; retain ownership until Compose accepts the page. */
+private suspend fun loadOwnedPdfPage(block: suspend () -> PdfPageBitmap): PdfPageBitmap {
+    return loadOwnedPdfRender(block) { page ->
+        if (!page.bitmap.isRecycled) page.bitmap.recycle()
+    }
+}
+
+/** Native PDF rendering is not cancellable; retain ownership until Compose accepts the bitmap. */
+internal suspend fun loadOwnedPdfBitmap(block: suspend () -> Bitmap): Bitmap =
+    loadOwnedPdfRender(block) { bitmap ->
+        if (!bitmap.isRecycled) bitmap.recycle()
+    }
+
+private suspend fun <T : Any> loadOwnedPdfRender(
+    block: suspend () -> T,
+    recycle: (T) -> Unit,
+): T {
+    val owned = AtomicReference<T?>(null)
+    return try {
+        withContext(NonCancellable + Dispatchers.Default) { owned.set(block()) }
+        currentCoroutineContext().ensureActive()
+        owned.getAndSet(null) ?: error("PDF render returned no result")
+    } finally {
+        owned.getAndSet(null)?.let(recycle)
     }
 }
