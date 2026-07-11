@@ -31,6 +31,7 @@
     <string name="developer_text_smaller">pienempi</string>
     <string name="developer_text_larger">suurempi</string>
     <string name="developer_language">kieli</string>
+    <string name="developer_light_mode">vaalea tila</string>
     <string name="developer_return_home">palaa alkuun</string>
     <string name="developer_auto_light">automaattivalo</string>
     <string name="developer_max_brightness">enimmäiskirkkaus</string>

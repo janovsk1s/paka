@@ -59,17 +59,19 @@ internal fun SimpleTopBar(
     trailing: String? = null,
     backEnabled: Boolean = true,
     capitalizeTitle: Boolean = true,
+    color: Color = Palette.foreground,
 ) {
     val displayedTitle = if (capitalizeTitle) title.replaceFirstChar { it.uppercase() } else title
     Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
         BackArrow(
             modifier = Modifier.align(Alignment.CenterStart).offset(x = (-30).dp),
             enabled = backEnabled,
+            color = color,
             onBack = onBack,
         )
         Text(
             text = displayedTitle,
-            color = White,
+            color = color,
             fontSize = 16.sp,
             fontWeight = FontWeight.Normal,
             maxLines = 1,
@@ -80,7 +82,7 @@ internal fun SimpleTopBar(
         if (trailing != null) {
             Text(
                 text = trailing,
-                color = White,
+                color = color,
                 fontSize = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
@@ -94,7 +96,7 @@ internal fun SimpleTopBar(
 @Composable
 internal fun EmptyHint(text: String) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = text, color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Normal)
+        Text(text = text, color = Palette.dim, fontSize = 18.sp, fontWeight = FontWeight.Normal)
     }
 }
 
@@ -146,7 +148,7 @@ internal fun Modifier.hardSnapVerticalScroll(state: ScrollState): Modifier {
         .verticalScroll(state, flingBehavior = flingBehavior)
 }
 
-/** Thin white track + thicker white segment, square ends, sized to the visible portion. */
+/** Thin foreground track + thicker segment, square ends, sized to the visible portion. */
 @Composable
 private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
     if (state.maxValue <= 0) return
@@ -159,8 +161,16 @@ private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
         val thumbLen = (vh / total * trackLen).coerceIn(24.dp.toPx(), trackLen)
         val thumbY = margin + (state.value / maxV) * (trackLen - thumbLen)
         val centerX = size.width / 2f
-        drawRect(White.copy(alpha = 0.3f), topLeft = Offset(centerX - 0.5.dp.toPx(), margin), size = Size(1.dp.toPx(), trackLen))
-        drawRect(White, topLeft = Offset(centerX - 2.dp.toPx(), thumbY), size = Size(4.dp.toPx(), thumbLen))
+        drawRect(
+            Palette.foreground.copy(alpha = 0.3f),
+            topLeft = Offset(centerX - 0.5.dp.toPx(), margin),
+            size = Size(1.dp.toPx(), trackLen),
+        )
+        drawRect(
+            Palette.foreground,
+            topLeft = Offset(centerX - 2.dp.toPx(), thumbY),
+            size = Size(4.dp.toPx(), thumbLen),
+        )
     }
 }
 
@@ -235,6 +245,9 @@ internal fun HardCutPager(
     modifier: Modifier = Modifier,
     indicatorOffset: Dp = 18.dp,
     showIndicator: Boolean = true,
+    // Full-screen content viewers draw over a physically dark backdrop and
+    // pass White explicitly; themed screens follow the palette.
+    indicatorColor: Color = Palette.foreground,
     gesturesEnabled: Boolean = true,
     contentKind: PagerContentKind = PagerContentKind.PAGE,
     onPageChange: ((Int) -> Unit)? = null,
@@ -337,6 +350,7 @@ internal fun HardCutPager(
                 page = currentPage,
                 pageCount = pageCount,
                 horizontalOffset = indicatorOffset,
+                color = indicatorColor,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -344,7 +358,13 @@ internal fun HardCutPager(
 }
 
 @Composable
-private fun PageIndicator(page: Int, pageCount: Int, horizontalOffset: Dp, modifier: Modifier = Modifier) {
+private fun PageIndicator(
+    page: Int,
+    pageCount: Int,
+    horizontalOffset: Dp,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
     Canvas(modifier = modifier.offset(x = horizontalOffset).fillMaxHeight().width(6.dp)) {
         val topMargin = 20.dp.toPx()
         val bottomMargin = 6.dp.toPx()
@@ -354,12 +374,12 @@ private fun PageIndicator(page: Int, pageCount: Int, horizontalOffset: Dp, modif
         val thumbY = topMargin + if (pageCount <= 1) 0f else availableTravel * page / (pageCount - 1)
         val centerX = size.width / 2f
         drawRect(
-            White.copy(alpha = 0.3f),
+            color.copy(alpha = 0.3f),
             topLeft = Offset(centerX - 0.5.dp.toPx(), topMargin),
             size = Size(1.dp.toPx(), trackLength),
         )
         drawRect(
-            White,
+            color,
             topLeft = Offset(centerX - 2.dp.toPx(), thumbY),
             size = Size(4.dp.toPx(), thumbLength),
         )

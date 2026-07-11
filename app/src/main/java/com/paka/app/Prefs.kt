@@ -17,6 +17,7 @@ internal object Prefs {
     private const val KEY_OFFICIAL_FONT = "official_light_font"
     private const val KEY_LIGHT_GEAR = "light_sdk_settings_gear"
     private const val KEY_LANGUAGE = "developer_language"
+    private const val KEY_LIGHT_MODE = "light_mode"
 
     const val MIN_TEXT_SIZE = 16f
     const val DEFAULT_TEXT_SIZE = 30f
@@ -66,6 +67,12 @@ internal object Prefs {
 
     fun setOfficialFont(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_OFFICIAL_FONT, enabled).apply()
+    }
+
+    fun lightMode(context: Context): Boolean = prefs(context).getBoolean(KEY_LIGHT_MODE, false)
+
+    fun setLightMode(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LIGHT_MODE, enabled).apply()
     }
 
     fun lightGear(context: Context): Boolean = prefs(context).getBoolean(KEY_LIGHT_GEAR, false)

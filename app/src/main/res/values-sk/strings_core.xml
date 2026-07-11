@@ -31,6 +31,7 @@
     <string name="developer_text_smaller">menší</string>
     <string name="developer_text_larger">väčší</string>
     <string name="developer_language">jazyk</string>
+    <string name="developer_light_mode">svetlý režim</string>
     <string name="developer_return_home">návrat domov</string>
     <string name="developer_auto_light">automatické svetlo</string>
     <string name="developer_max_brightness">max. jas</string>

@@ -62,7 +62,7 @@ internal fun CardsList(
             ) {
                 Text(
                     text = entry.card.name,
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = textSize.sp,
                     fontWeight = FontWeight.Normal,
                     textAlign = TextAlign.Start,
@@ -77,14 +77,14 @@ internal fun CardsList(
             ) {
                 Text(
                     entry.name,
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = textSize.sp,
                     fontWeight = FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Text(entry.cards.size.toString(), color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
+                Text(entry.cards.size.toString(), color = Palette.dim, fontSize = 16.sp, fontWeight = FontWeight.Light)
             }
         }
     }
@@ -192,7 +192,7 @@ internal fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float,
             }
             Text(
                 account.title(),
-                color = Grey,
+                color = Palette.dim,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Light,
                 maxLines = 1,
@@ -205,7 +205,7 @@ internal fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float,
             ) {
                 Text(
                     formatCode(code),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = fittedTextSize.sp,
                     fontWeight = FontWeight.Normal,
                     letterSpacing = 2.sp,
@@ -216,7 +216,7 @@ internal fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float,
                 )
                 Text(
                     remaining.toString(),
-                    color = Grey,
+                    color = Palette.dim,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Light,
                     textAlign = TextAlign.End,

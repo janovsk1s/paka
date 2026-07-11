@@ -31,6 +31,7 @@
     <string name="developer_text_smaller">väiksem</string>
     <string name="developer_text_larger">suurem</string>
     <string name="developer_language">keel</string>
+    <string name="developer_light_mode">hele režiim</string>
     <string name="developer_return_home">naase avalehele</string>
     <string name="developer_auto_light">automaatne valgus</string>
     <string name="developer_max_brightness">suurim heledus</string>

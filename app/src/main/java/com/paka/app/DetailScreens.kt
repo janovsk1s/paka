@@ -93,22 +93,22 @@ private fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Black)
+            .background(Palette.background)
             .systemBarsPadding()
             .padding(horizontal = 28.dp, vertical = 10.dp),
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
             Text(
                 stringResource(R.string.detail_delete_question, name),
-                color = White,
+                color = Palette.foreground,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Normal,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        ConfirmationAction(stringResource(R.string.detail_delete_action), White, onClick = onConfirm)
-        ConfirmationAction(stringResource(R.string.detail_cancel_action), Grey, onClick = onBack)
+        ConfirmationAction(stringResource(R.string.detail_delete_action), Palette.foreground, onClick = onConfirm)
+        ConfirmationAction(stringResource(R.string.detail_cancel_action), Palette.dim, onClick = onBack)
     }
 }
 
@@ -123,7 +123,7 @@ internal fun DuplicateConfirmScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Black)
+            .background(Palette.background)
             .systemBarsPadding()
             .padding(horizontal = 28.dp, vertical = 10.dp),
     ) {
@@ -136,7 +136,7 @@ internal fun DuplicateConfirmScreen(
                             DuplicateKind.CODE -> R.string.detail_duplicate_code_title
                         },
                     ),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 30.sp,
                     fontWeight = FontWeight.Normal,
                     maxLines = 3,
@@ -144,7 +144,7 @@ internal fun DuplicateConfirmScreen(
                 )
                 Text(
                     stringResource(R.string.detail_duplicate_match, existingName),
-                    color = Grey,
+                    color = Palette.dim,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Light,
                     maxLines = 3,
@@ -152,8 +152,8 @@ internal fun DuplicateConfirmScreen(
                 )
             }
         }
-        ConfirmationAction(stringResource(R.string.detail_add_anyway), White, onClick = onConfirm)
-        ConfirmationAction(stringResource(R.string.detail_discard_add_action), Grey, onClick = onBack)
+        ConfirmationAction(stringResource(R.string.detail_add_anyway), Palette.foreground, onClick = onConfirm)
+        ConfirmationAction(stringResource(R.string.detail_discard_add_action), Palette.dim, onClick = onBack)
     }
 }
 
@@ -166,7 +166,13 @@ private fun ReferenceOptionsScreen(
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(stringResource(R.string.detail_reference_title), onBack)
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -190,7 +196,7 @@ private fun ReferenceOptionsScreen(
                     ) {
                         Text(
                             label,
-                            color = White,
+                            color = Palette.foreground,
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Normal,
                             maxLines = 2,
@@ -202,7 +208,7 @@ private fun ReferenceOptionsScreen(
             Column(modifier = Modifier.fillMaxWidth().padding(end = 14.dp, bottom = 18.dp)) {
                 Text(
                     stringResource(R.string.detail_external_reference_file, name),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Light,
                     maxLines = 1,
@@ -211,7 +217,7 @@ private fun ReferenceOptionsScreen(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(R.string.detail_external_reference_warning),
-                    color = Grey,
+                    color = Palette.dim,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Light,
                 )
@@ -378,7 +384,13 @@ internal fun CardDetail(
     }
     BackHandler { persistAndBack() }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(stringResource(R.string.detail_title), persistAndBack)
         HardCutPager(pageCount = 3, modifier = Modifier.weight(1f).fillMaxWidth()) { page, _ ->
             Column(
@@ -400,7 +412,7 @@ internal fun CardDetail(
                         if (savedStack != null && stackMembers(savedStack).size >= 2) {
                             Text(
                                 stringResource(R.string.detail_sort_action),
-                                color = Grey,
+                                color = Palette.dim,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Light,
                                 modifier = Modifier
@@ -460,14 +472,14 @@ internal fun CardDetail(
                                     content.pages.joinToString(" · ") { it.documentId.take(8) },
                                 )
                             },
-                            color = Grey,
+                            color = Palette.dim,
                             fontSize = 13.sp,
                             maxLines = 8,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey.copy(alpha = 0.5f)))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.dim.copy(alpha = 0.5f)))
                     ManualEntryRow(
                         stringResource(R.string.detail_notes_field),
                         notes,
@@ -482,7 +494,7 @@ internal fun CardDetail(
                     }
                     Text(
                         stringResource(R.string.detail_references_description),
-                        color = Grey,
+                        color = Palette.dim,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Light,
                     )
@@ -502,7 +514,7 @@ internal fun CardDetail(
             ) {
                 Text(
                     text = stringResource(R.string.detail_save_action),
-                    color = if (name.isBlank()) Grey else White,
+                    color = if (name.isBlank()) Palette.dim else Palette.foreground,
                     fontSize = 18.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -514,7 +526,7 @@ internal fun CardDetail(
             ) {
                 Text(
                     text = stringResource(R.string.detail_delete_action),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 18.sp,
                     textAlign = TextAlign.End,
                     maxLines = 2,

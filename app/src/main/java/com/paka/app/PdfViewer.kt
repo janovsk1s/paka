@@ -189,6 +189,8 @@ private fun PdfDocumentViewerApi30(
                 modifier = modifier,
                 indicatorOffset = 0.dp,
                 showIndicator = content.pageCount > 1,
+                // Drawn over the physically dark document backdrop.
+                indicatorColor = White,
                 gesturesEnabled = !pageZoomed,
                 onPageChange = { onPageChanged(it, pageCount) },
             ) { page, _ ->

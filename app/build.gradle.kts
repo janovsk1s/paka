@@ -7,9 +7,21 @@ val signingProperties = Properties().apply {
 }
 // Signed previews use the production package/signing identity so they upgrade
 // in place. Development builds must not claim a released preview identity;
-// update both values when cutting the next preview and clear the label for stable.
+// update these values when cutting the next preview and clear the label for stable.
+// The debug and preview build types share one isolated identity per cycle.
 val releaseChannelLabel = ""
-val isolatedVersionSuffix = "-photo-development"
+val isolatedVersionSuffix = "-qr-development"
+val isolatedIdSuffix = ".qrpreview"
+val isolatedAppName = "Paka QR Test"
+
+// Release/preview APKs ship a single ABI. The default arm64-v8a covers Light
+// Phone III and every modern phone; `-Ppaka.releaseAbi=armeabi-v7a` builds the
+// 32-bit companion APK for Light Phone 2 (0.15.x is the last line to support
+// it). The debug build keeps all ABIs so it still runs on an emulator.
+val releaseAbi = providers.gradleProperty("paka.releaseAbi").getOrElse("arm64-v8a")
+require(releaseAbi in setOf("arm64-v8a", "armeabi-v7a")) {
+    "paka.releaseAbi must be arm64-v8a or armeabi-v7a (got '$releaseAbi')"
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -26,8 +38,8 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 52
-        versionName = "0.15.0"
+        versionCode = 53
+        versionName = "0.15.1"
         buildConfigField("String", "RELEASE_CHANNEL_LABEL", "\"$releaseChannelLabel\"")
     }
 
@@ -44,9 +56,9 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".photopreview"
+            applicationIdSuffix = isolatedIdSuffix
             versionNameSuffix = isolatedVersionSuffix
-            resValue("string", "app_name", "Paka Photo Test")
+            resValue("string", "app_name", isolatedAppName)
         }
         release {
             isMinifyEnabled = true
@@ -56,17 +68,20 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            ndk { abiFilters += releaseAbi }
         }
         // Shareable preview channel: minified like release so the APK stays
         // release-sized, but debug-signed under a suffixed id so it installs
         // alongside the real app without the release keystore.
         create("preview") {
             initWith(getByName("release"))
-            applicationIdSuffix = ".photopreview"
+            applicationIdSuffix = isolatedIdSuffix
             versionNameSuffix = isolatedVersionSuffix
-            resValue("string", "app_name", "Paka Photo Test")
+            resValue("string", "app_name", isolatedAppName)
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
+            // Explicit rather than relying on initWith copying ndk config.
+            ndk { abiFilters += releaseAbi }
         }
     }
 

@@ -8,3 +8,5 @@ keystore.properties
 *.iml
 *.jks
 *.keystore
+dist/
+light-sdk/

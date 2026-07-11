@@ -2,6 +2,35 @@
 
 Notable changes to Paka are documented here.
 
+## 0.15.1 — 2026-07-11
+
+The last release line supporting Light Phone 2. Later versions ship only the
+arm64 APK.
+
+- QR and Aztec codes now display on a centred compact stage surrounded by
+  screen background instead of an almost edge-to-edge white panel. The rendered
+  symbol is unchanged: full quiet zone, exact whole-module grid, and decode
+  verification before display.
+- Developer settings gain a persistent app-wide light mode — black text on
+  paper-white — for e-ink displays such as Light Phone 2. The camera, capture
+  review, and full-screen document viewers keep their dark backdrop, and
+  rendered codes remain dark modules on a white field in both modes.
+- Release APKs now ship one CPU architecture instead of four, roughly halving
+  the download. Stable releases attach two APKs: the arm64 build for Light
+  Phone III and other modern phones, and a 32-bit `arm32` build for Light
+  Phone 2. On Light Phone 2, scanning, in-app capture, and PDF passes are
+  unavailable (no camera; Android 8.1); manual entry, code display, 2FA,
+  photo import, and backups work.
+- Interrupted-write temporaries are now removed together with their store and
+  recognised by orphan cleanup; a narrow race between a pass save's document
+  cleanup and a concurrently starting restore is closed; per-photo lock objects
+  no longer accumulate for the process lifetime.
+- Tagged-release verification now checks that stable tags carry a development
+  version suffix and validates preview naming without hardcoding the cycle
+  name.
+- The README again documents clipboard TOTP handling and capture metadata
+  stripping.
+
 ## 0.15.0 — 2026-07-11
 
 *Codename: Paperlight.*

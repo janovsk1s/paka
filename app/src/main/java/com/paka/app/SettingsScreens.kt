@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.sp
 private enum class ManageGlyph { UP, DOWN }
 private enum class SettingsAction { REORDER, BACKUP, VIBRATION, ABOUT }
 private enum class DeveloperItem {
-    TEXT_SIZE, LANGUAGE, RETURN_HOME, AUTO_LIGHT,
+    TEXT_SIZE, LANGUAGE, LIGHT_MODE, RETURN_HOME, AUTO_LIGHT,
     MAX_BRIGHTNESS, PAGE_NUMBERS, OFFICIAL_FONT, LIGHT_GEAR, DEMO_MODE,
 }
 private enum class TextSizeItem { SAMPLE, SMALLER, LARGER }
@@ -65,7 +65,13 @@ internal fun SettingsScreen(
     BackHandler { onBack() }
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(stringResource(R.string.settings_title), onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             PagedList(SettingsAction.entries) { item ->
@@ -122,7 +128,13 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
         }
     }
     BackHandler { onBack() }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(stringResource(R.string.about_title), onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             ScrollList(topPadding = 20.dp, spacing = 36.dp) {
@@ -137,7 +149,7 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                 ) {
                     Text(
                         stringResource(R.string.app_name),
-                        color = White,
+                        color = Palette.foreground,
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
@@ -147,7 +159,7 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
                         Text(
                             "v${BuildConfig.VERSION_NAME} · ${BuildConfig.VERSION_CODE}",
-                            color = Grey,
+                            color = Palette.dim,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Light,
                             textAlign = TextAlign.End,
@@ -155,7 +167,7 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                         if (BuildConfig.RELEASE_CHANNEL_LABEL.isNotBlank()) {
                             Text(
                                 BuildConfig.RELEASE_CHANNEL_LABEL,
-                                color = Grey,
+                                color = Palette.dim,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Light,
                                 textAlign = TextAlign.End,
@@ -165,18 +177,18 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                 }
                 Text(
                     stringResource(R.string.about_description),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Normal,
                 )
                 Column {
                     Text(
                         stringResource(R.string.about_byline),
-                        color = White,
+                        color = Palette.foreground,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Normal,
                     )
-                    Text("@janovsk1s", color = Grey, fontSize = 16.sp, fontWeight = FontWeight.Light)
+                    Text("@janovsk1s", color = Palette.dim, fontSize = 16.sp, fontWeight = FontWeight.Light)
                 }
             }
         }
@@ -198,10 +210,10 @@ internal fun SettingsItem(label: String, trailing: String? = null, onClick: (() 
     ) {
         AutoFitText(
             label,
-            color = if (onClick == null) Grey else White,
+            color = if (onClick == null) Palette.dim else Palette.foreground,
             modifier = Modifier.weight(1f),
         )
-        if (trailing != null) Text(trailing, color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+        if (trailing != null) Text(trailing, color = Palette.dim, fontSize = 18.sp, fontWeight = FontWeight.Light)
     }
 }
 
@@ -223,6 +235,8 @@ internal fun DevScreen(
     onOfficialFont: (Boolean) -> Unit,
     lightGearEnabled: Boolean,
     onLightGear: (Boolean) -> Unit,
+    lightModeEnabled: Boolean,
+    onLightMode: (Boolean) -> Unit,
     demoModeEnabled: Boolean,
     onDemoMode: (Boolean) -> Unit,
     initialRoute: DeveloperRoute = DeveloperRoute.MENU,
@@ -231,7 +245,13 @@ internal fun DevScreen(
     var route by remember(initialRoute) { mutableStateOf(initialRoute) }
     val navigateBack = { if (route == DeveloperRoute.MENU) onBack() else route = DeveloperRoute.MENU }
     BackHandler { navigateBack() }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(
             when (route) {
                 DeveloperRoute.MENU -> stringResource(R.string.developer_title)
@@ -249,6 +269,7 @@ internal fun DevScreen(
                         label = when (item) {
                             DeveloperItem.TEXT_SIZE -> stringResource(R.string.developer_text_size)
                             DeveloperItem.LANGUAGE -> stringResource(R.string.developer_language)
+                            DeveloperItem.LIGHT_MODE -> stringResource(R.string.developer_light_mode)
                             DeveloperItem.RETURN_HOME -> stringResource(R.string.developer_return_home)
                             DeveloperItem.AUTO_LIGHT -> stringResource(R.string.developer_auto_light)
                             DeveloperItem.MAX_BRIGHTNESS -> stringResource(R.string.developer_max_brightness)
@@ -263,6 +284,7 @@ internal fun DevScreen(
                                 textSize.toInt(),
                             )
                             DeveloperItem.LANGUAGE -> stringResource(language.displayNameRes)
+                            DeveloperItem.LIGHT_MODE -> if (lightModeEnabled) enabled else disabled
                             DeveloperItem.RETURN_HOME -> if (returnHomeEnabled) enabled else disabled
                             DeveloperItem.AUTO_LIGHT -> if (autoLightEnabled) enabled else disabled
                             DeveloperItem.MAX_BRIGHTNESS -> if (maxCodeBrightnessEnabled) enabled else disabled
@@ -275,6 +297,7 @@ internal fun DevScreen(
                             when (item) {
                                 DeveloperItem.TEXT_SIZE -> route = DeveloperRoute.TEXT_SIZE
                                 DeveloperItem.LANGUAGE -> route = DeveloperRoute.LANGUAGE
+                                DeveloperItem.LIGHT_MODE -> onLightMode(!lightModeEnabled)
                                 DeveloperItem.RETURN_HOME -> onReturnHome(!returnHomeEnabled)
                                 DeveloperItem.AUTO_LIGHT -> onAutoLight(!autoLightEnabled)
                                 DeveloperItem.MAX_BRIGHTNESS -> onMaxCodeBrightness(!maxCodeBrightnessEnabled)
@@ -294,7 +317,7 @@ internal fun DevScreen(
                         ) {
                             Text(
                                 stringResource(R.string.developer_sample),
-                                color = White,
+                                color = Palette.foreground,
                                 fontSize = textSize.sp,
                                 fontWeight = FontWeight.Normal,
                                 maxLines = 1,
@@ -303,7 +326,7 @@ internal fun DevScreen(
                             )
                             Text(
                                 stringResource(R.string.developer_text_size_value, textSize.toInt()),
-                                color = Grey,
+                                color = Palette.dim,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Light,
                             )
@@ -343,7 +366,13 @@ internal fun ManageScreen(
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         val title = stringResource(
             when (kind) {
                 ManageKind.PASSES -> R.string.reorder_passes_title
@@ -362,7 +391,7 @@ internal fun ManageScreen(
                 ) {
                     Text(
                         row.name,
-                        color = White,
+                        color = Palette.foreground,
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
@@ -396,7 +425,7 @@ private fun ManageGlyphAction(
 ) {
     // Boundary arrows remain non-interactive, but keep the same visual weight
     // as every other reorder glyph.
-    val color = White
+    val color = Palette.foreground
     Box(
         modifier = modifier
             .height(48.dp)

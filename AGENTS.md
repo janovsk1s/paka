@@ -290,6 +290,13 @@ testing isolated from the owner's real encrypted Paka installation.
 On document-photo preview branches, the corresponding isolated debug/preview ID
 is `com.paka.app.photopreview` and the label is “Paka Photo Test.”
 
+On QR-display preview branches (the cycle after 0.15.0), the isolated
+debug/preview ID is `com.paka.app.qrpreview` and the label is “Paka QR Test.”
+The debug and preview build types share one isolated identity per cycle,
+defined once at the top of `app/build.gradle.kts` alongside
+`isolatedVersionSuffix`; `tools/check_release_metadata.sh` verifies that
+suffix against every release tag.
+
 When a proposed improvement conflicts with this document, pause and explain the
 trade-off. The owner’s explicit instruction wins; otherwise preserve Paka’s core:
 exact codes, quiet pages, deliberate gestures, local security, and a Light way.

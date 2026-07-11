@@ -113,9 +113,13 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
     // observed another state write. Keep ownership handoff outside snapshots.
     val contentTransferred = remember { AtomicBoolean(false) }
     val trimmedData = data.trim()
-    val renderTargetWidth = with(density) {
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
+    val standardRenderTargetWidth = with(density) {
         (configuration.screenWidthDp.dp - 32.dp).roundToPx()
     }.coerceAtLeast(240)
+    val renderTargetWidth = format?.let { selected ->
+        BarcodeDisplay.targetWidthPx(selected, screenWidthPx, standardRenderTargetWidth)
+    } ?: standardRenderTargetWidth
     val renderKey = "${format?.name}:$renderTargetWidth:$trimmedData"
     val basicValidationError = format?.let { selected ->
         trimmedData.takeIf { it.isNotBlank() }?.let { Barcodes.validationError(selected, it) }
@@ -367,7 +371,13 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
         renderCheck = renderKey to verified
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(stringResource(R.string.entry_title_pass), discardAndBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             PagedList(items) { item ->
@@ -429,7 +439,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                         ) {
                             Text(
                                 text = f.label(),
-                                color = if (f == format) White else Grey,
+                                color = if (f == format) Palette.foreground else Palette.dim,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Light,
                                 modifier = Modifier.weight(1f),
@@ -437,7 +447,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                             if (f == format) {
                                 Text(
                                     stringResource(R.string.entry_label_selected),
-                                    color = Grey,
+                                    color = Palette.dim,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Light,
                                 )
@@ -477,7 +487,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                     ) {
                         Text(
                             stringResource(R.string.entry_label_pdf_document),
-                            color = if (format == null && !photoMode) White else Grey,
+                            color = if (format == null && !photoMode) Palette.foreground else Palette.dim,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Light,
                             modifier = Modifier.weight(1f),
@@ -485,7 +495,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                         if (format == null && !photoMode) {
                             Text(
                                 stringResource(R.string.entry_label_selected),
-                                color = Grey,
+                                color = Palette.dim,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Light,
                             )
@@ -515,7 +525,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                     ) {
                         Text(
                             stringResource(R.string.entry_label_photo_pass),
-                            color = if (format == null && photoMode) White else Grey,
+                            color = if (format == null && photoMode) Palette.foreground else Palette.dim,
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Light,
                             modifier = Modifier.weight(1f),
@@ -523,7 +533,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                         if (format == null && photoMode) {
                             Text(
                                 stringResource(R.string.entry_label_selected),
-                                color = Grey,
+                                color = Palette.dim,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Light,
                             )
@@ -580,7 +590,13 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
 @Composable
 private fun PhotoSourceScreen(secondSide: Boolean, onTake: () -> Unit, onChoose: () -> Unit, onBack: () -> Unit) {
     BackHandler { onBack() }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(
             if (secondSide) {
                 stringResource(R.string.entry_title_back_side)
@@ -597,7 +613,7 @@ private fun PhotoSourceScreen(secondSide: Boolean, onTake: () -> Unit, onChoose:
                 }
                 AutoFitText(
                     label,
-                    color = White,
+                    color = Palette.foreground,
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(
@@ -614,7 +630,7 @@ private fun PhotoSourceScreen(secondSide: Boolean, onTake: () -> Unit, onChoose:
             }
             Text(
                 stringResource(R.string.entry_photo_source_privacy),
-                color = Grey,
+                color = Palette.dim,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Light,
                 modifier = Modifier.align(Alignment.BottomStart).padding(end = 14.dp, bottom = 20.dp),
@@ -679,7 +695,13 @@ internal fun ManualCodeScreen(onSave: (OtpAccount) -> Unit, onBack: () -> Unit) 
     }
     BackHandler { onBack() }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         SimpleTopBar(stringResource(R.string.entry_title_code), onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             PagedList(ManualCodeItem.entries) { item ->
@@ -755,7 +777,7 @@ internal fun TextEntryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Black)
+            .background(Palette.background)
             .systemBarsPadding()
             .imePadding()
             .padding(horizontal = 28.dp),
@@ -769,11 +791,11 @@ internal fun TextEntryScreen(
                     singleLine = singleLine,
                     visualTransformation = visualTransformation,
                     textStyle = TextStyle(
-                        color = White,
+                        color = Palette.foreground,
                         fontSize = 30.sp,
                         fontWeight = FontWeight.Normal,
                     ).withPakaFont(),
-                    cursorBrush = SolidColor(White),
+                    cursorBrush = SolidColor(Palette.foreground),
                     keyboardOptions = keyboardOptions,
                     keyboardActions = KeyboardActions(
                         onDone = {
@@ -794,7 +816,7 @@ internal fun TextEntryScreen(
                         .semantics { contentDescription = fieldLabel },
                 )
                 Spacer(Modifier.height(10.dp))
-                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(White))
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.foreground))
             }
         }
         Box(
@@ -811,7 +833,7 @@ internal fun TextEntryScreen(
         ) {
             Text(
                 text = stringResource(R.string.entry_action_save),
-                color = if (canSave) White else Grey,
+                color = if (canSave) Palette.foreground else Palette.dim,
                 fontSize = 18.sp,
             )
         }
@@ -834,11 +856,11 @@ private fun EntryChoiceRow(
     ) {
         AutoFitText(
             text = label,
-            color = if (enabled) White else Grey,
+            color = if (enabled) Palette.foreground else Palette.dim,
             modifier = Modifier.weight(1f),
         )
         if (trailing != null) {
-            Text(trailing, color = Grey, fontSize = 18.sp, fontWeight = FontWeight.Light)
+            Text(trailing, color = Palette.dim, fontSize = 18.sp, fontWeight = FontWeight.Light)
         }
     }
 }
@@ -849,7 +871,7 @@ private fun EntryBottomAction(status: String?, enabled: Boolean, onSave: () -> U
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = status.orEmpty(),
-            color = Grey,
+            color = Palette.dim,
             fontSize = 14.sp,
             fontWeight = FontWeight.Light,
             minLines = 2,
@@ -866,7 +888,7 @@ private fun EntryBottomAction(status: String?, enabled: Boolean, onSave: () -> U
         ) {
             Text(
                 text = stringResource(R.string.entry_action_save),
-                color = if (enabled) White else Grey,
+                color = if (enabled) Palette.foreground else Palette.dim,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Light,
             )
@@ -878,7 +900,14 @@ private fun EntryBottomAction(status: String?, enabled: Boolean, onSave: () -> U
 internal fun FieldLabel(text: String) {
     // Explicit line height: field rows must fit a fifth of the paged viewport
     // on the Light Phone III's short screen (see PagedList).
-    Text(text, color = Grey, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp)
+    Text(
+        text,
+        color = Palette.dim,
+        fontSize = 12.sp,
+        lineHeight = 14.sp,
+        fontWeight = FontWeight.Normal,
+        letterSpacing = 2.sp,
+    )
 }
 
 @Composable
@@ -886,7 +915,7 @@ internal fun LabelValue(label: String, value: String, modifier: Modifier = Modif
     Column(modifier = modifier) {
         FieldLabel(label)
         Spacer(Modifier.height(4.dp))
-        Text(value, color = White, fontSize = 20.sp, fontWeight = FontWeight.Light)
+        Text(value, color = Palette.foreground, fontSize = 20.sp, fontWeight = FontWeight.Light)
     }
 }
 
@@ -902,7 +931,7 @@ internal fun ManualEntryRow(label: String, value: String, placeholder: String, o
         Spacer(Modifier.height(3.dp))
         Text(
             text = value.ifEmpty { placeholder },
-            color = if (value.isEmpty()) Grey else White,
+            color = if (value.isEmpty()) Palette.dim else Palette.foreground,
             fontSize = 20.sp,
             lineHeight = 22.sp,
             fontWeight = FontWeight.Light,
@@ -910,7 +939,7 @@ internal fun ManualEntryRow(label: String, value: String, placeholder: String, o
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(3.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.dim))
     }
 }
 
@@ -926,7 +955,7 @@ internal fun ReferenceEntryRow(label: String, reference: PassReference?, onClick
         Spacer(Modifier.height(3.dp))
         Text(
             text = reference?.name ?: stringResource(R.string.entry_reference_add_file),
-            color = if (reference == null) Grey else White,
+            color = if (reference == null) Palette.dim else Palette.foreground,
             fontSize = 20.sp,
             lineHeight = 22.sp,
             fontWeight = FontWeight.Light,
@@ -937,13 +966,13 @@ internal fun ReferenceEntryRow(label: String, reference: PassReference?, onClick
             Spacer(Modifier.height(2.dp))
             Text(
                 stringResource(R.string.entry_reference_external_unencrypted),
-                color = Grey,
+                color = Palette.dim,
                 fontSize = 12.sp,
                 lineHeight = 14.sp,
                 fontWeight = FontWeight.Light,
             )
         }
         Spacer(Modifier.height(3.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Grey))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.dim))
     }
 }

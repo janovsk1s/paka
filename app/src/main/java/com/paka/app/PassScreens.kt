@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
@@ -54,6 +55,17 @@ private data class BarcodeRender(
 )
 
 private val PassCaptionHeight = 17.dp
+private val StandardPassCaptionGap = 18.dp
+private val CompactSquarePassCaptionGap = 4.dp
+
+// The compact stage already carries black space below the centred code, so
+// its caption sits closer than the standard white panel's.
+private fun passCaptionGap(card: Card): Dp =
+    if (card.barcodeContent?.format?.let(BarcodeDisplay::usesCompactSquareStage) == true) {
+        CompactSquarePassCaptionGap
+    } else {
+        StandardPassCaptionGap
+    }
 
 @Composable
 private fun BarcodePanel(
@@ -67,35 +79,57 @@ private fun BarcodePanel(
     clickLabel: String? = null,
 ) {
     val openDetailsLabel = stringResource(R.string.accessibility_open_details)
-    Box(
-        modifier = modifier
+    val barcode = card.barcodeContent
+    val compactSquareStage = barcode?.format?.let(BarcodeDisplay::usesCompactSquareStage) == true
+    val interactionModifier = if (longPressOnly) {
+        longPressModifier(
+            onLongClick = onLongClick,
+            label = card.name,
+            longClickLabel = openDetailsLabel,
+        )
+    } else {
+        tapLongModifier(
+            onClick = onClick,
+            onLongClick = onLongClick,
+            label = card.name,
+            longClickLabel = openDetailsLabel,
+            clickLabel = clickLabel,
+        )
+    }
+
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val density = LocalDensity.current
+        val availableWidthPx = with(density) { maxWidth.roundToPx() }
+        val standardTargetWidthPx = with(density) { (maxWidth - 32.dp).roundToPx() }.coerceAtLeast(1)
+        val targetWidthPx = barcode?.format?.let { format ->
+            BarcodeDisplay.targetWidthPx(format, availableWidthPx, standardTargetWidthPx)
+        } ?: standardTargetWidthPx
+        val stageHeight = with(density) { targetWidthPx.toDp() }
+        val panelModifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
-            .background(White)
             .then(
-                if (longPressOnly) {
-                    longPressModifier(
-                        onLongClick = onLongClick,
-                        label = card.name,
-                        longClickLabel = openDetailsLabel,
-                    )
+                if (compactSquareStage) {
+                    // The stage keeps its full square height even when the
+                    // snapped bitmap is smaller: the code centres vertically
+                    // instead of hugging the caption row, so dense codes never
+                    // sit top-heavy and the caption position stays stable.
+                    Modifier.height(stageHeight)
                 } else {
-                    tapLongModifier(
-                        onClick = onClick,
-                        onLongClick = onLongClick,
-                        label = card.name,
-                        longClickLabel = openDetailsLabel,
-                        clickLabel = clickLabel,
-                    )
+                    // Physically white: the panel behind a rendered code is
+                    // part of its quiet zone and never follows the palette.
+                    Modifier.background(White)
                 },
             )
-            .padding(8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            val density = LocalDensity.current
-            val targetWidthPx = with(density) { maxWidth.roundToPx() }
-            val render = if (usePreRendered) preRendered else rememberBarcodeRender(card, targetWidthPx)
+            .then(interactionModifier)
+            .then(if (compactSquareStage) Modifier else Modifier.padding(8.dp))
+
+        Box(modifier = panelModifier, contentAlignment = Alignment.Center) {
+            val render = if (usePreRendered) {
+                preRendered
+            } else {
+                rememberBarcodeRender(card, targetWidthPx)
+            }
             val bitmap = render?.bitmap
             when {
                 bitmap != null -> {
@@ -111,8 +145,8 @@ private fun BarcodePanel(
                         contentScale = ContentScale.Fit,
                     )
                 }
-                render == null -> Text(stringResource(R.string.status_rendering), color = Grey, fontSize = 16.sp)
-                else -> Text(stringResource(R.string.error_code_render), color = Grey, fontSize = 16.sp)
+                render == null -> Text(stringResource(R.string.status_rendering), color = Palette.dim, fontSize = 16.sp)
+                else -> Text(stringResource(R.string.error_code_render), color = Palette.dim, fontSize = 16.sp)
             }
         }
     }
@@ -135,18 +169,23 @@ internal fun StackScreen(
     val foreground by rememberIsForeground()
     val nextPassLabel = stringResource(R.string.accessibility_next_pass)
     val nextSideLabel = stringResource(R.string.accessibility_next_side)
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
             SimpleTopBar(name, onBack, capitalizeTitle = false)
         }
         BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             val density = LocalDensity.current
-            val targetWidthPx = with(density) { (maxWidth - 32.dp).roundToPx() }
+            val availableWidthPx = with(density) { maxWidth.roundToPx() }
+            val documentTargetWidthPx = with(density) { (maxWidth - 32.dp).roundToPx() }
             // Matches PdfDocumentPreview's 420.dp box minus its 8.dp inner padding.
             val pdfHeightPx = with(density) { 404.dp.roundToPx() }
             var currentIndex by remember(name, cards) { mutableIntStateOf(0) }
-            val rendered = remember(name, cards, targetWidthPx) { mutableStateMapOf<String, BarcodeRender>() }
-            val photoRenders = remember(name, cards, targetWidthPx) { mutableStateMapOf<String, BarcodeRender>() }
+            val rendered = remember(name, cards, availableWidthPx, documentTargetWidthPx) {
+                mutableStateMapOf<String, BarcodeRender>()
+            }
+            val photoRenders = remember(name, cards, documentTargetWidthPx) {
+                mutableStateMapOf<String, BarcodeRender>()
+            }
             DisposableEffect(photoRenders) {
                 onDispose {
                     val owned = photoRenders.values.mapNotNull(BarcodeRender::bitmap)
@@ -167,7 +206,7 @@ internal fun StackScreen(
                 }
             }
 
-            LaunchedEffect(cards, targetWidthPx, foreground, currentIndex) {
+            LaunchedEffect(cards, availableWidthPx, documentTargetWidthPx, foreground, currentIndex) {
                 val uniqueCards = cards.distinctBy { it.id }
                 if (!foreground) {
                     val photos = photoRenders.values.mapNotNull(BarcodeRender::bitmap)
@@ -206,7 +245,7 @@ internal fun StackScreen(
                             if (key in photoRenders) return@forEach
                             val bitmap = try {
                                 loadOwnedBitmap {
-                                    PhotoStore.decode(context, page.documentId, targetWidthPx, pdfHeightPx)
+                                    PhotoStore.decode(context, page.documentId, documentTargetWidthPx, pdfHeightPx)
                                 }
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
@@ -221,7 +260,12 @@ internal fun StackScreen(
                     if (stackCard.id in rendered) return
                     val bitmap = when (val content = stackCard.content) {
                         is PassContent.Barcode -> withContext(Dispatchers.Default) {
-                            Barcodes.generateCached(content.format, content.data, targetWidthPx)
+                            val barcodeTargetWidthPx = BarcodeDisplay.targetWidthPx(
+                                content.format,
+                                availableWidthPx,
+                                documentTargetWidthPx,
+                            )
+                            Barcodes.generateCached(content.format, content.data, barcodeTargetWidthPx)
                         }
                         is PassContent.Pdf -> if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                             null
@@ -229,7 +273,7 @@ internal fun StackScreen(
                             try {
                                 loadOwnedBitmap {
                                     PdfStore.open(context, content.documentId).use { session ->
-                                        session.renderPage(0, targetWidthPx, pdfHeightPx).bitmap
+                                        session.renderPage(0, documentTargetWidthPx, pdfHeightPx).bitmap
                                     }
                                 }
                             } catch (cancelled: CancellationException) {
@@ -313,7 +357,7 @@ internal fun StackScreen(
                             )
                         }
                     }
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(passCaptionGap(card)))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -323,7 +367,7 @@ internal fun StackScreen(
                     ) {
                         Text(
                             stringResource(R.string.pass_stack_position, card.name, index + 1, cards.size),
-                            color = Grey,
+                            color = Palette.dim,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Light,
                             textAlign = TextAlign.Center,
@@ -334,7 +378,7 @@ internal fun StackScreen(
                         if (photoContent != null && photoContent.pages.size > 1) {
                             Text(
                                 stringResource(R.string.page_fraction, photoSide + 1, photoContent.pages.size),
-                                color = Grey,
+                                color = Palette.dim,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Light,
                                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -350,14 +394,14 @@ internal fun StackScreen(
 @Composable
 internal fun CardScreen(card: Card, forceMaximumBrightness: Boolean, onLong: () -> Unit, onBack: () -> Unit) {
     KeepScreenBright(forceMaximumBrightness)
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
             SimpleTopBar(card.name, onBack, capitalizeTitle = false)
         }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BarcodePanel(card = card, onClick = {}, onLongClick = onLong, longPressOnly = true)
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(passCaptionGap(card)))
                 // Fixed stand-in for StackScreen's one-line caption. A spacer
                 // preserves alignment without exposing invisible accessibility text.
                 Spacer(Modifier.height(PassCaptionHeight))
@@ -379,7 +423,7 @@ internal fun PdfScreen(
     val resources = LocalResources.current
     val showPageNumbers = remember { Prefs.pageNumbers(context) }
     var pageLabel by remember(content.documentId) { mutableStateOf<String?>(null) }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
             SimpleTopBar(
                 card.name,
@@ -414,7 +458,7 @@ internal fun PhotoScreen(
     KeepScreenBright(forceMaximumBrightness)
     val context = LocalContext.current
     val showPageNumbers = remember { Prefs.pageNumbers(context) }
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
             SimpleTopBar(card.name, onBack, capitalizeTitle = false)
         }

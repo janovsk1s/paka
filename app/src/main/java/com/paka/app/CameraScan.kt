@@ -283,6 +283,8 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
 
         BackArrow(
             modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(8.dp),
+            // The viewfinder backdrop is physically dark in both palette modes.
+            color = White,
             onBack = onBack,
         )
 
