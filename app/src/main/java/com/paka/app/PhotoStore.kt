@@ -11,7 +11,6 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
@@ -36,6 +35,7 @@ internal object PhotoStore {
     private const val DISPLAY_JPEG_QUALITY = 90
     private const val KEY_ALIAS = "paka_photo_key"
     private const val TRANSFORM = "AES/GCM/NoPadding"
+    private const val DOCUMENT_LOCK_STRIPES = 64
 
     // Version 1 encrypted bulk bytes directly with the Keystore key; version 2
     // uses the in-process data key. Both are 4 bytes so offsets are identical.
@@ -48,11 +48,13 @@ internal object PhotoStore {
     @Volatile
     private var cachedDataKey: SecretKey? = null
 
-    private val documentLocks = ConcurrentHashMap<String, Any>()
+    // Fixed lock stripes rather than one object per documentId, which would
+    // grow for the process lifetime with every photo ever decoded.
+    private val documentLocks = Array(DOCUMENT_LOCK_STRIPES) { Any() }
 
     // Serialises fallback display-copy creation and decryption per photo.
     private inline fun <T> withDocumentLock(documentId: String, block: () -> T): T =
-        synchronized(documentLocks.getOrPut(documentId) { Any() }) { block() }
+        synchronized(documentLocks[(documentId.hashCode() and Int.MAX_VALUE) % documentLocks.size]) { block() }
 
     fun import(context: Context, uri: Uri): Result<PhotoImport> = runCatching {
         val bytes = readImportBytes(context, uri).getOrThrow()
@@ -106,7 +108,7 @@ internal object PhotoStore {
 
     fun deleteOrphans(context: Context, referencedIds: Set<String>) {
         File(context.filesDir, DIRECTORY).listFiles()?.forEach { file ->
-            val name = file.name.removeSuffix(".bak").removeSuffix(".corrupt")
+            val name = atomicBaseName(file.name)
             val documentId = when {
                 name.endsWith(DISPLAY_SUFFIX) -> name.removeSuffix(DISPLAY_SUFFIX)
                 name.endsWith(SUFFIX) -> name.removeSuffix(SUFFIX)

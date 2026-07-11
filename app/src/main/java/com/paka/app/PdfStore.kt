@@ -216,7 +216,7 @@ internal object PdfStore {
     fun deleteOrphans(context: Context, referencedIds: Set<String>) {
         val directory = File(context.filesDir, DIRECTORY)
         directory.listFiles()?.forEach { file ->
-            val name = file.name.removeSuffix(".bak").removeSuffix(".corrupt")
+            val name = atomicBaseName(file.name)
             if (!name.endsWith(SUFFIX)) return@forEach
             val id = name.removeSuffix(SUFFIX)
             if (id !in referencedIds) {

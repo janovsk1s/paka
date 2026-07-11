@@ -35,6 +35,15 @@ case "$release" in
       echo "releaseChannelLabel must be empty for stable $tag (found '$channel_label')" >&2
       exit 1
     }
+    # Debug/preview builds must never claim a released preview identity, so a
+    # stable tag requires the suffix reset to its development value.
+    case "$isolated_suffix" in
+      *-development) ;;
+      *)
+        echo "isolatedVersionSuffix must end in '-development' for stable $tag (found '$isolated_suffix')" >&2
+        exit 1
+        ;;
+    esac
     ;;
 esac
 
