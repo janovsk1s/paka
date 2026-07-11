@@ -2,7 +2,7 @@
 
 Notable changes to Paka are documented here.
 
-## 0.15.1 — 2026-07-11
+## 0.15.1 — 2026-07-12
 
 The last release line supporting Light Phone 2. Later versions ship only the
 arm64 APK.
