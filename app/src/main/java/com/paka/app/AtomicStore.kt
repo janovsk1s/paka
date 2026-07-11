@@ -135,9 +135,13 @@ internal object AtomicStore {
         }
     }
 
-    /** Removes an atomic file and all generations used for recovery. */
+    /**
+     * Removes an atomic file, all generations used for recovery, and any
+     * in-flight temporary left behind by a write interrupted by process death.
+     */
     fun delete(file: File): Boolean {
-        val deleted = listOf(file, backupFile(file), corruptFile(file))
+        val generations = ATOMIC_GENERATION_SUFFIXES.map { File(file.parentFile, "${file.name}$it") }
+        val deleted = (listOf(file) + generations)
             .map { !it.exists() || it.delete() }
             .all { it }
         syncDirectory(file.parentFile)
@@ -152,4 +156,21 @@ internal object AtomicStore {
             FileChannel.open(directory.toPath(), StandardOpenOption.READ).use { it.force(true) }
         }
     }
+}
+
+// Every generation AtomicStore creates next to a primary file: backup,
+// retained corrupt evidence, and the in-flight temporaries a crash can
+// leave behind.
+private val ATOMIC_GENERATION_SUFFIXES = listOf(".bak", ".corrupt", ".tmp", ".recover")
+
+/**
+ * Base file name behind any generation of an [AtomicStore] primary file, so
+ * directory scans attribute backups and crash leftovers to the file that owns
+ * them.
+ */
+internal fun atomicBaseName(fileName: String): String {
+    for (suffix in ATOMIC_GENERATION_SUFFIXES) {
+        if (fileName.endsWith(suffix)) return fileName.removeSuffix(suffix)
+    }
+    return fileName
 }

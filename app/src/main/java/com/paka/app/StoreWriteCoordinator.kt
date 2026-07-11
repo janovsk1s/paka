@@ -259,16 +259,23 @@ internal object StoreWriteCoordinator {
             return
         }
         val result = cardMutex.withLock {
-            if (task.generation != cardGeneration.get()) null
-            else CardStore.save(task.context, task.value)
+            if (task.generation != cardGeneration.get()) {
+                null
+            } else {
+                // Deletions stay under the mutex: a restore that begins after
+                // this save cannot acquire the stores until they finish, so it
+                // can never re-create a document these deletions then remove.
+                CardStore.save(task.context, task.value).also { saved ->
+                    if (saved.isSuccess) {
+                        task.deletePdfIds.forEach { PdfStore.delete(task.context, it) }
+                        task.deletePhotoIds.forEach { PhotoStore.delete(task.context, it) }
+                    }
+                }
+            }
         }
         val status = when {
             task.generation != cardGeneration.get() || result == null -> StoreWriteStatus.SUPERSEDED
-            result.isSuccess -> {
-                task.deletePdfIds.forEach { PdfStore.delete(task.context, it) }
-                task.deletePhotoIds.forEach { PhotoStore.delete(task.context, it) }
-                StoreWriteStatus.SAVED
-            }
+            result.isSuccess -> StoreWriteStatus.SAVED
             else -> {
                 cardGeneration.compareAndSet(task.generation, task.generation + 1)
                 StoreWriteStatus.FAILED
