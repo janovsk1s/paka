@@ -30,6 +30,8 @@ arm64 APK.
   name.
 - The README again documents clipboard TOTP handling and capture metadata
   stripping.
+- Long translated menu labels now measure their fitted size before first
+  draw instead of visibly shrinking into place when a page is revisited.
 
 ## 0.15.0 — 2026-07-11
 

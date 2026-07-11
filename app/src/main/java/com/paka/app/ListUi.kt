@@ -18,11 +18,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,9 +41,12 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -174,10 +178,17 @@ private fun VerticalScrollbar(state: ScrollState, modifier: Modifier) {
     }
 }
 
+private const val AUTO_FIT_STEP_SP = 2f
+
 /**
- * Single-line label that steps its font size down until the text fits,
- * instead of ellipsizing. Longer translations (Latvian, German, …) routinely
- * overflow the widths the English labels were designed for.
+ * Single-line label sized to the largest font in [minFontSize]..[maxFontSize]
+ * that fits the available width, instead of ellipsizing. Longer translations
+ * (Latvian, German, …) routinely overflow the widths the English labels were
+ * designed for.
+ *
+ * The size is found by measurement before anything is drawn; stepping down
+ * across drawn frames would visibly shrink long labels into place every time
+ * a row re-enters composition (e.g. paging away and back).
  */
 @Composable
 internal fun AutoFitText(
@@ -188,21 +199,33 @@ internal fun AutoFitText(
     minFontSize: TextUnit = 18.sp,
     fontWeight: FontWeight = FontWeight.Normal,
 ) {
-    var fontSize by remember(text, maxFontSize) { mutableFloatStateOf(maxFontSize.value) }
-    Text(
-        text,
-        color = color,
-        fontSize = fontSize.sp,
-        fontWeight = fontWeight,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        onTextLayout = { result ->
-            if (result.hasVisualOverflow && fontSize > minFontSize.value) {
-                fontSize = (fontSize - 2f).coerceAtLeast(minFontSize.value)
+    BoxWithConstraints(modifier = modifier) {
+        val measurer = rememberTextMeasurer()
+        val baseStyle = LocalTextStyle.current
+        val maxWidth = constraints.maxWidth
+        val fittedSp = remember(text, maxFontSize, minFontSize, fontWeight, baseStyle, maxWidth) {
+            var size = maxFontSize.value
+            while (constraints.hasBoundedWidth && size > minFontSize.value) {
+                val layout = measurer.measure(
+                    text = AnnotatedString(text),
+                    style = baseStyle.copy(fontSize = size.sp, fontWeight = fontWeight),
+                    maxLines = 1,
+                    constraints = Constraints(maxWidth = maxWidth),
+                )
+                if (!layout.hasVisualOverflow) break
+                size = (size - AUTO_FIT_STEP_SP).coerceAtLeast(minFontSize.value)
             }
-        },
-        modifier = modifier,
-    )
+            size
+        }
+        Text(
+            text,
+            color = color,
+            fontSize = fittedSp.sp,
+            fontWeight = fontWeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 private const val ITEMS_PER_PAGE = 5
