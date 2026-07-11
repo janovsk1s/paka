@@ -45,6 +45,20 @@ Then verify the release-signed APK:
 tools/verify_release_apk.sh app/build/outputs/apk/release/app-release.apk
 ```
 
+For a 0.15.x stable release, also build and verify the 32-bit companion APK for
+Light Phone 2 (copy the arm64 APK aside first — both builds write the same
+output path):
+
+```sh
+cp app/build/outputs/apk/release/app-release.apk dist/Paka-v<version>.apk
+./gradlew assembleRelease -Ppaka.releaseAbi=armeabi-v7a --rerun-tasks
+cp app/build/outputs/apk/release/app-release.apk dist/Paka-v<version>-arm32.apk
+tools/verify_release_apk.sh dist/Paka-v<version>-arm32.apk
+```
+
+0.15.x is the last line to support Light Phone 2; later versions ship only the
+arm64 APK.
+
 Expected for 0.15:
 
 - Signing certificate SHA-256:

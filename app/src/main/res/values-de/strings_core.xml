@@ -31,6 +31,7 @@
     <string name="developer_text_smaller">kleiner</string>
     <string name="developer_text_larger">größer</string>
     <string name="developer_language">Sprache</string>
+    <string name="developer_light_mode">heller Modus</string>
     <string name="developer_return_home">zur Startseite</string>
     <string name="developer_auto_light">Lichtautomatik</string>
     <string name="developer_max_brightness">max. Helligkeit</string>

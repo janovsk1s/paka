@@ -278,6 +278,8 @@ internal fun PhotoCaptureScreen(
         BackArrow(
             modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(8.dp),
             enabled = !busy,
+            // The viewfinder backdrop is physically dark in both palette modes.
+            color = White,
             onBack = onBack,
         )
 
@@ -479,7 +481,7 @@ internal fun PhotoReviewScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
-            SimpleTopBar(title, onBack = ::navigateBack, backEnabled = !busy)
+            SimpleTopBar(title, onBack = ::navigateBack, backEnabled = !busy, color = White)
         }
         Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             displayBitmap?.let { bitmap ->

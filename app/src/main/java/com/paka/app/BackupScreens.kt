@@ -215,7 +215,7 @@ internal fun BackupScreen(
         return
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding().imePadding().padding(horizontal = 28.dp)) {
         SimpleTopBar(
             when (step) {
                 BackupStep.MENU -> stringResource(R.string.backup_title)
@@ -250,7 +250,7 @@ internal fun BackupScreen(
                         ) {
                             Text(
                                 label,
-                                color = White,
+                                color = Palette.foreground,
                                 fontSize = 30.sp,
                                 fontWeight = FontWeight.Normal,
                                 maxLines = 2,
@@ -260,7 +260,7 @@ internal fun BackupScreen(
                     }
                     Text(
                         stringResource(R.string.backup_offline_description),
-                        color = Grey,
+                        color = Palette.dim,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
                         modifier = Modifier.align(Alignment.BottomStart).padding(end = 14.dp, bottom = 20.dp),
@@ -280,13 +280,13 @@ internal fun BackupScreen(
                             R.string.backup_new_passphrase_instructions,
                             BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH,
                         ),
-                        color = Grey,
+                        color = Palette.dim,
                         fontSize = 16.sp,
                     )
                     if (cards.any { it.content is PassContent.Photos }) {
                         Text(
                             stringResource(R.string.backup_photo_compatibility),
-                            color = Grey,
+                            color = Palette.dim,
                             fontSize = 16.sp,
                         )
                     }
@@ -303,7 +303,11 @@ internal fun BackupScreen(
                         editingField = BackupField.REPEAT
                     }
                     if (confirmation.isNotEmpty() && passphrase != confirmation) {
-                        Text(stringResource(R.string.backup_passphrases_do_not_match), color = Grey, fontSize = 14.sp)
+                        Text(
+                            stringResource(R.string.backup_passphrases_do_not_match),
+                            color = Palette.dim,
+                            fontSize = 14.sp,
+                        )
                     }
                 }
                 BackupBottomAction(
@@ -312,7 +316,7 @@ internal fun BackupScreen(
                     } else {
                         stringResource(R.string.backup_save_encrypted)
                     },
-                    color = if (canExport) White else Grey,
+                    color = if (canExport) Palette.foreground else Palette.dim,
                     fontSize = 18,
                     enabled = canExport,
                 ) {
@@ -362,7 +366,7 @@ internal fun BackupScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    Text(stringResource(R.string.backup_import_instructions), color = Grey, fontSize = 16.sp)
+                    Text(stringResource(R.string.backup_import_instructions), color = Palette.dim, fontSize = 16.sp)
                     ManualEntryRow(
                         stringResource(R.string.backup_passphrase_field),
                         "•".repeat(passphrase.length),
@@ -377,7 +381,7 @@ internal fun BackupScreen(
                     } else {
                         stringResource(R.string.backup_unlock_action)
                     },
-                    color = if (canUnlock) White else Grey,
+                    color = if (canUnlock) Palette.foreground else Palette.dim,
                     fontSize = 18,
                     enabled = canUnlock,
                 ) {
@@ -432,7 +436,7 @@ internal fun BackupScreen(
                         ScrollList(topPadding = 24.dp, spacing = 24.dp) {
                             Text(
                                 stringResource(R.string.backup_replace_current_data),
-                                color = White,
+                                color = Palette.foreground,
                                 fontSize = 30.sp,
                                 fontWeight = FontWeight.Normal,
                             )
@@ -445,7 +449,7 @@ internal fun BackupScreen(
                                         append("\n$pdfRequirement")
                                     }
                                 },
-                                color = Grey,
+                                color = Palette.dim,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Light,
                             )
@@ -457,7 +461,7 @@ internal fun BackupScreen(
                         } else {
                             stringResource(R.string.backup_restore_action)
                         },
-                        color = if (canRestore) White else Grey,
+                        color = if (canRestore) Palette.foreground else Palette.dim,
                         fontSize = 24,
                         enabled = canRestore,
                     ) {
@@ -496,7 +500,7 @@ internal fun BackupScreen(
                     }
                     BackupBottomAction(
                         text = stringResource(R.string.backup_cancel_restore_action),
-                        color = Grey,
+                        color = Palette.dim,
                         fontSize = 24,
                         enabled = !busy,
                     ) {

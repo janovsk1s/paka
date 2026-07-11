@@ -64,6 +64,39 @@ class BarcodeGenerationTest {
     }
 
     @Test
+    fun sparseAndDenseSquareCodesRenderExactlyInsideTheLightGridStage() {
+        val targetWidth = BarcodeDisplay.targetWidthPx(
+            PakaFormat.QR,
+            LIGHT_PHONE_SCREEN_WIDTH,
+            LIGHT_PHONE_DISPLAY_PANEL_WIDTH,
+        )
+        val samples = listOf(
+            Sample(PakaFormat.QR, "https://paka.invalid/qr-stage"),
+            Sample(PakaFormat.QR, "DENSE-QR-" + "0123456789ABCDEF".repeat(80)),
+            Sample(PakaFormat.AZTEC, "AZTEC-STAGE-1234567890"),
+            Sample(PakaFormat.AZTEC, ByteArray(256) { it.toByte() }.toString(Charsets.ISO_8859_1)),
+        )
+
+        assertEquals(LIGHT_PHONE_SQUARE_STAGE_WIDTH, targetWidth)
+        samples.forEach { sample ->
+            val bitmap = requireNotNull(Barcodes.generate(sample.format, sample.data, targetWidth))
+            try {
+                val moduleCount = rawModuleWidth(sample)
+                assertEquals("${sample.format} must remain square", bitmap.width, bitmap.height)
+                assertTrue("${sample.format} must fit its black stage", bitmap.width <= targetWidth)
+                assertTrue(
+                    "${sample.format} must use the largest whole-module size that fits",
+                    targetWidth - bitmap.width < moduleCount,
+                )
+                assertExpectedHorizontalModuleGrid(sample, targetWidth, bitmap)
+                assertExpectedVerticalModuleGrid(sample, targetWidth, bitmap)
+            } finally {
+                bitmap.recycle()
+            }
+        }
+    }
+
+    @Test
     fun renderCapAndCacheUseTheSameVerifiedBitmap() {
         val payload = "https://paka.invalid/cache/render-cap"
         val capped = Barcodes.generateCached(PakaFormat.QR, payload, MAX_RENDER_WIDTH)
@@ -262,6 +295,9 @@ class BarcodeGenerationTest {
     private companion object {
         const val MIN_RENDER_WIDTH = 240
         const val MANUAL_CHECK_WIDTH = 320
+        const val LIGHT_PHONE_SCREEN_WIDTH = 1080
+        const val LIGHT_PHONE_DISPLAY_PANEL_WIDTH = 984
+        const val LIGHT_PHONE_SQUARE_STAGE_WIDTH = 920
         const val LIGHT_PHONE_PANEL_WIDTH = 1048
         const val MAX_RENDER_WIDTH = 2160
         const val GRID_SAMPLE_ROWS = 48

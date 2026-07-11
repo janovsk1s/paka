@@ -41,6 +41,7 @@
     <string name="developer_text_smaller">smaller</string>
     <string name="developer_text_larger">larger</string>
     <string name="developer_language">language</string>
+    <string name="developer_light_mode">light mode</string>
     <string name="developer_return_home">return home</string>
     <string name="developer_auto_light">auto light</string>
     <string name="developer_max_brightness">max brightness</string>

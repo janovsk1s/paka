@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -135,6 +137,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before setContent so the first frame is already in the chosen palette.
+        Palette.lightMode = Prefs.lightMode(this)
         AppLanguage.reconcileApplicationLocale(
             context = this,
             selected = Prefs.language(this),
@@ -260,17 +264,17 @@ private fun PakaAppContent(
     val loaded = initialLoad
     if (loaded == null) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding(),
+            modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding(),
         ) {
             Text(
                 stringResource(R.string.app_name),
-                color = White,
+                color = Palette.foreground,
                 fontSize = 16.sp,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
             )
             Text(
                 stringResource(R.string.status_opening_paka),
-                color = Grey,
+                color = Palette.dim,
                 fontSize = 16.sp,
                 modifier = Modifier.align(Alignment.Center),
             )
@@ -331,7 +335,19 @@ private fun LoadedPakaApp(
     var maxCodeBrightnessEnabled by remember { mutableStateOf(Prefs.maxCodeBrightness(context)) }
     var pageNumbersEnabled by remember { mutableStateOf(Prefs.pageNumbers(context)) }
     var lightGearEnabled by remember { mutableStateOf(Prefs.lightGear(context)) }
+    var lightModeEnabled by remember { mutableStateOf(Prefs.lightMode(context)) }
     var demoModeEnabled by remember { mutableStateOf(Prefs.demoMode(context)) }
+    // System bar icons must stay legible over the palette: dark icons on the
+    // light background, light icons on the dark one. Edge-to-edge keeps the
+    // bars transparent, so the app background provides their color.
+    val activityWindow = (context as? Activity)?.window
+    LaunchedEffect(activityWindow, lightModeEnabled) {
+        if (activityWindow != null) {
+            val insets = WindowCompat.getInsetsController(activityWindow, activityWindow.decorView)
+            insets.isAppearanceLightStatusBars = Palette.lightMode
+            insets.isAppearanceLightNavigationBars = Palette.lightMode
+        }
+    }
     var demoContent by remember { mutableStateOf(DemoData.create(context)) }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -345,6 +361,7 @@ private fun LoadedPakaApp(
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
     val codesVisible = mode == Mode.CODES && homeVisible
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val passWidthPx = with(density) { (configuration.screenWidthDp.dp - 32.dp).roundToPx() }
     LaunchedEffect(homeResetSignal) {
         if (homeResetSignal > 0) {
@@ -378,13 +395,18 @@ private fun LoadedPakaApp(
             }
         }
     }
-    LaunchedEffect(homeVisible, mode, activeCards, passWidthPx) {
+    LaunchedEffect(homeVisible, mode, activeCards, screenWidthPx, passWidthPx) {
         if (homeVisible && mode == Mode.CARDS) {
             delay(250)
             activeCards.take(6).forEach { card ->
                 card.barcodeContent?.let { barcode ->
                     withContext(Dispatchers.Default) {
-                        Barcodes.generateCached(barcode.format, barcode.data, passWidthPx)
+                        val targetWidthPx = BarcodeDisplay.targetWidthPx(
+                            barcode.format,
+                            screenWidthPx,
+                            passWidthPx,
+                        )
+                        Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
                     }
                 }
             }
@@ -618,6 +640,12 @@ private fun LoadedPakaApp(
                 lightGearEnabled = enabled
                 Prefs.setLightGear(context, enabled)
             },
+            lightModeEnabled = lightModeEnabled,
+            onLightMode = { enabled ->
+                lightModeEnabled = enabled
+                Palette.lightMode = enabled
+                Prefs.setLightMode(context, enabled)
+            },
             demoModeEnabled = demoModeEnabled,
             onDemoMode = { enabled ->
                 if (enabled) {
@@ -848,11 +876,17 @@ private fun LoadedPakaApp(
         return
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
+    ) {
         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
             Text(
                 if (demoModeEnabled) stringResource(R.string.home_demo_title) else stringResource(R.string.app_name),
-                color = White,
+                color = Palette.foreground,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Normal,
             )
@@ -901,7 +935,7 @@ private fun LoadedPakaApp(
         if (storageNotice != null) {
             Text(
                 stringResource(storageNotice),
-                color = Grey,
+                color = Palette.dim,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Light,
                 modifier = Modifier.fillMaxWidth().padding(end = 14.dp, bottom = 4.dp),
@@ -922,24 +956,33 @@ private fun LoadedPakaApp(
 @Composable
 private fun OnboardingScreen(onStart: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().background(Black).systemBarsPadding().padding(horizontal = 28.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Palette.background)
+            .systemBarsPadding()
+            .padding(horizontal = 28.dp),
     ) {
         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
             Text(
                 stringResource(R.string.onboarding_title),
-                color = White,
+                color = Palette.foreground,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Normal,
             )
         }
         Column(modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp, end = 14.dp, bottom = 8.dp)) {
             OnboardingRow(weight = 1f) {
-                Text(stringResource(R.string.app_name), color = White, fontSize = 30.sp, fontWeight = FontWeight.Normal)
+                Text(
+                    stringResource(R.string.app_name),
+                    color = Palette.foreground,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Normal,
+                )
             }
             OnboardingRow(weight = 1f) {
                 Text(
                     stringResource(R.string.onboarding_summary),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Normal,
                 )
@@ -947,7 +990,7 @@ private fun OnboardingScreen(onStart: () -> Unit) {
             OnboardingRow(weight = 1f) {
                 Text(
                     stringResource(R.string.onboarding_scan),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Normal,
                 )
@@ -955,7 +998,7 @@ private fun OnboardingScreen(onStart: () -> Unit) {
             OnboardingRow(weight = 1f) {
                 Text(
                     stringResource(R.string.onboarding_privacy),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Normal,
                 )
@@ -963,7 +1006,7 @@ private fun OnboardingScreen(onStart: () -> Unit) {
             OnboardingRow(weight = 1f) {
                 Text(
                     stringResource(R.string.onboarding_start),
-                    color = White,
+                    color = Palette.foreground,
                     fontSize = 30.sp,
                     fontWeight = FontWeight.Normal,
                     modifier = Modifier.fillMaxWidth().then(tapModifier(onStart)),
@@ -1008,6 +1051,8 @@ private fun BottomBar(
                 Image(
                     painter = painterResource(R.drawable.ic_light_settings_white),
                     contentDescription = null,
+                    // The asset is drawn white; follow the palette in light mode.
+                    colorFilter = ColorFilter.tint(Palette.foreground),
                     modifier = Modifier.size(27.dp),
                 )
             }
@@ -1044,7 +1089,7 @@ private fun DrawScope.drawGear() {
     for (k in 0 until GEAR_TOOTH_COUNT) {
         rotate(GEAR_TOOTH_STEP_DEGREES * k, c) {
             drawRect(
-                color = White,
+                color = Palette.foreground,
                 topLeft = Offset(
                     pixelAlignedCenter(c.x, toothWidth) - toothWidth / 2f,
                     c.y - outerRadius,
@@ -1053,8 +1098,8 @@ private fun DrawScope.drawGear() {
             )
         }
     }
-    drawCircle(White, body, c)
-    drawCircle(Black, hole, c)
+    drawCircle(Palette.foreground, body, c)
+    drawCircle(Palette.background, hole, c)
 }
 
 private fun DrawScope.drawPlus() {
@@ -1063,14 +1108,14 @@ private fun DrawScope.drawPlus() {
     val stroke = pixelAlignedStroke(s * BOTTOM_PLUS_STROKE)
     val center = pixelAlignedCenter(s / 2f, stroke)
     drawLine(
-        White,
+        Palette.foreground,
         Offset(center - halfLength, center),
         Offset(center + halfLength, center),
         strokeWidth = stroke,
         cap = StrokeCap.Butt,
     )
     drawLine(
-        White,
+        Palette.foreground,
         Offset(center, center - halfLength),
         Offset(center, center + halfLength),
         strokeWidth = stroke,
@@ -1086,7 +1131,7 @@ private fun DrawScope.drawBarcodeGlyph() {
     val bottom = center + halfLength
     fun bar(x: Float, width: Float) =
         drawLine(
-            White,
+            Palette.foreground,
             Offset(pixelAlignedCenter((x + BOTTOM_BARCODE_CENTERING_OFFSET) * s, width * s), top),
             Offset(pixelAlignedCenter((x + BOTTOM_BARCODE_CENTERING_OFFSET) * s, width * s), bottom),
             strokeWidth = pixelAlignedStroke(width * s),
@@ -1115,7 +1160,7 @@ private fun DrawScope.drawAsterisk() {
         val dx = (radius * cos(rad)).toFloat()
         val dy = (radius * sin(rad)).toFloat()
         drawLine(
-            White,
+            Palette.foreground,
             Offset(pixelAlignedCenter(c.x - dx, stroke), pixelAlignedCenter(c.y - dy, stroke)),
             Offset(pixelAlignedCenter(c.x + dx, stroke), pixelAlignedCenter(c.y + dy, stroke)),
             strokeWidth = stroke,

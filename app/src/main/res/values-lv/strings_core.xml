@@ -31,6 +31,7 @@
     <string name="developer_text_smaller">mazāks</string>
     <string name="developer_text_larger">lielāks</string>
     <string name="developer_language">valoda</string>
+    <string name="developer_light_mode">gaišais režīms</string>
     <string name="developer_return_home">atgriezties sākumā</string>
     <string name="developer_auto_light">automātiska gaisma</string>
     <string name="developer_max_brightness">maks. spilgtums</string>

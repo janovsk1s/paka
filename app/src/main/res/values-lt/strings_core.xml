@@ -31,6 +31,7 @@
     <string name="developer_text_smaller">mažesnis</string>
     <string name="developer_text_larger">didesnis</string>
     <string name="developer_language">kalba</string>
+    <string name="developer_light_mode">šviesus režimas</string>
     <string name="developer_return_home">grįžti į pradžią</string>
     <string name="developer_auto_light">automatinė šviesa</string>
     <string name="developer_max_brightness">didž. ryškumas</string>

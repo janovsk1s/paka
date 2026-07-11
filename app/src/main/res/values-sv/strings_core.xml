@@ -31,6 +31,7 @@
     <string name="developer_text_smaller">mindre</string>
     <string name="developer_text_larger">större</string>
     <string name="developer_language">språk</string>
+    <string name="developer_light_mode">ljust läge</string>
     <string name="developer_return_home">återgå hem</string>
     <string name="developer_auto_light">automatiskt ljus</string>
     <string name="developer_max_brightness">maximal ljusstyrka</string>
