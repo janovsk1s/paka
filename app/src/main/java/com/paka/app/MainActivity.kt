@@ -336,6 +336,7 @@ private fun LoadedPakaApp(
     var pageNumbersEnabled by remember { mutableStateOf(Prefs.pageNumbers(context)) }
     var lightGearEnabled by remember { mutableStateOf(Prefs.lightGear(context)) }
     var lightModeEnabled by remember { mutableStateOf(Prefs.lightMode(context)) }
+    var gestureHintsEnabled by remember { mutableStateOf(Prefs.gestureHints(context)) }
     var demoModeEnabled by remember { mutableStateOf(Prefs.demoMode(context)) }
     // System bar icons must stay legible over the palette: dark icons on the
     // light background, light icons on the dark one. Edge-to-edge keeps the
@@ -645,6 +646,11 @@ private fun LoadedPakaApp(
                 lightModeEnabled = enabled
                 Palette.lightMode = enabled
                 Prefs.setLightMode(context, enabled)
+            },
+            gestureHintsEnabled = gestureHintsEnabled,
+            onGestureHints = { enabled ->
+                gestureHintsEnabled = enabled
+                Prefs.setGestureHints(context, enabled)
             },
             demoModeEnabled = demoModeEnabled,
             onDemoMode = { enabled ->

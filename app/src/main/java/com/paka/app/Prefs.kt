@@ -18,6 +18,7 @@ internal object Prefs {
     private const val KEY_LIGHT_GEAR = "light_sdk_settings_gear"
     private const val KEY_LANGUAGE = "developer_language"
     private const val KEY_LIGHT_MODE = "light_mode"
+    private const val KEY_GESTURE_HINTS = "gesture_hints"
 
     const val MIN_TEXT_SIZE = 16f
     const val DEFAULT_TEXT_SIZE = 30f
@@ -73,6 +74,12 @@ internal object Prefs {
 
     fun setLightMode(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_LIGHT_MODE, enabled).apply()
+    }
+
+    fun gestureHints(context: Context): Boolean = prefs(context).getBoolean(KEY_GESTURE_HINTS, false)
+
+    fun setGestureHints(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_GESTURE_HINTS, enabled).apply()
     }
 
     fun lightGear(context: Context): Boolean = prefs(context).getBoolean(KEY_LIGHT_GEAR, false)

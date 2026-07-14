@@ -67,6 +67,21 @@ private fun passCaptionGap(card: Card): Dp =
         StandardPassCaptionGap
     }
 
+/** Optional caption naming the hidden long-press action on pass screens. */
+@Composable
+private fun PassGestureHint(modifier: Modifier = Modifier) {
+    Text(
+        stringResource(R.string.hint_hold_pass_edit),
+        color = Palette.dim,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Light,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 40.dp),
+    )
+}
+
 @Composable
 private fun BarcodePanel(
     card: Card,
@@ -166,6 +181,7 @@ internal fun StackScreen(
     }
     KeepScreenBright(forceMaximumBrightness)
     val context = LocalContext.current
+    val gestureHints = remember { Prefs.gestureHints(context) }
     val foreground by rememberIsForeground()
     val nextPassLabel = stringResource(R.string.accessibility_next_pass)
     val nextSideLabel = stringResource(R.string.accessibility_next_side)
@@ -385,6 +401,7 @@ internal fun StackScreen(
                             )
                         }
                     }
+                    if (gestureHints) PassGestureHint(Modifier.padding(top = 4.dp))
                 }
             }
         }
@@ -394,6 +411,7 @@ internal fun StackScreen(
 @Composable
 internal fun CardScreen(card: Card, forceMaximumBrightness: Boolean, onLong: () -> Unit, onBack: () -> Unit) {
     KeepScreenBright(forceMaximumBrightness)
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding()) {
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
             SimpleTopBar(card.name, onBack, capitalizeTitle = false)
@@ -402,9 +420,13 @@ internal fun CardScreen(card: Card, forceMaximumBrightness: Boolean, onLong: () 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BarcodePanel(card = card, onClick = {}, onLongClick = onLong, longPressOnly = true)
                 Spacer(Modifier.height(passCaptionGap(card)))
-                // Fixed stand-in for StackScreen's one-line caption. A spacer
-                // preserves alignment without exposing invisible accessibility text.
-                Spacer(Modifier.height(PassCaptionHeight))
+                if (remember { Prefs.gestureHints(context) }) {
+                    PassGestureHint()
+                } else {
+                    // Fixed stand-in for StackScreen's one-line caption. A spacer
+                    // preserves alignment without exposing invisible accessibility text.
+                    Spacer(Modifier.height(PassCaptionHeight))
+                }
             }
         }
     }
@@ -444,6 +466,9 @@ internal fun PdfScreen(
                 }
             },
         )
+        if (remember { Prefs.gestureHints(context) }) {
+            PassGestureHint(Modifier.padding(bottom = 8.dp))
+        }
     }
 }
 
@@ -468,6 +493,9 @@ internal fun PhotoScreen(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             showPageNumbers = showPageNumbers,
         )
+        if (remember { Prefs.gestureHints(context) }) {
+            PassGestureHint(Modifier.padding(bottom = 8.dp))
+        }
     }
 }
 

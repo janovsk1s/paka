@@ -48,6 +48,7 @@
     <string name="developer_page_numbers">page numbers</string>
     <string name="developer_official_font">official font</string>
     <string name="developer_light_gear">light gear</string>
+    <string name="developer_gesture_hints">gesture hints</string>
     <string name="developer_demo_mode">demo mode</string>
     <string name="language_title">language</string>
     <string name="language_selected">selected</string>

@@ -38,6 +38,7 @@
     <string name="developer_page_numbers">puslapių numeriai</string>
     <string name="developer_official_font">oficialus šriftas</string>
     <string name="developer_light_gear">Light krumpliaratis</string>
+    <string name="developer_gesture_hints">gestų užuominos</string>
     <string name="developer_demo_mode">demo režimas</string>
     <string name="language_title">kalba</string>
     <string name="language_selected">pasirinkta</string>

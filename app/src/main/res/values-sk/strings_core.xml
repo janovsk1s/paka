@@ -38,6 +38,7 @@
     <string name="developer_page_numbers">čísla strán</string>
     <string name="developer_official_font">oficiálne písmo</string>
     <string name="developer_light_gear">ozubené koleso Light</string>
+    <string name="developer_gesture_hints">tipy na gestá</string>
     <string name="developer_demo_mode">demo režim</string>
     <string name="language_title">jazyk</string>
     <string name="language_selected">vybrané</string>

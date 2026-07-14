@@ -23,6 +23,7 @@
 
     <string name="page_fraction">%1$d/%2$d</string>
     <string name="pass_stack_position">%1$s · %2$d/%3$d</string>
+    <string name="hint_hold_pass_edit">hold the pass to edit or delete</string>
 
     <string name="status_rendering">Rendering…</string>
     <string name="status_opening_pdf">Opening PDF…</string>
