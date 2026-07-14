@@ -6,13 +6,13 @@ no accounts, no analytics, and no crash reporting.
 
 ## Supported versions
 
-Security fixes target the current stable release and the active capture/photo
-preview branch.
+Security fixes target the current stable release line and any active preview
+branch.
 
 | Version | Status |
 | --- | --- |
-| 0.15.x beta previews | Active preview testing |
-| 0.14.x | Current stable |
+| 0.15.x | Current stable |
+| 0.14.x | Best-effort only |
 | Older versions | Best-effort only |
 
 ## Reporting a vulnerability

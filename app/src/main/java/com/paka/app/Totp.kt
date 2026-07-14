@@ -31,7 +31,10 @@ object Totp {
             return LocalizedMessage(R.string.validation_totp_algorithm)
         }
         return runCatching<LocalizedMessage?> {
-            require(base32Decode(account.secret).isNotEmpty())
+            val decoded = base32Decode(account.secret)
+            val usable = decoded.isNotEmpty()
+            decoded.fill(0)
+            require(usable)
             null
         }.getOrElse { LocalizedMessage(R.string.validation_totp_secret) }
     }
@@ -42,8 +45,12 @@ object Totp {
         return try {
             require(validationError(account) == null)
             val key = base32Decode(account.secret)
-            val counter = (timeMillis / 1000L) / account.period
-            hotp(key, counter, digits, account.algorithm)
+            try {
+                val counter = (timeMillis / 1000L) / account.period
+                hotp(key, counter, digits, account.algorithm)
+            } finally {
+                key.fill(0)
+            }
         } catch (_: Exception) {
             "-".repeat(digits)
         }
@@ -116,7 +123,9 @@ object Totp {
             val supported = uri.scheme.equals("otpauth", ignoreCase = true) &&
                 uri.host.equals("totp", ignoreCase = true) && secret.isNotBlank()
             if (supported) {
-                val label = Uri.decode(uri.path?.trimStart('/').orEmpty())
+                // Uri.getPath() already percent-decodes; decoding again would
+                // corrupt labels containing literal percent sequences.
+                val label = uri.path?.trimStart('/').orEmpty()
                 val issuerParam = uri.getQueryParameter("issuer")
                 val issuer: String
                 val account: String
