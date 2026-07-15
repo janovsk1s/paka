@@ -38,8 +38,8 @@ android {
         applicationId = "com.paka.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 53
-        versionName = "0.15.1"
+        versionCode = 54
+        versionName = "0.15.2"
         buildConfigField("String", "RELEASE_CHANNEL_LABEL", "\"$releaseChannelLabel\"")
     }
 

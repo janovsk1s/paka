@@ -2,6 +2,19 @@
 
 Notable changes to Paka are documented here.
 
+## 0.15.2 — 2026-07-15
+
+- Scanning a document that shows several barcodes now captures only the code
+  aimed inside the on-screen guide square. A single visible code still scans
+  instantly from anywhere in the frame.
+- New developer setting: gesture hints, off by default. Pass, stack, PDF, and
+  photo screens show a one-line caption naming the hold-to-edit action, in all
+  supported languages. With the setting off, screens render exactly as before.
+- 2FA setup QR labels are no longer percent-decoded twice, which corrupted
+  issuer names containing literal percent sequences.
+- Decoded TOTP key bytes are zeroed after code generation and validation, and
+  the security policy's supported-versions table names 0.15.x as current.
+
 ## 0.15.1 — 2026-07-12
 
 The last release line supporting Light Phone 2. Later versions ship only the

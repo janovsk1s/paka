@@ -1,0 +1,1 @@
+Paka 0.15.2 captures only the barcode aimed inside the guide square when a document shows several codes (a lone code still scans instantly), adds an optional developer gesture-hints caption naming the hold-to-edit action, fixes 2FA setup labels containing literal percent sequences, and zeroes TOTP key material after use.

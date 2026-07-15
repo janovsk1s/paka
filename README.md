@@ -6,12 +6,12 @@ hand without accounts, cloud services, analytics, or Google Play Services.
 
 ## Download
 
-Latest stable release: **Paka 0.15.1**
+Latest stable release: **Paka 0.15.2**
 
-- [Release notes](https://github.com/janovsk1s/paka/releases/tag/v0.15.1)
-- [Download Paka-v0.15.1.apk](https://github.com/janovsk1s/paka/releases/download/v0.15.1/Paka-v0.15.1.apk)
+- [Release notes](https://github.com/janovsk1s/paka/releases/tag/v0.15.2)
+- [Download Paka-v0.15.2.apk](https://github.com/janovsk1s/paka/releases/download/v0.15.2/Paka-v0.15.2.apk)
   — Light Phone III and other 64-bit phones
-- [Download Paka-v0.15.1-arm32.apk](https://github.com/janovsk1s/paka/releases/download/v0.15.1/Paka-v0.15.1-arm32.apk)
+- [Download Paka-v0.15.2-arm32.apk](https://github.com/janovsk1s/paka/releases/download/v0.15.2/Paka-v0.15.2-arm32.apk)
   — 32-bit phones such as Light Phone 2
 
 0.15.x is the last release line supporting Light Phone 2. On that device Paka
