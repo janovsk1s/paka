@@ -43,7 +43,7 @@ private enum class ManageGlyph { UP, DOWN }
 private enum class SettingsAction { REORDER, BACKUP, VIBRATION, ABOUT }
 private enum class DeveloperItem {
     TEXT_SIZE, LANGUAGE, LIGHT_MODE, RETURN_HOME, AUTO_LIGHT,
-    MAX_BRIGHTNESS, PAGE_NUMBERS, OFFICIAL_FONT, LIGHT_GEAR, DEMO_MODE,
+    MAX_BRIGHTNESS, PAGE_NUMBERS, OFFICIAL_FONT, LIGHT_GEAR, GESTURE_HINTS, DEMO_MODE,
 }
 private enum class TextSizeItem { SAMPLE, SMALLER, LARGER }
 
@@ -237,6 +237,8 @@ internal fun DevScreen(
     onLightGear: (Boolean) -> Unit,
     lightModeEnabled: Boolean,
     onLightMode: (Boolean) -> Unit,
+    gestureHintsEnabled: Boolean,
+    onGestureHints: (Boolean) -> Unit,
     demoModeEnabled: Boolean,
     onDemoMode: (Boolean) -> Unit,
     initialRoute: DeveloperRoute = DeveloperRoute.MENU,
@@ -276,6 +278,7 @@ internal fun DevScreen(
                             DeveloperItem.PAGE_NUMBERS -> stringResource(R.string.developer_page_numbers)
                             DeveloperItem.OFFICIAL_FONT -> stringResource(R.string.developer_official_font)
                             DeveloperItem.LIGHT_GEAR -> stringResource(R.string.developer_light_gear)
+                            DeveloperItem.GESTURE_HINTS -> stringResource(R.string.developer_gesture_hints)
                             DeveloperItem.DEMO_MODE -> stringResource(R.string.developer_demo_mode)
                         },
                         trailing = when (item) {
@@ -291,6 +294,7 @@ internal fun DevScreen(
                             DeveloperItem.PAGE_NUMBERS -> if (pageNumbersEnabled) enabled else disabled
                             DeveloperItem.OFFICIAL_FONT -> if (officialFontEnabled) enabled else disabled
                             DeveloperItem.LIGHT_GEAR -> if (lightGearEnabled) enabled else disabled
+                            DeveloperItem.GESTURE_HINTS -> if (gestureHintsEnabled) enabled else disabled
                             DeveloperItem.DEMO_MODE -> if (demoModeEnabled) enabled else disabled
                         },
                         onClick = {
@@ -304,6 +308,7 @@ internal fun DevScreen(
                                 DeveloperItem.PAGE_NUMBERS -> onPageNumbers(!pageNumbersEnabled)
                                 DeveloperItem.OFFICIAL_FONT -> onOfficialFont(!officialFontEnabled)
                                 DeveloperItem.LIGHT_GEAR -> onLightGear(!lightGearEnabled)
+                                DeveloperItem.GESTURE_HINTS -> onGestureHints(!gestureHintsEnabled)
                                 DeveloperItem.DEMO_MODE -> onDemoMode(!demoModeEnabled)
                             }
                         },

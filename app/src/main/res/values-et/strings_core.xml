@@ -38,6 +38,7 @@
     <string name="developer_page_numbers">leheküljenumbrid</string>
     <string name="developer_official_font">ametlik font</string>
     <string name="developer_light_gear">Lighti hammasratas</string>
+    <string name="developer_gesture_hints">žestivihjed</string>
     <string name="developer_demo_mode">demorežiim</string>
     <string name="language_title">keel</string>
     <string name="language_selected">valitud</string>

@@ -38,6 +38,7 @@
     <string name="developer_page_numbers">sidnummer</string>
     <string name="developer_official_font">officiellt typsnitt</string>
     <string name="developer_light_gear">Light-kugghjul</string>
+    <string name="developer_gesture_hints">gesttips</string>
     <string name="developer_demo_mode">demoläge</string>
     <string name="language_title">språk</string>
     <string name="language_selected">valt</string>

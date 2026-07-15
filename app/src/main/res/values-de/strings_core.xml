@@ -38,6 +38,7 @@
     <string name="developer_page_numbers">Seitenzahlen</string>
     <string name="developer_official_font">offizielle Schrift</string>
     <string name="developer_light_gear">Light-Zahnrad</string>
+    <string name="developer_gesture_hints">Gestenhinweise</string>
     <string name="developer_demo_mode">Demo-Modus</string>
     <string name="language_title">Sprache</string>
     <string name="language_selected">ausgewählt</string>

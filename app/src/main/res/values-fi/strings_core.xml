@@ -38,6 +38,7 @@
     <string name="developer_page_numbers">sivunumerot</string>
     <string name="developer_official_font">virallinen fontti</string>
     <string name="developer_light_gear">Light-ratas</string>
+    <string name="developer_gesture_hints">elevihjeet</string>
     <string name="developer_demo_mode">demotila</string>
     <string name="language_title">kieli</string>
     <string name="language_selected">valittu</string>

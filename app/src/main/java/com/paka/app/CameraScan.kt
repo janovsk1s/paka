@@ -42,6 +42,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import zxingcpp.BarcodeReader
+import kotlin.math.abs
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -62,6 +63,8 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
     var autoLight by remember { mutableStateOf(false) }
     var lowLight by remember { mutableStateOf(false) }
     val readers = remember {
+        // Reading several symbols per frame lets selectAimedSymbol require the
+        // guide square to disambiguate documents that carry more than one code.
         listOf(
             BarcodeReader(
                 BarcodeReader.Options(
@@ -71,7 +74,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                     tryInvert = true,
                     tryDownscale = false,
                     binarizer = BarcodeReader.Binarizer.LOCAL_AVERAGE,
-                    maxNumberOfSymbols = 1,
+                    maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
                 ),
             ),
             BarcodeReader(
@@ -82,7 +85,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                     tryInvert = true,
                     tryDownscale = false,
                     binarizer = BarcodeReader.Binarizer.GLOBAL_HISTOGRAM,
-                    maxNumberOfSymbols = 1,
+                    maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
                 ),
             ),
         )
@@ -93,6 +96,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
         Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "paka-barcode-scan") }
     }
     val providerRef = remember { AtomicReference<ProcessCameraProvider?>(null) }
+    val viewSizeRef = remember { AtomicReference(intArrayOf(0, 0)) }
     val cameraRef = remember { AtomicReference<Camera?>(null) }
     val previewRef = remember { AtomicReference<PreviewView?>(null) }
     val hasFlashRef = remember { AtomicBoolean(false) }
@@ -131,6 +135,9 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                 factory = { ctx ->
                     val previewView = PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
                     previewRef.set(previewView)
+                    previewView.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                        viewSizeRef.set(intArrayOf(view.width, view.height))
+                    }
                     val future = ProcessCameraProvider.getInstance(ctx)
                     future.addListener({
                         try {
@@ -212,11 +219,25 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                                                     }
                                                 }
 
-                                                val result = readers.firstNotNullOfOrNull { reader ->
-                                                    reader.read(image).firstOrNull {
-                                                        it.text != null || it.bytes != null
-                                                    }
-                                                }
+                                                val symbols = readers.firstNotNullOfOrNull { reader ->
+                                                    reader.read(image).filter {
+                                                        (it.text != null || it.bytes != null) &&
+                                                            mapFormat(it.format) != null
+                                                    }.takeIf { it.isNotEmpty() }
+                                                }.orEmpty()
+                                                // zxing-cpp reports positions in the rotated
+                                                // (display-oriented) frame.
+                                                val rotated = image.imageInfo.rotationDegrees % 180 != 0
+                                                val viewSize = viewSizeRef.get()
+                                                val result = selectAimedSymbol(
+                                                    centers = symbols.map { it.position.center() },
+                                                    geometry = ScanGeometry(
+                                                        frameWidth = if (rotated) image.height else image.width,
+                                                        frameHeight = if (rotated) image.width else image.height,
+                                                        viewWidth = viewSize[0],
+                                                        viewHeight = viewSize[1],
+                                                    ),
+                                                )?.let(symbols::get)
                                                 val format = result?.let { mapFormat(it.format) }
                                                 if (
                                                     result != null &&
@@ -335,6 +356,56 @@ private const val LOW_LIGHT_LUMA = 48
 private const val LOW_LIGHT_FRAMES = 6
 private const val BRIGHT_LIGHT_FRAMES = 4
 internal const val FOCUS_RETRY_MS = 2_200L
+private const val MAX_SCAN_SYMBOLS = 5
+internal const val SCAN_GUIDE_FRACTION = 0.70f
+
+/** Symbol centre in the display-oriented analysis frame zxing-cpp reports. */
+internal data class SymbolCenter(val x: Float, val y: Float)
+
+internal fun BarcodeReader.Position.center(): SymbolCenter = SymbolCenter(
+    x = (topLeft.x + topRight.x + bottomRight.x + bottomLeft.x) / 4f,
+    y = (topLeft.y + topRight.y + bottomRight.y + bottomLeft.y) / 4f,
+)
+
+/** Display-oriented analysis-frame and preview-view sizes for guide placement. */
+internal data class ScanGeometry(
+    val frameWidth: Int,
+    val frameHeight: Int,
+    val viewWidth: Int,
+    val viewHeight: Int,
+) {
+    val usable: Boolean get() = minOf(frameWidth, frameHeight, viewWidth, viewHeight) > 0
+}
+
+/**
+ * Chooses the symbol the user is aiming at. A lone symbol is accepted from the
+ * whole frame, keeping single-code scans as forgiving as before. When several
+ * codes are visible at once, exactly one symbol centre must sit inside the
+ * on-screen guide square; any other arrangement selects nothing so scanning
+ * continues until the user has aimed at one code.
+ */
+internal fun selectAimedSymbol(
+    centers: List<SymbolCenter>,
+    geometry: ScanGeometry,
+    guideFraction: Float = SCAN_GUIDE_FRACTION,
+): Int? {
+    if (centers.size <= 1) return centers.indices.firstOrNull()
+    if (!geometry.usable) return null
+    // FILL_CENTER scales the frame uniformly to cover the view and crops the
+    // overflow evenly, so the view centre stays the frame centre and the guide
+    // square (guideFraction of the view width) spans viewWidth / scale frame
+    // pixels.
+    val scale = maxOf(
+        geometry.viewWidth.toFloat() / geometry.frameWidth,
+        geometry.viewHeight.toFloat() / geometry.frameHeight,
+    )
+    val halfSide = guideFraction * geometry.viewWidth / scale / 2f
+    val inside = centers.withIndex().filter { (_, center) ->
+        abs(center.x - geometry.frameWidth / 2f) <= halfSide &&
+            abs(center.y - geometry.frameHeight / 2f) <= halfSide
+    }
+    return inside.singleOrNull()?.index
+}
 
 /** Samples the central image area without allocating a full luminance copy. */
 private fun averageLuma(image: ImageProxy): Int {
@@ -370,7 +441,7 @@ private fun averageLuma(image: ImageProxy): Int {
 @Composable
 private fun ScanGuide() {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val frame = size.width * 0.70f
+        val frame = size.width * SCAN_GUIDE_FRACTION
         val left = (size.width - frame) / 2f
         val top = (size.height - frame) / 2f
         val right = left + frame
