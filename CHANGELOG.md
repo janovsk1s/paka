@@ -2,6 +2,11 @@
 
 Notable changes to Paka are documented here.
 
+## 0.15.3 — 2026-07-24
+
+- Version-bump re-release of 0.15.2 (`versionCode` 55). No functional, security,
+  or compatibility changes; built from the same source as 0.15.2.
+
 ## 0.15.2 — 2026-07-15
 
 - Scanning a document that shows several barcodes now captures only the code
