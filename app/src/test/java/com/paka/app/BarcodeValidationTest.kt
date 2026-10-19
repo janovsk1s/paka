@@ -24,4 +24,11 @@ class BarcodeValidationTest {
         assertNull(Barcodes.validationError(PakaFormat.CODABAR, "A12345B"))
         assertNotNull(Barcodes.validationError(PakaFormat.CODABAR, "12345"))
     }
+
+    @Test
+    fun `data matrix is limited to latin-1 like its zxing writer`() {
+        assertNull(Barcodes.validationError(PakaFormat.DATA_MATRIX, "Café 123"))
+        assertNotNull(Barcodes.validationError(PakaFormat.DATA_MATRIX, "Rīga"))
+        assertNotNull(Barcodes.validationError(PakaFormat.DATA_MATRIX, "€5"))
+    }
 }

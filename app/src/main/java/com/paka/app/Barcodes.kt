@@ -94,7 +94,7 @@ internal object Barcodes {
             PakaFormat.ITF -> itfValidationError(data)
             PakaFormat.CODE39 -> code39ValidationError(data)
             PakaFormat.CODABAR -> codabarValidationError(data)
-            PakaFormat.AZTEC, PakaFormat.PDF417 -> latin1ValidationError(format, data)
+            PakaFormat.AZTEC, PakaFormat.PDF417, PakaFormat.DATA_MATRIX -> latin1ValidationError(format, data)
             else -> null
         }
     }
@@ -208,10 +208,12 @@ private fun zxingHints(format: BarcodeFormat): HashMap<EncodeHintType, Any> {
         // than a per-side quiet zone. Pad linear symbols explicitly below.
         else -> 0
     }
-    // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
+    // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1. Aztec and
+    // Data Matrix already encode Latin-1 without a hint: an Aztec charset hint only adds
+    // an ECI header the original never carried, and Data Matrix reads it only in compact mode.
     when (format) {
-        BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
-        BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
+        BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
+        BarcodeFormat.QR_CODE -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
         else -> Unit
     }
     if (format == BarcodeFormat.QR_CODE) hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M

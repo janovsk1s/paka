@@ -318,7 +318,14 @@ internal fun CardDetail(
     }
     val persistAndBack = {
         val savedName = name.trim().ifBlank { card.name }
-        if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }, references = references))) onBack()
+        val updated = card.copy(
+            name = savedName,
+            notes = notes.trim(),
+            stack = stack.trim().ifBlank { null },
+            references = references,
+        )
+        // Unchanged details need no write, so Back still works while storage is read-only.
+        if (updated == card || onUpdate(updated)) onBack()
     }
 
     val savedStack = card.stack

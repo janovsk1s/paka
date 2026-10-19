@@ -2,6 +2,7 @@ package com.paka.app
 
 import android.os.SystemClock
 import android.util.Size
+import android.widget.Toast
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
@@ -244,10 +245,24 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                                                     format != null &&
                                                     handled.compareAndSet(false, true)
                                                 ) {
-                                                    val data = selectScanPayload(format, result.text, result.bytes)
+                                                    val data = selectScanPayload(
+                                                        format,
+                                                        result.contentType,
+                                                        result.text,
+                                                        result.bytes,
+                                                    )
                                                     previewView.post {
-                                                        performPakaHaptic(context, haptics)
-                                                        onScanned(ScanResult(data, format))
+                                                        if (data == null) {
+                                                            Toast.makeText(
+                                                                context,
+                                                                R.string.entry_error_code_cannot_render_exactly,
+                                                                Toast.LENGTH_LONG,
+                                                            ).show()
+                                                            onBack()
+                                                        } else {
+                                                            performPakaHaptic(context, haptics)
+                                                            onScanned(ScanResult(data, format))
+                                                        }
                                                     }
                                                 }
                                             }
@@ -478,13 +493,25 @@ internal fun focusAt(camera: Camera, preview: PreviewView, x: Float, y: Float) {
     camera.cameraControl.startFocusAndMetering(action)
 }
 
-/** Preserve arbitrary binary payloads for the two byte-oriented pass formats. */
-internal fun selectScanPayload(format: PakaFormat, text: String?, bytes: ByteArray?): String = when {
-    format == PakaFormat.AZTEC && bytes != null -> String(bytes, Charsets.ISO_8859_1)
-    format == PakaFormat.PDF417 && bytes != null -> String(bytes, Charsets.ISO_8859_1)
-    text != null -> text
-    bytes != null -> String(bytes, Charsets.ISO_8859_1)
-    else -> ""
+/**
+ * The exact payload Paka can re-render, or null. zxing-cpp's default HRI text
+ * adds "(01)" brackets to GS1 data and escapes control bytes as "<GS>", so only
+ * plain text is taken as text; Aztec/PDF417 keep their raw bytes via Latin-1.
+ */
+internal fun selectScanPayload(
+    format: PakaFormat,
+    contentType: BarcodeReader.ContentType,
+    text: String?,
+    bytes: ByteArray?,
+): String? = when {
+    // DataBar Expanded is GS1 by definition; the verifier compares canonical AIs.
+    format == PakaFormat.DATABAR_EXPANDED -> text
+    // FNC1/GS1 mode is not part of the stored payload, so it cannot be reproduced.
+    contentType == BarcodeReader.ContentType.GS1 -> null
+    (format == PakaFormat.AZTEC || format == PakaFormat.PDF417) && bytes != null ->
+        String(bytes, Charsets.ISO_8859_1)
+    contentType == BarcodeReader.ContentType.TEXT -> text
+    else -> null
 }
 
 private fun mapFormat(f: BarcodeReader.Format): PakaFormat? = when (f) {

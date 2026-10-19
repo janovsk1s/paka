@@ -296,7 +296,9 @@ private fun PdfZoomPage(
     }
     fun clampY(value: Float, targetZoom: Float): Float {
         val height = (page?.bitmap?.height ?: 0) * targetZoom
-        return if (height <= viewportHeight) 0f
+        // A centred landscape page grows towards true centre so its bottom never
+        // overflows; portrait pages (pageTop 0) stay top-aligned.
+        return if (height <= viewportHeight) minOf(0f, (viewportHeight - height) / 2f - pageTop)
         else value.coerceIn(viewportHeight - pageTop - height, -pageTop)
     }
 

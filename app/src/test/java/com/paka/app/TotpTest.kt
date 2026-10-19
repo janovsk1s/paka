@@ -38,4 +38,13 @@ class TotpTest {
         assertNotNull(Totp.validationError(valid.copy(digits = 7)))
         assertNotNull(Totp.validationError(valid.copy(algorithm = "MD5")))
     }
+
+    @Test
+    fun `ignores leftover Base32 bits like other authenticators`() {
+        // 26 characters carry 130 bits; the final H leaves two set bits beyond 16 bytes.
+        val lenient = OtpAccount("Example", "me", "JBSWY3DPEHPK3PXPJBSWY3DPEH")
+        val canonical = lenient.copy(secret = "JBSWY3DPEHPK3PXPJBSWY3DPEE")
+        assertNull(Totp.validationError(lenient))
+        assertEquals(Totp.code(canonical, 59_000L), Totp.code(lenient, 59_000L))
+    }
 }

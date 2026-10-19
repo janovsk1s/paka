@@ -12,6 +12,24 @@ class CropGeometryTest {
     private val minSize = 0.15f
 
     @Test
+    fun minimumSizeBoxAtAnEdgeCanStillBeResizedWithoutCrashing() {
+        // Shrinking to the minimum and moving to an edge can round the width a
+        // hair below minSize; the corner clamp range must not become empty.
+        for (step in 0 until 2_000) {
+            val start = step / 2_000f * 0.8f
+            val minimal = CropRect(start, start, start + 0.5f, start + 0.5f)
+                .resized(CropHandle.TOP_LEFT, dx = 10f, dy = 10f, minSize = minSize)
+            for (edge in listOf(minimal.movedBy(-10f, -10f), minimal.movedBy(10f, 10f))) {
+                CropHandle.entries.forEach { handle ->
+                    val resized = edge.resized(handle, dx = 0.001f, dy = 0.001f, minSize = minSize)
+                    assertTrue(resized.left >= 0f && resized.top >= 0f)
+                    assertTrue(resized.right <= 1f && resized.bottom <= 1f)
+                }
+            }
+        }
+    }
+
+    @Test
     fun movingClampsAtTheEdges() {
         val moved = centered.movedBy(dx = 10f, dy = -10f)
         assertEquals(CropRect(0.5f, 0f, 1f, 0.5f), moved)

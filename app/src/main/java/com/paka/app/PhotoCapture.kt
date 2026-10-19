@@ -427,9 +427,10 @@ internal fun PhotoReviewScreen(
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
 
-    val latestBytes = rememberUpdatedState(currentBytes)
     DisposableEffect(initialBytes) {
-        onDispose { latestBytes.value.fill(0) }
+        // Reads this photo's own keyed state (including a crop replacement), never
+        // the next photo's bytes that the same call site may already be showing.
+        onDispose { currentBytes.fill(0) }
     }
 
     // Review decoding is both bounded and off the UI thread. A private copy is

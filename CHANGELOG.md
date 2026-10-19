@@ -2,6 +2,28 @@
 
 Notable changes to Paka are documented here.
 
+## Unreleased
+
+- Scanning no longer saves a decoder's display text as a pass payload. GS1
+  symbols (other than DataBar Expanded) and codes containing control or binary
+  bytes, other than Aztec and PDF417, are refused with "cannot be rendered
+  exactly" instead of being saved as bracketed or `<GS>`-escaped text.
+- Scanned passes must render and verify before they are named and saved, the
+  same gate manual entry uses.
+- Data Matrix now validates as Latin-1, matching its encoder, and Aztec codes no
+  longer gain an ECI-1 header the original symbol did not carry. Aztec payload
+  bytes are unchanged.
+- 2FA secrets whose final Base32 character carries leftover bits are accepted
+  again, as before 0.12.6. Such accounts no longer show dashes, and backups
+  containing them restore.
+- Picking front and back photos together no longer wipes the back photo before
+  it can be reviewed.
+- Resizing a minimum-size crop selection at the photo edge no longer crashes.
+- Deleting a pass from its details returns to the list instead of the deleted
+  pass. Leaving unchanged details no longer rewrites the pass store, so Back
+  works while storage is read-only.
+- Zoomed landscape PDF pages stay centred instead of overflowing the bottom.
+
 ## 0.15.3 — 2026-07-24
 
 - Version-bump re-release of 0.15.2 (`versionCode` 55). No functional, security,

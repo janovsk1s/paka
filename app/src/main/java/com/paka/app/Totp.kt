@@ -108,10 +108,8 @@ object Totp {
                 out.add(((buffer shr bits) and 0xff).toByte())
             }
         }
-        if (bits > 0) {
-            val paddingMask = (1 shl bits) - 1
-            require(buffer and paddingMask == 0) { "Invalid Base32 trailing bits" }
-        }
+        // Leftover bits are ignored, as Paka did before 0.12.6 and other authenticators do:
+        // rejecting them hid stored accounts and made whole backups unrestorable.
         return out.toByteArray()
     }
 

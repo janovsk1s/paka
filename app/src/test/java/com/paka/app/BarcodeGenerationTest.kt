@@ -282,8 +282,8 @@ class BarcodeGenerationTest {
             },
         )
         when (format) {
-            BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> put(EncodeHintType.CHARACTER_SET, "ISO-8859-1")
-            BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> put(EncodeHintType.CHARACTER_SET, "UTF-8")
+            BarcodeFormat.PDF_417 -> put(EncodeHintType.CHARACTER_SET, "ISO-8859-1")
+            BarcodeFormat.QR_CODE -> put(EncodeHintType.CHARACTER_SET, "UTF-8")
             else -> Unit
         }
         if (format == BarcodeFormat.QR_CODE) put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M)

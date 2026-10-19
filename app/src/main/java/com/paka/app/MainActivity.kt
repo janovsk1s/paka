@@ -815,7 +815,22 @@ private fun LoadedPakaApp(
                     if (account != null) addCode(account)
                     else Toast.makeText(context, R.string.scan_not_2fa, Toast.LENGTH_SHORT).show()
                 } else {
-                    pendingScan = result
+                    // Same render-and-verify gate as manual entry: never save a pass that cannot display.
+                    scope.launch {
+                        val renders = withContext(Dispatchers.Default) {
+                            Barcodes.generate(result.format, result.data, passWidthPx)
+                                ?.also { it.recycle() } != null
+                        }
+                        if (renders) {
+                            pendingScan = result
+                        } else {
+                            Toast.makeText(
+                                context,
+                                R.string.entry_error_code_cannot_render_exactly,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
                 }
             },
             onBack = { scanning = false },
@@ -829,7 +844,8 @@ private fun LoadedPakaApp(
         CardDetail(
             card = fresh,
             onUpdate = updateCard,
-            onDelete = { saveCards(activeCards.filter { it.id != fresh.id }) },
+            // Clear the opened pass too, or Back would fall through to the deleted pass.
+            onDelete = { saveCards(activeCards.filter { it.id != fresh.id }).also { if (it) selectedCard = null } },
             stackMembers = { stackName ->
                 activeCards.filter { it.stack == stackName }.map { ManageRow(it.id, it.name) }
             },
