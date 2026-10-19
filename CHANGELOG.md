@@ -4,6 +4,14 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- Read-only storage now explains its recovery path on the Backup screen and
+  disables restore there, instead of a toast that Android 12+ cuts to two
+  lines; the photo backup-limit message stays on the review screen.
+- Paka is portrait-only, so turning a phone no longer recreates the screen
+  and drops the open pass, stack, or form back to the list.
+- The camera light toggle sits on the back arrow's line, and only the 2FA list
+  redraws every second while codes are shown; home prefetch uses the pass
+  screen's exact width so its renders hit the cache.
 - Polish: wrapped 30 sp text (delete and duplicate questions, backup and
   reference menus, the restore warning) no longer inherits a 24 sp line height
   that made its lines overlap; About moves a long development or preview

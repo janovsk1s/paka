@@ -296,6 +296,8 @@ internal fun PhotoCaptureScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
+                    // The back arrow's 48 dp lane: 12 dp below the status bar.
+                    .padding(top = 12.dp)
                     .then(
                         if (busy) Modifier else tapModifier({
                             val enabled = !torchRef.get()
@@ -308,7 +310,7 @@ internal fun PhotoCaptureScreen(
                             stringResource(R.string.capture_cd_turn_light_on)
                         }),
                     )
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
 
@@ -410,6 +412,8 @@ internal fun PhotoReviewScreen(
     var cropRect by remember(initialBytes) { mutableStateOf(CropRect.FULL) }
     var busy by remember(initialBytes) { mutableStateOf(false) }
     var reviewFailed by remember(initialBytes) { mutableStateOf(false) }
+    // Persistent, unlike a toast, which Android 12+ cuts to two lines.
+    var limitMessage by remember(initialBytes) { mutableStateOf<String?>(null) }
     var reviewRender by remember(initialBytes) { mutableStateOf<ReviewRender?>(null) }
     val displayBitmap = reviewRender?.takeIf {
         it.source === currentBytes && it.counterClockwiseTurns == pendingRotations
@@ -517,6 +521,14 @@ internal fun PhotoReviewScreen(
                 color = Grey,
                 fontSize = 16.sp,
                 modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        limitMessage?.let { message ->
+            Text(
+                message,
+                color = Grey,
+                fontSize = 16.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp).padding(top = 12.dp),
             )
         }
         Row(
@@ -645,10 +657,11 @@ internal fun PhotoReviewScreen(
                                     ?: Result.failure(IllegalStateException("Photo import did not finish"))
                                 busy = false
                                 result.onSuccess(onUsed).onFailure { error ->
-                                    showError(
-                                        if (error is BackupLimitException) resources.backupLimitMessage()
-                                        else resources.getString(R.string.capture_error_save_photo),
-                                    )
+                                    if (error is BackupLimitException) {
+                                        limitMessage = resources.backupLimitMessage()
+                                    } else {
+                                        showError(resources.getString(R.string.capture_error_save_photo))
+                                    }
                                 }
                             } finally {
                                 prepared?.fill(0)

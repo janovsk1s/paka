@@ -48,7 +48,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
@@ -303,7 +303,6 @@ private fun LoadedPakaApp(
     val context = LocalContext.current
     val resources = LocalResources.current
     val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
     var cards by remember { mutableStateOf(cardLoad.value) }
     var codes by remember { mutableStateOf(codeLoad.value) }
     var committedCards by remember { mutableStateOf(cardLoad.value) }
@@ -352,9 +351,7 @@ private fun LoadedPakaApp(
     }
     var demoContent by remember { mutableStateOf(DemoData.create(context)) }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
-    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var pendingClipboard by remember { mutableStateOf<PendingClipboard?>(null) }
-    val foreground by rememberIsForeground()
     val scope = rememberCoroutineScope()
     val activeCards = if (demoModeEnabled) demoContent.cards else cards
     val activeCodes = if (demoModeEnabled) demoContent.accounts else codes
@@ -362,9 +359,9 @@ private fun LoadedPakaApp(
         onboardingComplete && !showSettings && !showBackup && !showAbout && manageMode == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
-    val codesVisible = mode == Mode.CODES && homeVisible
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
-    val passWidthPx = with(density) { (configuration.screenWidthDp.dp - 32.dp).roundToPx() }
+    // Derived like the pass screen's container width, so prefetched codes hit its render cache.
+    val screenWidthPx = LocalWindowInfo.current.containerSize.width
+    val passWidthPx = screenWidthPx - with(density) { 32.dp.roundToPx() }
     LaunchedEffect(homeResetSignal) {
         if (homeResetSignal > 0) {
             mode = Mode.CARDS
@@ -387,17 +384,6 @@ private fun LoadedPakaApp(
             manualCode = false
             initialDevRoute = null
             showDev = false
-        }
-    }
-    // Gated on foreground so the per-second wake-up stops when Paka is
-    // backgrounded; Compose would otherwise keep this loop alive while stopped.
-    LaunchedEffect(codesVisible, foreground) {
-        if (codesVisible && foreground) {
-            while (true) {
-                nowMs = System.currentTimeMillis()
-                // Wake on the next whole second so a code never lingers past its rollover.
-                delay(1_000L - nowMs % 1_000L)
-            }
         }
     }
     LaunchedEffect(homeVisible, mode, activeCards, screenWidthPx, passWidthPx) {
@@ -690,6 +676,7 @@ private fun LoadedPakaApp(
         BackupScreen(
             cards = cards,
             accounts = codes,
+            restoreBlocked = !cardsWritable || !codesWritable,
             onRestore = { restored ->
                 if (!cardsWritable || !codesWritable) {
                     restored.clearDocuments()
@@ -928,7 +915,6 @@ private fun LoadedPakaApp(
                     if (activeCodes.isEmpty()) EmptyHint(stringResource(R.string.home_add_code_hint))
                     else CodesList(
                         accounts = activeCodes,
-                        nowMs = nowMs,
                         textSize = textSize,
                         pageState = codesPage,
                         onCopy = { code ->

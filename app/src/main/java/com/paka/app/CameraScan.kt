@@ -337,6 +337,8 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
+                    // The back arrow's 48 dp lane: 12 dp below the status bar.
+                    .padding(top = 12.dp)
                     .then(
                         tapModifier({
                             manualLightOverride.set(true)
@@ -351,7 +353,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                             stringResource(R.string.scanner_cd_turn_light_on)
                         }),
                     )
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
 

@@ -60,6 +60,8 @@ private enum class BackupMenuAction { EXPORT, RESTORE }
 internal fun BackupScreen(
     cards: List<Card>,
     accounts: List<OtpAccount>,
+    // Read-only storage cannot be restored over; say how to recover up front.
+    restoreBlocked: Boolean,
     onRestore: suspend (BackupData) -> Boolean,
     onBack: () -> Unit,
 ) {
@@ -211,14 +213,19 @@ internal fun BackupScreen(
                             BackupMenuAction.EXPORT -> stringResource(R.string.backup_encrypted_export)
                             BackupMenuAction.RESTORE -> stringResource(R.string.backup_restore_backup)
                         }
+                        val enabled = action == BackupMenuAction.EXPORT || !restoreBlocked
                         Box(
                             modifier = Modifier.fillMaxSize().then(
-                                tapModifier {
-                                    if (action == BackupMenuAction.EXPORT) {
-                                        step = BackupStep.EXPORT_PASSWORD
-                                    } else {
-                                        context.setPakaExternalFlowActive(true)
-                                        importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                                if (!enabled) {
+                                    Modifier
+                                } else {
+                                    tapModifier {
+                                        if (action == BackupMenuAction.EXPORT) {
+                                            step = BackupStep.EXPORT_PASSWORD
+                                        } else {
+                                            context.setPakaExternalFlowActive(true)
+                                            importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                                        }
                                     }
                                 },
                             ),
@@ -226,7 +233,7 @@ internal fun BackupScreen(
                         ) {
                             Text(
                                 label,
-                                color = Palette.foreground,
+                                color = if (enabled) Palette.foreground else Palette.dim,
                                 fontSize = 30.sp,
                                 lineHeight = LargeTextLineHeight,
                                 fontWeight = FontWeight.Normal,
@@ -236,8 +243,12 @@ internal fun BackupScreen(
                         }
                     }
                     Text(
-                        stringResource(R.string.backup_offline_description),
-                        color = Palette.dim,
+                        if (restoreBlocked) {
+                            stringResource(R.string.restore_storage_unhealthy)
+                        } else {
+                            stringResource(R.string.backup_offline_description)
+                        },
+                        color = if (restoreBlocked) Palette.foreground else Palette.dim,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
                         modifier = Modifier.align(Alignment.BottomStart).padding(end = 14.dp, bottom = 20.dp),

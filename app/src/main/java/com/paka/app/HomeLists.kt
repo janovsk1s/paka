@@ -10,8 +10,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -27,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 internal sealed interface Entry
@@ -95,7 +100,6 @@ internal fun CardsList(
 @Composable
 internal fun CodesList(
     accounts: List<OtpAccount>,
-    nowMs: Long,
     textSize: Float,
     pageState: MutableIntState,
     onCopy: (String) -> Unit,
@@ -104,6 +108,16 @@ internal fun CodesList(
     val textMeasurer = rememberTextMeasurer()
     val localTextStyle = LocalTextStyle.current
     val copyLabel = stringResource(R.string.accessibility_copy_code)
+    val foreground by rememberIsForeground()
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // Only this list redraws each second, and only while Paka is in the foreground.
+    LaunchedEffect(foreground) {
+        while (foreground) {
+            nowMs = System.currentTimeMillis()
+            // Wake on the next whole second so a code never lingers past its rollover.
+            delay(1_000L - nowMs % 1_000L)
+        }
+    }
     PagedList(accounts, pageState = pageState) { account ->
         val code = Totp.code(account, nowMs)
         val remaining = Totp.secondsRemaining(account, nowMs)
