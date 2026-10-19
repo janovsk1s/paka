@@ -19,6 +19,15 @@ Notable changes to Paka are documented here.
 - Scanned passes verify at the width the pass screen uses, and that render is
   cached for display. Reordering a stack from Details keeps the stack on the
   pass you were viewing.
+- Removing a linked file from a pass, or deleting the pass, now drops Paka's
+  read access to that file once no saved pass links it. Reading a picked
+  link's name and type no longer runs on the UI thread, so a slow document
+  provider cannot freeze Paka.
+- Picking the same PDF twice and then backing out deletes it instead of
+  leaving it stored until the next cold start.
+- Numeric barcode fields accept only ASCII digits; full-width digits now get
+  the "digits only" message instead of failing later at render.
+- 18 strings nothing used were removed from all eight languages.
 - UI consistency: the Backup and file-reference menus shrink long labels onto
   one line like every other menu; Details and entry screens share one footer
   lane, so "save" sits in the same place; explanatory and inline-error texts

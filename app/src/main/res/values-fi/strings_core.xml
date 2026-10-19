@@ -2,21 +2,14 @@
 <resources>
     <string name="core_on">päällä</string>
     <string name="core_off">pois</string>
-    <string name="core_back">Takaisin</string>
-    <string name="core_open_details">Avaa tiedot</string>
     <string name="core_settings">Asetukset</string>
     <string name="core_add">Lisää</string>
     <string name="core_manual_entry">Manuaalinen syöttö</string>
-    <string name="core_cards">Kortit</string>
-    <string name="core_2fa_codes">2FA-koodit</string>
     <string name="core_show_passes">Näytä kortit</string>
     <string name="core_show_2fa_codes">Näytä 2FA-koodit</string>
-    <string name="core_pass">kortti</string>
-    <string name="core_code">koodi</string>
     <string name="core_name">nimi</string>
 
     <string name="settings_title">asetukset</string>
-    <string name="settings_reorder">järjestä</string>
     <string name="settings_reorder_passes">järjestä kortit</string>
     <string name="settings_reorder_codes">järjestä 2FA-koodit</string>
     <string name="settings_backup">varmuuskopio</string>
@@ -42,7 +35,6 @@
     <string name="developer_demo_mode">demotila</string>
     <string name="language_title">kieli</string>
     <string name="language_selected">valittu</string>
-    <string name="reorder_title">järjestä</string>
     <string name="reorder_passes_title">järjestä kortit</string>
     <string name="reorder_codes_title">järjestä 2FA-koodit</string>
     <string name="reorder_stack_title">järjestä pino</string>
@@ -50,15 +42,6 @@
     <string name="reorder_move_up">Siirrä %1$s ylös</string>
     <string name="reorder_move_down">Siirrä %1$s alas</string>
 
-    <string name="camera_start_failed">Kameraa ei voitu käynnistää</string>
-    <string name="camera_unavailable">Kamera ei ole käytettävissä</string>
-    <string name="camera_light_auto">valo auto</string>
-    <string name="camera_light_on">valo päällä</string>
-    <string name="camera_light">valo</string>
-    <string name="camera_turn_light_off">Sammuta kameran valo</string>
-    <string name="camera_turn_light_on">Sytytä kameran valo</string>
-    <string name="camera_low_light">hämärää · käytä valoa</string>
-    <string name="camera_tap_to_focus">tarkenna napauttamalla</string>
 
     <string name="restore_rolled_back_notice">Keskeytynyt palautus peruttiin turvallisesti.</string>
     <string name="restore_completed_notice">Keskeytynyt palautus viimeisteltiin turvallisesti.</string>
@@ -75,7 +58,6 @@
     <string name="restore_storage_unhealthy">Tallennustila on vain luettavissa. Avaa Paka uudelleen; jos tilanne jatkuu, tyhjennä Pakan tallennustila Androidin asetuksista ja palauta sitten</string>
     <string name="restore_failed">Varmuuskopiota ei voitu palauttaa</string>
     <string name="restore_interrupted">Palautus keskeytyi; avaa Paka uudelleen ja tarkista tiedot</string>
-    <string name="storage_read_only_notice">Tallennustila on vain luettavissa, kunnes se korjataan.</string>
     <string name="backup_demo_unavailable">Varmuuskopio ei ole käytettävissä demotilassa</string>
     <string name="scan_not_2fa">Tämä ei ole 2FA-QR-koodi</string>
     <string name="home_demo_title">Paka · demo</string>

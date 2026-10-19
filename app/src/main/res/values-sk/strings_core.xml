@@ -2,21 +2,14 @@
 <resources>
     <string name="core_on">zap.</string>
     <string name="core_off">vyp.</string>
-    <string name="core_back">Späť</string>
-    <string name="core_open_details">Otvoriť podrobnosti</string>
     <string name="core_settings">Nastavenia</string>
     <string name="core_add">Pridať</string>
     <string name="core_manual_entry">Ručné zadanie</string>
-    <string name="core_cards">Preukazy</string>
-    <string name="core_2fa_codes">Kódy 2FA</string>
     <string name="core_show_passes">Zobraziť preukazy</string>
     <string name="core_show_2fa_codes">Zobraziť kódy 2FA</string>
-    <string name="core_pass">preukaz</string>
-    <string name="core_code">kód</string>
     <string name="core_name">názov</string>
 
     <string name="settings_title">nastavenia</string>
-    <string name="settings_reorder">zoradiť</string>
     <string name="settings_reorder_passes">zoradiť preukazy</string>
     <string name="settings_reorder_codes">zoradiť kódy 2FA</string>
     <string name="settings_backup">záloha</string>
@@ -42,7 +35,6 @@
     <string name="developer_demo_mode">demo režim</string>
     <string name="language_title">jazyk</string>
     <string name="language_selected">vybrané</string>
-    <string name="reorder_title">zoradiť</string>
     <string name="reorder_passes_title">zoradiť preukazy</string>
     <string name="reorder_codes_title">zoradiť kódy 2FA</string>
     <string name="reorder_stack_title">zoradiť skupinu</string>
@@ -50,15 +42,6 @@
     <string name="reorder_move_up">Posunúť %1$s nahor</string>
     <string name="reorder_move_down">Posunúť %1$s nadol</string>
 
-    <string name="camera_start_failed">Kameru sa nepodarilo spustiť</string>
-    <string name="camera_unavailable">Kamera nie je dostupná</string>
-    <string name="camera_light_auto">svetlo auto</string>
-    <string name="camera_light_on">svetlo zap.</string>
-    <string name="camera_light">svetlo</string>
-    <string name="camera_turn_light_off">Vypnúť svetlo kamery</string>
-    <string name="camera_turn_light_on">Zapnúť svetlo kamery</string>
-    <string name="camera_low_light">tma · zapnite svetlo</string>
-    <string name="camera_tap_to_focus">zaostriť ťuknutím</string>
 
     <string name="restore_rolled_back_notice">Prerušené obnovenie bolo bezpečne vrátené späť.</string>
     <string name="restore_completed_notice">Prerušené obnovenie bolo bezpečne dokončené.</string>
@@ -75,7 +58,6 @@
     <string name="restore_storage_unhealthy">Úložisko je iba na čítanie. Znova otvorte Paka; ak zostane iba na čítanie, vymažte úložisko Paka v nastaveniach Androidu a potom obnovte</string>
     <string name="restore_failed">Zálohu sa nepodarilo obnoviť</string>
     <string name="restore_interrupted">Obnovenie bolo prerušené; znova otvorte Paka a overte údaje</string>
-    <string name="storage_read_only_notice">Úložisko je iba na čítanie, kým sa neobnoví.</string>
     <string name="backup_demo_unavailable">Záloha nie je v demo režime dostupná</string>
     <string name="scan_not_2fa">Toto nie je QR kód 2FA</string>
     <string name="home_demo_title">Paka · demo</string>

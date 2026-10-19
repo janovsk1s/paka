@@ -166,7 +166,7 @@ internal fun CodesList(
             val labelHeightPx = labelLayout.size.height
             val representativeCode = when (code.length) {
                 6 -> "888 888"
-                7, 8 -> "8888 8888"
+                8 -> "8888 8888"
                 else -> code
             }
             val codeWidthPx = (constraints.maxWidth - timerWidthPx - with(density) { 8.dp.roundToPx() })

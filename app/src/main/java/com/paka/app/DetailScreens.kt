@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Date
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class DetailField { NAME, STACK, NOTES }
 private enum class ReferenceAction { OPEN, REPLACE, REMOVE }
@@ -72,6 +76,14 @@ internal fun ConfirmationAction(
 
 private fun Context.formatDate(ms: Long): String =
     SimpleDateFormat(getString(R.string.detail_date_pattern), resources.configuration.locales[0]).format(Date(ms))
+
+/**
+ * Keeps read access to a picked file and describes it, or null when the
+ * provider refuses. Provider calls can block, so callers run this off the UI thread.
+ */
+private fun Context.retainedReference(uri: Uri): PassReference? = runCatching {
+    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+}.mapCatching { passReference(uri) }.getOrNull()
 
 private fun Context.passReference(uri: Uri): PassReference {
     val displayName = runCatching {
@@ -241,44 +253,44 @@ internal fun CardDetail(
     var editingField by remember(card.id) { mutableStateOf<DetailField?>(null) }
     var activeReferenceIndex by remember(card.id) { mutableStateOf<Int?>(null) }
     var managingStack by remember(card.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val addReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         context.setPakaExternalFlowActive(false)
         val remaining = (2 - references.size).coerceAtLeast(0)
-        val additions = uris
+        val candidates = uris
             .distinctBy(Uri::toString)
             .filterNot { candidate -> references.any { it.uri == candidate.toString() } }
             .take(remaining)
-            .mapNotNull { uri ->
-                val retained = runCatching {
-                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }.isSuccess
-                if (retained) context.passReference(uri) else null
+        scope.launch {
+            val additions = withContext(Dispatchers.IO) { candidates.mapNotNull { context.retainedReference(it) } }
+            if (additions.isNotEmpty()) references = (references + additions).distinctBy { it.uri }.take(2)
+            if (uris.isNotEmpty() && additions.isEmpty() && remaining > 0) {
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.detail_reference_access_many_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
             }
-        if (additions.isNotEmpty()) references = references + additions
-        if (uris.isNotEmpty() && additions.isEmpty() && remaining > 0) {
-            Toast.makeText(
-                context,
-                resources.getString(R.string.detail_reference_access_many_failed),
-                Toast.LENGTH_LONG,
-            ).show()
         }
     }
     val replaceReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         context.setPakaExternalFlowActive(false)
         val index = activeReferenceIndex
         if (uri != null && index != null && index in references.indices) {
-            val retained = runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }.isSuccess
-            if (retained) {
-                references = references.toMutableList().also { it[index] = context.passReference(uri) }
-                activeReferenceIndex = null
-            } else {
-                Toast.makeText(
-                    context,
-                    resources.getString(R.string.detail_reference_access_one_failed),
-                    Toast.LENGTH_LONG,
-                ).show()
+            scope.launch {
+                val replacement = withContext(Dispatchers.IO) { context.retainedReference(uri) }
+                if (replacement != null) {
+                    if (index in references.indices) {
+                        references = references.toMutableList().also { it[index] = replacement }
+                    }
+                    activeReferenceIndex = null
+                } else {
+                    Toast.makeText(
+                        context,
+                        resources.getString(R.string.detail_reference_access_one_failed),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             }
         }
     }

@@ -99,7 +99,7 @@ internal object Barcodes {
     }
 
     private fun itfValidationError(data: String): LocalizedMessage? = when {
-        !data.all(Char::isDigit) -> LocalizedMessage(R.string.validation_digits_only, listOf("ITF"))
+        !data.all { it in '0'..'9' } -> LocalizedMessage(R.string.validation_digits_only, listOf("ITF"))
         data.length % 2 != 0 -> LocalizedMessage(R.string.validation_itf_even)
         else -> null
     }
@@ -181,7 +181,7 @@ internal object Barcodes {
 }
 
 private fun digitLengthError(data: String, short: Int, full: Int, label: String): LocalizedMessage? = when {
-    !data.all(Char::isDigit) -> LocalizedMessage(R.string.validation_digits_only, listOf(label))
+    !data.all { it in '0'..'9' } -> LocalizedMessage(R.string.validation_digits_only, listOf(label))
     data.length != short && data.length != full ->
         LocalizedMessage(R.string.validation_length, listOf(label, short, full))
     else -> null

@@ -6,6 +6,7 @@ import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.os.Bundle
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -285,6 +287,19 @@ private fun PakaAppContent(
     )
 }
 
+/** Drops read access to linked files that no saved pass references any more. */
+private fun releaseReferenceGrants(context: Context, before: List<Card>, after: List<Card>) {
+    val kept = after.flatMap { it.references }.map { it.uri }.toSet()
+    before.flatMap { it.references }.map { it.uri }.distinct().filter { it !in kept }.forEach { uri ->
+        runCatching {
+            context.contentResolver.releasePersistableUriPermission(
+                uri.toUri(),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+    }
+}
+
 /** Reads both stores the way a fresh start does, finishing any interrupted restore first. */
 private suspend fun loadStores(context: Context, resources: Resources): InitialAppLoad {
     StoreWriteCoordinator.awaitPendingWrites()
@@ -480,7 +495,10 @@ private fun LoadedPakaApp(
         cards = list
         scope.launch {
             when (write.await()) {
-                StoreWriteStatus.SAVED -> committedCards = list
+                StoreWriteStatus.SAVED -> {
+                    releaseReferenceGrants(context, committedCards, list)
+                    committedCards = list
+                }
                 StoreWriteStatus.SUPERSEDED -> Unit
                 StoreWriteStatus.FAILED -> {
                     cards = committedCards

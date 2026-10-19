@@ -199,10 +199,13 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                     val result = importPdfOwned(context, uri, replacing)
                     pdfChecking = false
                     result.onSuccess { imported ->
-                        pdfImport?.takeIf { it.created && it.documentId != imported.documentId }?.let { orphan ->
+                        val previous = pdfImport
+                        previous?.takeIf { it.created && it.documentId != imported.documentId }?.let { orphan ->
                             deleteAbandonedImports(pdfs = listOf(orphan))
                         }
-                        pdfImport = imported
+                        // Re-picking the same PDF finds it already stored, but cancelling must still delete it.
+                        val stillOwned = previous?.created == true && previous.documentId == imported.documentId
+                        pdfImport = if (stillOwned) imported.copy(created = true) else imported
                     }.onFailure { error ->
                         pdfError = when (error) {
                             is SecurityException -> resources.getString(R.string.entry_error_password_pdf_unsupported)

@@ -2,21 +2,14 @@
 <resources>
     <string name="core_on">sees</string>
     <string name="core_off">väljas</string>
-    <string name="core_back">Tagasi</string>
-    <string name="core_open_details">Ava üksikasjad</string>
     <string name="core_settings">Seaded</string>
     <string name="core_add">Lisa</string>
     <string name="core_manual_entry">Käsitsi sisestamine</string>
-    <string name="core_cards">Pääsmed</string>
-    <string name="core_2fa_codes">2FA koodid</string>
     <string name="core_show_passes">Näita pääsmeid</string>
     <string name="core_show_2fa_codes">Näita 2FA koode</string>
-    <string name="core_pass">pääse</string>
-    <string name="core_code">kood</string>
     <string name="core_name">nimi</string>
 
     <string name="settings_title">seaded</string>
-    <string name="settings_reorder">järjesta</string>
     <string name="settings_reorder_passes">järjesta pääsmed</string>
     <string name="settings_reorder_codes">järjesta 2FA koodid</string>
     <string name="settings_backup">varukoopia</string>
@@ -42,7 +35,6 @@
     <string name="developer_demo_mode">demorežiim</string>
     <string name="language_title">keel</string>
     <string name="language_selected">valitud</string>
-    <string name="reorder_title">järjesta</string>
     <string name="reorder_passes_title">järjesta pääsmed</string>
     <string name="reorder_codes_title">järjesta 2FA koodid</string>
     <string name="reorder_stack_title">järjesta virn</string>
@@ -50,15 +42,6 @@
     <string name="reorder_move_up">Liiguta %1$s üles</string>
     <string name="reorder_move_down">Liiguta %1$s alla</string>
 
-    <string name="camera_start_failed">Kaamerat ei õnnestunud käivitada</string>
-    <string name="camera_unavailable">Kaamera pole saadaval</string>
-    <string name="camera_light_auto">valgus auto</string>
-    <string name="camera_light_on">valgus sees</string>
-    <string name="camera_light">valgus</string>
-    <string name="camera_turn_light_off">Lülita kaamera valgus välja</string>
-    <string name="camera_turn_light_on">Lülita kaamera valgus sisse</string>
-    <string name="camera_low_light">hämar · kasuta valgust</string>
-    <string name="camera_tap_to_focus">puuduta teravustamiseks</string>
 
     <string name="restore_rolled_back_notice">Katkenud taastamine pöörati turvaliselt tagasi.</string>
     <string name="restore_completed_notice">Katkenud taastamine lõpetati turvaliselt.</string>
@@ -75,7 +58,6 @@
     <string name="restore_storage_unhealthy">Salvestusruum on kirjutuskaitstud. Ava Paka uuesti; kui see jääb kirjutuskaitstuks, tühjenda Androidi seadetes Paka salvestusruum ja taasta siis</string>
     <string name="restore_failed">Varukoopiat ei õnnestunud taastada</string>
     <string name="restore_interrupted">Taastamine katkes; andmete kontrollimiseks ava Paka uuesti</string>
-    <string name="storage_read_only_notice">Salvestusruum on kirjutuskaitstud, kuni see taastatakse.</string>
     <string name="backup_demo_unavailable">Varukoopia pole demorežiimis saadaval</string>
     <string name="scan_not_2fa">See pole 2FA QR-kood</string>
     <string name="home_demo_title">Paka · demo</string>

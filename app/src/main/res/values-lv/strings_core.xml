@@ -2,21 +2,14 @@
 <resources>
     <string name="core_on">ieslēgts</string>
     <string name="core_off">izslēgts</string>
-    <string name="core_back">Atpakaļ</string>
-    <string name="core_open_details">Skatīt informāciju</string>
     <string name="core_settings">Iestatījumi</string>
     <string name="core_add">Pievienot</string>
     <string name="core_manual_entry">Manuāla ievade</string>
-    <string name="core_cards">Caurlaides</string>
-    <string name="core_2fa_codes">2FA kodi</string>
     <string name="core_show_passes">Rādīt caurlaides</string>
     <string name="core_show_2fa_codes">Rādīt 2FA kodus</string>
-    <string name="core_pass">caurlaide</string>
-    <string name="core_code">kods</string>
     <string name="core_name">nosaukums</string>
 
     <string name="settings_title">iestatījumi</string>
-    <string name="settings_reorder">pārkārtot</string>
     <string name="settings_reorder_passes">pārkārtot caurlaides</string>
     <string name="settings_reorder_codes">pārkārtot 2FA kodus</string>
     <string name="settings_backup">dublējums</string>
@@ -42,7 +35,6 @@
     <string name="developer_demo_mode">demo režīms</string>
     <string name="language_title">valoda</string>
     <string name="language_selected">izvēlēta</string>
-    <string name="reorder_title">pārkārtot</string>
     <string name="reorder_passes_title">pārkārtot caurlaides</string>
     <string name="reorder_codes_title">pārkārtot 2FA kodus</string>
     <string name="reorder_stack_title">pārkārtot kopu</string>
@@ -50,15 +42,6 @@
     <string name="reorder_move_up">Pārvietot %1$s augšup</string>
     <string name="reorder_move_down">Pārvietot %1$s lejup</string>
 
-    <string name="camera_start_failed">Kameru neizdevās ieslēgt</string>
-    <string name="camera_unavailable">Kamera nav pieejama</string>
-    <string name="camera_light_auto">gaisma auto</string>
-    <string name="camera_light_on">gaisma ieslēgta</string>
-    <string name="camera_light">gaisma</string>
-    <string name="camera_turn_light_off">Izslēgt kameras gaismu</string>
-    <string name="camera_turn_light_on">Ieslēgt kameras gaismu</string>
-    <string name="camera_low_light">tumšs · ieslēdz gaismu</string>
-    <string name="camera_tap_to_focus">pieskaries, lai fokusētu</string>
 
     <string name="restore_rolled_back_notice">Pārtrauktās atjaunošanas izmaiņas droši atsauktas.</string>
     <string name="restore_completed_notice">Pārtrauktā atjaunošana droši pabeigta.</string>
@@ -75,7 +58,6 @@
     <string name="restore_storage_unhealthy">Krātuve ir tikai lasāma. Atver Paka vēlreiz; ja tā joprojām ir tikai lasāma, notīri Paka krātuvi Android iestatījumos un tad atjauno</string>
     <string name="restore_failed">Dublējumu neizdevās atjaunot</string>
     <string name="restore_interrupted">Atjaunošana pārtraukta; atver Paka vēlreiz, lai pārbaudītu datus</string>
-    <string name="storage_read_only_notice">Krātuve ir tikai lasāma, kamēr tā nav atkopta.</string>
     <string name="backup_demo_unavailable">Demo režīmā dublējums nav pieejams</string>
     <string name="scan_not_2fa">Tas nav 2FA QR kods</string>
     <string name="home_demo_title">Paka · demonstrācija</string>
