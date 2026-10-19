@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
@@ -174,14 +173,24 @@ internal object PdfStore {
     private const val SUFFIX = ".pdf.enc"
     private const val KEY_ALIAS = "paka_pdf_key"
     private const val TRANSFORM = "AES/GCM/NoPadding"
-    private val MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), 1)
+
+    // Version 1 encrypted bulk bytes directly with the Keystore key; version 2
+    // uses the wrapped in-process data key. Both are 4 bytes so offsets match.
+    private val MAGIC_KEYSTORE = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), 1)
+    private val MAGIC_DEK = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), 2)
+    private val dataKey = WrappedDataKey(
+        directory = DIRECTORY,
+        fileName = "pdf.dek",
+        keyAlias = KEY_ALIAS,
+        aad = "paka-pdf-dek-v1".toByteArray(Charsets.UTF_8),
+    )
 
     @RequiresApi(30)
     suspend fun import(context: Context, uri: Uri): Result<PdfImport> = runCatching {
         val bytes = readUri(context, uri)
         try {
             require(hasPdfHeader(bytes)) { "The selected file is not a PDF" }
-            val documentId = pdfDocumentId(bytes)
+            val documentId = documentDigest(bytes)
             val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, documentId)
             if (stored + bytes.size > BackupStore.MAX_PDF_TOTAL_BYTES) throw BackupLimitException()
             val pageCount = PdfDocumentSession.fromBytes(bytes).use { session ->
@@ -195,7 +204,7 @@ internal object PdfStore {
             // The content hash and render validation above establish that the
             // replacement is usable. Preserve any known-good backup if the
             // current primary is corrupt or a replacement is interrupted.
-            encryptToFile(file, documentId, bytes, replaceVerified = true)
+            encryptToFile(context, file, documentId, bytes)
             PdfImport(documentId, pageCount, created)
         } finally {
             bytes.fill(0)
@@ -204,7 +213,7 @@ internal object PdfStore {
 
     @RequiresApi(30)
     fun open(context: Context, documentId: String): PdfDocumentSession {
-        val bytes = decryptFile(documentFile(context, documentId), documentId)
+        val bytes = decryptFile(context, documentFile(context, documentId), documentId)
         return try {
             PdfDocumentSession.fromBytes(bytes)
         } finally {
@@ -222,24 +231,24 @@ internal object PdfStore {
             if (!name.endsWith(SUFFIX)) return@forEach
             val id = name.removeSuffix(SUFFIX)
             if (id !in referencedIds) {
-                if (id.matches(Regex("[0-9a-f]{64}"))) AtomicStore.delete(documentFile(context, id)) else file.delete()
+                if (id.matches(DOCUMENT_ID_PATTERN)) AtomicStore.delete(documentFile(context, id)) else file.delete()
             }
         }
     }
 
     fun readPlaintext(context: Context, documentId: String): ByteArray =
-        decryptFile(documentFile(context, documentId), documentId)
+        decryptFile(context, documentFile(context, documentId), documentId)
 
     fun writePlaintext(context: Context, documentId: String, bytes: ByteArray) {
-        require(pdfDocumentId(bytes) == documentId) { "PDF identifier does not match its content" }
+        require(documentDigest(bytes) == documentId) { "PDF identifier does not match its content" }
         require(bytes.size <= MAX_PDF_BYTES) { "PDF is too large" }
         require(hasPdfHeader(bytes)) { "PDF header is invalid" }
-        encryptToFile(documentFile(context, documentId), documentId, bytes, replaceVerified = true)
+        encryptToFile(context, documentFile(context, documentId), documentId, bytes)
     }
 
     /** Applies the same open-and-render validation used by interactive import. */
     suspend fun validateRestore(bytes: ByteArray, documentId: String, expectedPageCount: Int) {
-        require(pdfDocumentId(bytes) == documentId) { "PDF identifier does not match its content" }
+        require(documentDigest(bytes) == documentId) { "PDF identifier does not match its content" }
         require(bytes.size <= MAX_PDF_BYTES) { "PDF is too large" }
         require(hasPdfHeader(bytes)) { "PDF header is invalid" }
         require(expectedPageCount in 1..1_000) { "PDF page count is invalid" }
@@ -285,49 +294,53 @@ internal object PdfStore {
     }
 
     private fun documentFile(context: Context, documentId: String): File {
-        require(documentId.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
+        require(documentId.matches(DOCUMENT_ID_PATTERN)) { "Invalid PDF identifier" }
         return File(File(context.filesDir, DIRECTORY), "$documentId$SUFFIX")
     }
 
-    private fun encryptToFile(
-        file: File,
-        documentId: String,
-        plaintext: ByteArray,
-        replaceVerified: Boolean = false,
-    ) {
+    // Content hashes and render validation establish every replacement, so a
+    // possibly corrupt primary is never rotated over a known-good backup. PDF
+    // writes are rare; serialising them keeps a one-time v1 rewrite from
+    // sharing an AtomicStore temporary with an import of the same document.
+    @Synchronized
+    private fun encryptToFile(context: Context, file: File, documentId: String, plaintext: ByteArray) {
         require(plaintext.size <= MAX_PDF_BYTES) { "PDF is too large" }
         val cipher = Cipher.getInstance(TRANSFORM)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        cipher.init(Cipher.ENCRYPT_MODE, dataKey.get(context))
         cipher.updateAAD(aad(documentId))
-        val ciphertext = cipher.doFinal(plaintext)
-        val encrypted = MAGIC + cipher.iv + ciphertext
-        if (replaceVerified) AtomicStore.replaceVerified(file, encrypted).getOrThrow()
-        else AtomicStore.write(file, encrypted).getOrThrow()
+        val encrypted = MAGIC_DEK + cipher.iv + cipher.doFinal(plaintext)
+        AtomicStore.replaceVerified(file, encrypted).getOrThrow()
     }
 
-    private fun decryptFile(file: File, documentId: String): ByteArray {
+    private fun decryptFile(context: Context, file: File, documentId: String): ByteArray {
+        var legacy = false
         fun decrypt(blob: ByteArray): ByteArray {
-            require(blob.size > MAGIC.size + 12 + 16) { "Encrypted PDF is truncated" }
-            require(blob.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)) { "Unsupported PDF version" }
+            require(blob.size > MAGIC_DEK.size + 12 + 16) { "Encrypted PDF is truncated" }
+            val key = when {
+                blob.copyOfRange(0, MAGIC_DEK.size).contentEquals(MAGIC_DEK) -> dataKey.get(context)
+                blob.copyOfRange(0, MAGIC_KEYSTORE.size).contentEquals(MAGIC_KEYSTORE) -> {
+                    legacy = true
+                    secretKey()
+                }
+                else -> error("Unsupported PDF version")
+            }
             val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(
-                Cipher.DECRYPT_MODE,
-                secretKey(),
-                GCMParameterSpec(128, blob, MAGIC.size, 12),
-            )
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, blob, MAGIC_DEK.size, 12))
             cipher.updateAAD(aad(documentId))
-            return cipher.doFinal(blob, MAGIC.size + 12, blob.size - MAGIC.size - 12)
+            return cipher.doFinal(blob, MAGIC_DEK.size + 12, blob.size - MAGIC_DEK.size - 12)
         }
-        return AtomicStore.readWithBackup(file, ::decrypt).getOrElse {
+        val value = AtomicStore.readWithBackup(file, ::decrypt).getOrElse {
             throw IllegalStateException("PDF could not be decrypted", it)
         }.value
+        if (legacy) {
+            // Files written before envelope encryption pushed every bulk byte
+            // through the Keystore; rewrite once so future opens stay fast.
+            runCatching { encryptToFile(context, file, documentId, value) }
+        }
+        return value
     }
 
     private fun aad(documentId: String) = "paka-pdf-v1:$documentId".toByteArray(Charsets.UTF_8)
 
     private fun secretKey(): SecretKey = KeystoreKeys.getOrCreateAes256(KEY_ALIAS)
 }
-
-internal fun pdfDocumentId(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
-    .digest(bytes)
-    .joinToString("") { "%02x".format(it) }

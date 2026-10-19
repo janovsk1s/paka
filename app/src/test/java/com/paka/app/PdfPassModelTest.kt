@@ -8,7 +8,7 @@ class PdfPassModelTest {
     @Test
     fun `PDF content is distinct from barcode content`() {
         val bytes = "%PDF-1.7\nsynthetic".toByteArray()
-        val documentId = pdfDocumentId(bytes)
+        val documentId = documentDigest(bytes)
         val pdf = Card("Document", PassContent.Pdf(documentId, 2))
         val barcode = Card("Code", "synthetic", PakaFormat.QR)
 
@@ -23,7 +23,7 @@ class PdfPassModelTest {
     fun `document identifiers are stable SHA-256 values`() {
         assertEquals(
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-            pdfDocumentId("abc".toByteArray()),
+            documentDigest("abc".toByteArray()),
         )
     }
 

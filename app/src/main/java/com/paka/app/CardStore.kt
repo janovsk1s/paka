@@ -149,7 +149,7 @@ internal object CardStore {
                 )
                 "pdf" -> PassContent.Pdf(
                     documentId = item.getString("documentId").also {
-                        require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
+                        require(it.matches(DOCUMENT_ID_PATTERN)) { "Invalid PDF identifier" }
                     },
                     pageCount = item.getInt("pageCount").also { require(it in 1..1_000) { "Invalid PDF page count" } },
                 )
@@ -160,7 +160,7 @@ internal object CardStore {
                             val page = pages.getJSONObject(pageIndex)
                             PhotoPage(
                                 documentId = page.getString("documentId").also {
-                                    require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }
+                                    require(it.matches(DOCUMENT_ID_PATTERN)) { "Invalid photo identifier" }
                                 },
                                 width = page.getInt("width").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
                                 height = page.getInt("height").also { require(it in 1..PhotoStore.MAX_DIMENSION) },

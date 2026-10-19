@@ -2,6 +2,7 @@ package com.paka.app
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 import java.util.UUID
 
 sealed interface PassContent {
@@ -116,3 +117,10 @@ internal fun List<Card>.movedWithinStack(id: String, up: Boolean): List<Card> {
         reordered
     }
 }
+
+/** Content identifier of a PDF or photo blob: lowercase SHA-256 hex of its bytes. */
+internal fun documentDigest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+    .digest(bytes)
+    .joinToString("") { "%02x".format(it) }
+
+internal val DOCUMENT_ID_PATTERN = Regex("[0-9a-f]{64}")

@@ -9,12 +9,9 @@ import android.os.Build
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
-import java.security.MessageDigest
-import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -41,12 +38,12 @@ internal object PhotoStore {
     // uses the in-process data key. Both are 4 bytes so offsets are identical.
     private val MAGIC_KEYSTORE = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'I'.code.toByte(), 1)
     private val MAGIC_DEK = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'I'.code.toByte(), 2)
-    private val DEK_MAGIC = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'D'.code.toByte(), 1)
-    private val DEK_AAD = "paka-photo-dek-v1".toByteArray(Charsets.UTF_8)
-    private const val DEK_FILE = "photo.dek"
-
-    @Volatile
-    private var cachedDataKey: SecretKey? = null
+    private val dataKey = WrappedDataKey(
+        directory = DIRECTORY,
+        fileName = "photo.dek",
+        keyAlias = KEY_ALIAS,
+        aad = "paka-photo-dek-v1".toByteArray(Charsets.UTF_8),
+    )
 
     // Fixed lock stripes rather than one object per documentId, which would
     // grow for the process lifetime with every photo ever decoded.
@@ -73,7 +70,7 @@ internal object PhotoStore {
     /** Ingests photo bytes already in memory (an in-app capture). The caller zeroes them. */
     fun importBytes(context: Context, bytes: ByteArray): Result<PhotoImport> = runCatching {
         val dimensions = inspect(bytes)
-        val documentId = photoDocumentId(bytes)
+        val documentId = documentDigest(bytes)
         val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, documentId)
         if (stored + bytes.size > BackupStore.MAX_PHOTO_TOTAL_BYTES) throw BackupLimitException()
         val file = documentFile(context, documentId)
@@ -117,7 +114,7 @@ internal object PhotoStore {
                 else -> return@forEach
             }
             if (documentId !in referencedIds) {
-                if (documentId.matches(Regex("[0-9a-f]{64}"))) delete(context, documentId) else file.delete()
+                if (documentId.matches(DOCUMENT_ID_PATTERN)) delete(context, documentId) else file.delete()
             }
         }
     }
@@ -127,7 +124,7 @@ internal object PhotoStore {
 
     fun writePlaintext(context: Context, documentId: String, bytes: ByteArray) {
         require(bytes.size <= MAX_PHOTO_BYTES) { "Photo is too large" }
-        require(photoDocumentId(bytes) == documentId) { "Photo identifier does not match its content" }
+        require(documentDigest(bytes) == documentId) { "Photo identifier does not match its content" }
         inspect(bytes)
         encryptToFile(
             context,
@@ -278,12 +275,12 @@ internal object PhotoStore {
     )
 
     private fun documentFile(context: Context, documentId: String): File {
-        require(documentId.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }
+        require(documentId.matches(DOCUMENT_ID_PATTERN)) { "Invalid photo identifier" }
         return File(File(context.filesDir, DIRECTORY), "$documentId$SUFFIX")
     }
 
     private fun displayFile(context: Context, documentId: String): File {
-        require(documentId.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }
+        require(documentId.matches(DOCUMENT_ID_PATTERN)) { "Invalid photo identifier" }
         return File(File(context.filesDir, DIRECTORY), "$documentId$DISPLAY_SUFFIX")
     }
 
@@ -295,7 +292,7 @@ internal object PhotoStore {
         replaceVerified: Boolean = false,
     ) {
         val cipher = Cipher.getInstance(TRANSFORM)
-        cipher.init(Cipher.ENCRYPT_MODE, dataKey(context))
+        cipher.init(Cipher.ENCRYPT_MODE, dataKey.get(context))
         cipher.updateAAD(aad)
         val encrypted = MAGIC_DEK + cipher.iv + cipher.doFinal(plaintext)
         if (replaceVerified) AtomicStore.replaceVerified(file, encrypted).getOrThrow()
@@ -307,7 +304,7 @@ internal object PhotoStore {
         fun decrypt(blob: ByteArray): ByteArray {
             require(blob.size > MAGIC_DEK.size + 12 + 16) { "Encrypted photo is truncated" }
             val key = when {
-                blob.copyOfRange(0, MAGIC_DEK.size).contentEquals(MAGIC_DEK) -> dataKey(context)
+                blob.copyOfRange(0, MAGIC_DEK.size).contentEquals(MAGIC_DEK) -> dataKey.get(context)
                 blob.copyOfRange(0, MAGIC_KEYSTORE.size).contentEquals(MAGIC_KEYSTORE) -> {
                     legacy = true
                     secretKey()
@@ -330,56 +327,9 @@ internal object PhotoStore {
         return value
     }
 
-    /**
-     * Bulk photo bytes are encrypted in-process with a random data key that is
-     * itself wrapped by the hardware-backed Keystore key. Keystore — and
-     * StrongBox especially — is far too slow for megabytes of AES, while the
-     * CPU's AES instructions are effectively free; the master key still never
-     * leaves the hardware.
-     */
-    private fun dataKey(context: Context): SecretKey {
-        cachedDataKey?.let { return it }
-        synchronized(this) {
-            cachedDataKey?.let { return it }
-            val file = File(File(context.filesDir, DIRECTORY), DEK_FILE)
-            val master = secretKey()
-            fun unwrap(blob: ByteArray): ByteArray {
-                require(blob.size > DEK_MAGIC.size + 12 + 16) { "Photo key is truncated" }
-                require(blob.copyOfRange(0, DEK_MAGIC.size).contentEquals(DEK_MAGIC)) { "Unsupported photo key" }
-                val cipher = Cipher.getInstance(TRANSFORM)
-                cipher.init(Cipher.DECRYPT_MODE, master, GCMParameterSpec(128, blob, DEK_MAGIC.size, 12))
-                cipher.updateAAD(DEK_AAD)
-                return cipher.doFinal(blob, DEK_MAGIC.size + 12, blob.size - DEK_MAGIC.size - 12)
-            }
-            val raw = if (file.exists() || AtomicStore.backupFile(file).exists()) {
-                AtomicStore.readWithBackup(file, ::unwrap).getOrElse {
-                    // Regenerating here would silently orphan every envelope-
-                    // encrypted photo, so fail loudly instead.
-                    throw IllegalStateException("Photo key could not be unwrapped", it)
-                }.value
-            } else {
-                ByteArray(32).also(SecureRandom()::nextBytes).also { fresh ->
-                    val cipher = Cipher.getInstance(TRANSFORM)
-                    cipher.init(Cipher.ENCRYPT_MODE, master)
-                    cipher.updateAAD(DEK_AAD)
-                    AtomicStore.write(file, DEK_MAGIC + cipher.iv + cipher.doFinal(fresh)).getOrThrow()
-                }
-            }
-            require(raw.size == 32) { "Invalid photo key" }
-            val key = SecretKeySpec(raw, "AES")
-            raw.fill(0)
-            cachedDataKey = key
-            return key
-        }
-    }
-
     private fun aad(documentId: String) = "paka-photo-v1:$documentId".toByteArray(Charsets.UTF_8)
 
     private fun displayAad(documentId: String) = "paka-photo-display-v1:$documentId".toByteArray(Charsets.UTF_8)
 
     private fun secretKey(): SecretKey = KeystoreKeys.getOrCreateAes256(KEY_ALIAS)
 }
-
-internal fun photoDocumentId(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
-    .digest(bytes)
-    .joinToString("") { "%02x".format(it) }

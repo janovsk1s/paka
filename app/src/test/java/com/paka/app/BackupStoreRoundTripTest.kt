@@ -29,13 +29,13 @@ class BackupStoreRoundTripTest {
     )
     private val pdfPass = Card(
         name = "Train",
-        content = PassContent.Pdf(pdfDocumentId(pdf), pageCount = 2),
+        content = PassContent.Pdf(documentDigest(pdf), pageCount = 2),
         id = "card-2",
         createdAt = 1_700_000_000_001L,
     )
     private val photoPass = Card(
         name = "ID",
-        content = PassContent.Photos(listOf(PhotoPage(photoDocumentId(photo), width = 300, height = 200))),
+        content = PassContent.Photos(listOf(PhotoPage(documentDigest(photo), width = 300, height = 200))),
         id = "card-3",
         createdAt = 1_700_000_000_002L,
         stack = "Documents",
@@ -55,15 +55,15 @@ class BackupStoreRoundTripTest {
     fun photoBackupRoundTripsEveryFieldExceptExternalReferences() {
         val restored = roundTrip(
             listOf(barcode, pdfPass, photoPass),
-            documents = mapOf(pdfDocumentId(pdf) to pdf.copyOf()),
-            photos = mapOf(photoDocumentId(photo) to photo.copyOf()),
+            documents = mapOf(documentDigest(pdf) to pdf.copyOf()),
+            photos = mapOf(documentDigest(photo) to photo.copyOf()),
         )
 
         // References are device-local links and are deliberately left out of backups.
         assertEquals(listOf(barcode.copy(references = emptyList()), pdfPass, photoPass), restored.cards)
         assertEquals(listOf(account), restored.accounts)
-        assertArrayEquals(pdf, restored.documents.getValue(pdfDocumentId(pdf)))
-        assertArrayEquals(photo, restored.photos.getValue(photoDocumentId(photo)))
+        assertArrayEquals(pdf, restored.documents.getValue(documentDigest(pdf)))
+        assertArrayEquals(photo, restored.photos.getValue(documentDigest(photo)))
     }
 
     @Test
@@ -71,10 +71,10 @@ class BackupStoreRoundTripTest {
         val barcodeOnly = roundTrip(listOf(barcode))
         assertEquals(listOf(barcode.copy(references = emptyList())), barcodeOnly.cards)
 
-        val withPdf = roundTrip(listOf(pdfPass), documents = mapOf(pdfDocumentId(pdf) to pdf.copyOf()))
+        val withPdf = roundTrip(listOf(pdfPass), documents = mapOf(documentDigest(pdf) to pdf.copyOf()))
         assertEquals(listOf(pdfPass), withPdf.cards)
         assertTrue(withPdf.photos.isEmpty())
-        assertArrayEquals(pdf, withPdf.documents.getValue(pdfDocumentId(pdf)))
+        assertArrayEquals(pdf, withPdf.documents.getValue(documentDigest(pdf)))
     }
 
     private fun roundTrip(

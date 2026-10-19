@@ -21,7 +21,7 @@ class StoreWriteCoordinatorRestoreTest {
     private lateinit var context: Context
 
     private val oldPdf = pdfBytes("old paka document")
-    private val oldPdfId = pdfDocumentId(oldPdf)
+    private val oldPdfId = documentDigest(oldPdf)
     private val oldCards = listOf(
         Card(name = "Bahnticket", content = PassContent.Pdf(oldPdfId, 1), id = "card-old-pdf"),
         Card(name = "Billa", data = "9120012345678", format = PakaFormat.EAN13, id = "card-old-barcode"),
@@ -64,7 +64,7 @@ class StoreWriteCoordinatorRestoreTest {
     fun successfulRestoreReplacesStoresAndRemovesOrphans() {
         val newPdf = pdfBytes("new paka document")
         val expectedNewPdf = newPdf.copyOf()
-        val newPdfId = pdfDocumentId(newPdf)
+        val newPdfId = documentDigest(newPdf)
         val restored = BackupData(
             cards = listOf(Card(name = "Flugticket", content = PassContent.Pdf(newPdfId, 1), id = "card-new-pdf")),
             accounts = listOf(OtpAccount(issuer = "Mastodon", account = "new", secret = "JBSWY3DPEHPK3PXP", id = "code-new")),
@@ -110,7 +110,7 @@ class StoreWriteCoordinatorRestoreTest {
     @Test
     fun abandonedImportCleanupWaitsForEarlierCardSaveBeforeCheckingReferences() {
         val importedPdf = pdfBytes("queued card document")
-        val importedPdfId = pdfDocumentId(importedPdf)
+        val importedPdfId = documentDigest(importedPdf)
         val importedCard = Card(
             name = "Queued ticket",
             content = PassContent.Pdf(importedPdfId, 1),
@@ -179,7 +179,7 @@ class StoreWriteCoordinatorRestoreTest {
     @Test
     fun preparedJournalRollsBackCrashAfterCodesWereReplaced() {
         val newPdf = pdfBytes("new paka document")
-        val newPdfId = pdfDocumentId(newPdf)
+        val newPdfId = documentDigest(newPdf)
         val newCards = listOf(Card(name = "Flugticket", content = PassContent.Pdf(newPdfId, 1), id = "card-new-pdf"))
         val newCodes = listOf(
             OtpAccount(issuer = "Mastodon", account = "new", secret = "JBSWY3DPEHPK3PXP", id = "code-new"),
@@ -202,7 +202,7 @@ class StoreWriteCoordinatorRestoreTest {
     @Test
     fun rolledBackJournalRetainsMarkerUntilSnapshotCleanupCanRetry() {
         val newPdf = pdfBytes("new paka document")
-        val newPdfId = pdfDocumentId(newPdf)
+        val newPdfId = documentDigest(newPdf)
         val newCards = listOf(
             Card(name = "Flugticket", content = PassContent.Pdf(newPdfId, 1), id = "card-new-pdf"),
         )
@@ -235,7 +235,7 @@ class StoreWriteCoordinatorRestoreTest {
     @Test
     fun committedJournalFinishesCrashCleanup() {
         val newPdf = pdfBytes("new paka document")
-        val newPdfId = pdfDocumentId(newPdf)
+        val newPdfId = documentDigest(newPdf)
         val newCards = listOf(Card(name = "Flugticket", content = PassContent.Pdf(newPdfId, 1), id = "card-new-pdf"))
         val newCodes = listOf(
             OtpAccount(issuer = "Mastodon", account = "new", secret = "JBSWY3DPEHPK3PXP", id = "code-new"),
@@ -259,7 +259,7 @@ class StoreWriteCoordinatorRestoreTest {
     @Test
     fun committedJournalRetainsMarkerUntilSnapshotCleanupCanRetry() {
         val newPdf = pdfBytes("new paka document")
-        val newPdfId = pdfDocumentId(newPdf)
+        val newPdfId = documentDigest(newPdf)
         val newCards = listOf(
             Card(name = "Flugticket", content = PassContent.Pdf(newPdfId, 1), id = "card-new-pdf"),
         )

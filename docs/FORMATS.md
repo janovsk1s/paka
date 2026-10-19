@@ -75,6 +75,14 @@ immediately rewritten into the current authenticated layout on successful load.
 - Limit: 10 MB per document.
 - Runtime: API 30+ only, opened through anonymous `memfd` and `PdfRenderer`.
 - Plaintext cache files are forbidden.
+- Current container: `PKP` magic version `2`.
+- Legacy container: `PKP` magic version `1`.
+- Data-key wrapper: `PKD` magic version `1` in `pdfs/pdf.dek`, AAD
+  `paka-pdf-dek-v1`.
+
+Version 1 encrypted PDF bytes directly with the Keystore key. Version 2 uses
+the same wrapped data-key envelope as photos; a version 1 file is rewritten as
+version 2 the first time it is read.
 
 PDF bytes are included in encrypted portable backups and restored
 transactionally. Orphan cleanup runs only after a healthy pass-store load.

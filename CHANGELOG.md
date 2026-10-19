@@ -4,6 +4,9 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- PDFs are encrypted with a random data key wrapped by the PDF Keystore key,
+  the envelope photos already use, instead of pushing every byte through the
+  Keystore. Existing PDFs migrate the first time they are opened.
 - Imports that would push stored PDFs past 20 MB or photos past 32 MB are
   refused with a clear message, so an export can always include every pass.
 - A restore refused because storage is read-only now explains the recovery

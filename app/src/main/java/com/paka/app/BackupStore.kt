@@ -99,13 +99,13 @@ internal object BackupStore {
         require(documents.keys == referencedDocuments) { "Backup is missing PDF data" }
         require(documents.values.sumOf { it.size.toLong() } <= MAX_PDF_TOTAL_BYTES) { "PDF backup data is too large" }
         documents.forEach { (id, bytes) ->
-            require(bytes.size <= PdfStore.MAX_PDF_BYTES && pdfDocumentId(bytes) == id) { "Invalid PDF backup data" }
+            require(bytes.size <= PdfStore.MAX_PDF_BYTES && documentDigest(bytes) == id) { "Invalid PDF backup data" }
         }
         val referencedPhotos = cards.photoDocumentIds()
         require(photos.keys == referencedPhotos) { "Backup is missing photo data" }
         require(photos.values.sumOf { it.size.toLong() } <= MAX_PHOTO_TOTAL_BYTES) { "Photo backup data is too large" }
         photos.forEach { (id, bytes) ->
-            require(bytes.size <= PhotoStore.MAX_PHOTO_BYTES && photoDocumentId(bytes) == id && PhotoStore.hasSupportedHeader(bytes)) {
+            require(bytes.size <= PhotoStore.MAX_PHOTO_BYTES && documentDigest(bytes) == id && PhotoStore.hasSupportedHeader(bytes)) {
                 "Invalid photo backup data"
             }
         }
@@ -187,14 +187,14 @@ internal object BackupStore {
                 PdfStore.MAX_PDF_BYTES,
                 MAX_PDF_TOTAL_BYTES,
                 "PDF",
-            ) { id, bytes -> pdfDocumentId(bytes) == id }
+            ) { id, bytes -> documentDigest(bytes) == id }
             if (schema >= 3) readLegacyBlobs(
                 root.optJSONArray("photos") ?: JSONArray(),
                 photos,
                 PhotoStore.MAX_PHOTO_BYTES,
                 MAX_PHOTO_TOTAL_BYTES,
                 "photo",
-            ) { id, bytes -> photoDocumentId(bytes) == id && PhotoStore.hasSupportedHeader(bytes) }
+            ) { id, bytes -> documentDigest(bytes) == id && PhotoStore.hasSupportedHeader(bytes) }
             val (alignedDocuments, alignedPhotos) = alignBlobMaps(entries.cards, documents, photos)
             return BackupData(entries.cards, entries.accounts, alignedDocuments, alignedPhotos, entries.skippedPasses)
         } catch (error: Throwable) {
@@ -228,7 +228,7 @@ internal object BackupStore {
                 )
                 "pdf" -> PassContent.Pdf(
                     documentId = limited(item.getString("documentId")).also {
-                        require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
+                        require(it.matches(DOCUMENT_ID_PATTERN)) { "Invalid PDF identifier" }
                     },
                     pageCount = item.getInt("pageCount").also { require(it in 1..1_000) { "Invalid PDF page count" } },
                 )
@@ -239,7 +239,7 @@ internal object BackupStore {
                             val page = pages.getJSONObject(pageIndex)
                             PhotoPage(
                                 documentId = limited(page.getString("documentId")).also {
-                                    require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }
+                                    require(it.matches(DOCUMENT_ID_PATTERN)) { "Invalid photo identifier" }
                                 },
                                 width = page.getInt("width").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
                                 height = page.getInt("height").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
@@ -296,7 +296,7 @@ internal object BackupStore {
         for (index in 0 until array.length()) {
             val item = array.getJSONObject(index)
             val id = limited(item.getString("id"))
-            require(id.matches(Regex("[0-9a-f]{64}")) && id !in destination) { "Invalid $label backup entry" }
+            require(id.matches(DOCUMENT_ID_PATTERN) && id !in destination) { "Invalid $label backup entry" }
             val encoded = item.getString("data")
             require(encoded.length <= ((maxEntryBytes + 2L) / 3L * 4L + 4L).toInt()) { "$label backup entry is too large" }
             val bytes = Base64.getDecoder().decode(encoded)
@@ -317,10 +317,10 @@ internal object BackupStore {
         photos: Map<String, ByteArray>,
     ): Pair<Map<String, ByteArray>, Map<String, ByteArray>> {
         documents.forEach { (id, bytes) ->
-            require(bytes.size <= PdfStore.MAX_PDF_BYTES && pdfDocumentId(bytes) == id) { "Invalid PDF backup data" }
+            require(bytes.size <= PdfStore.MAX_PDF_BYTES && documentDigest(bytes) == id) { "Invalid PDF backup data" }
         }
         photos.forEach { (id, bytes) ->
-            require(bytes.size <= PhotoStore.MAX_PHOTO_BYTES && photoDocumentId(bytes) == id && PhotoStore.hasSupportedHeader(bytes)) {
+            require(bytes.size <= PhotoStore.MAX_PHOTO_BYTES && documentDigest(bytes) == id && PhotoStore.hasSupportedHeader(bytes)) {
                 "Invalid photo backup data"
             }
         }

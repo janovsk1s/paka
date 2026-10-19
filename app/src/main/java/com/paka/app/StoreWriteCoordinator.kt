@@ -211,7 +211,7 @@ internal object StoreWriteCoordinator {
                 .flatMap { (it.content as? PassContent.Photos)?.pages.orEmpty() }
                 .groupBy { it.documentId }
             restored.photos.forEach { (id, bytes) ->
-                require(photoDocumentId(bytes) == id) { "Photo identifier does not match its content" }
+                require(documentDigest(bytes) == id) { "Photo identifier does not match its content" }
                 val dimensions = PhotoStore.inspect(bytes)
                 require(
                     photoPages.getValue(id).all {

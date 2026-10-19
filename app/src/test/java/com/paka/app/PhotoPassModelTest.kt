@@ -30,7 +30,7 @@ class PhotoPassModelTest {
     fun `photo identifiers are stable SHA-256 values`() {
         assertEquals(
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-            photoDocumentId("abc".toByteArray()),
+            documentDigest("abc".toByteArray()),
         )
     }
 
