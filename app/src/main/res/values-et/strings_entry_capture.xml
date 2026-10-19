@@ -39,6 +39,7 @@
     <string name="entry_placeholder_base32_key">Base32-võti</string>
     <string name="entry_toast_pdf_demo_disabled">PDF-pääsmed pole demorežiimis saadaval</string>
     <string name="entry_toast_photo_demo_disabled">Fotopääsmed pole demorežiimis saadaval</string>
+    <string name="entry_toast_code_demo_disabled">2FA koodid pole demorežiimis saadaval</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$d lk</string>
     <string name="entry_photo_source_privacy">Tehtud fotod lähevad otse Paka krüptitud salvestisse. Neid ei salvestata kunagi galeriisse ega failina.</string>

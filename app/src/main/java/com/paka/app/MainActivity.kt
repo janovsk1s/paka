@@ -67,7 +67,6 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private enum class Mode { CARDS, CODES }
-private enum class ScanMode { CARD, CODE }
 
 private sealed interface PendingDuplicate {
     data class Pass(val candidate: Card, val existingName: String) : PendingDuplicate
@@ -309,9 +308,12 @@ private fun LoadedPakaApp(
     var pendingDuplicate by remember { mutableStateOf<PendingDuplicate?>(null) }
     var selectedCard by remember { mutableStateOf<Card?>(null) }
     var selectedStack by remember { mutableStateOf<String?>(null) }
+    // Pages live here so Back from a pass, stack card, or details keeps the user's place.
+    val cardsPage = remember { mutableIntStateOf(0) }
+    val codesPage = remember { mutableIntStateOf(0) }
+    val stackPage = remember(selectedStack) { mutableIntStateOf(0) }
     var detailCard by remember { mutableStateOf<Card?>(null) }
     var scanning by remember { mutableStateOf(false) }
-    var scanMode by remember { mutableStateOf(ScanMode.CARD) }
     var pendingScan by remember { mutableStateOf<ScanResult?>(null) }
     var manualCard by remember { mutableStateOf(false) }
     var manualCode by remember { mutableStateOf(false) }
@@ -356,6 +358,8 @@ private fun LoadedPakaApp(
     LaunchedEffect(homeResetSignal) {
         if (homeResetSignal > 0) {
             mode = Mode.CARDS
+            cardsPage.intValue = 0
+            codesPage.intValue = 0
             showSettings = false
             showBackup = false
             showAbout = false
@@ -381,7 +385,8 @@ private fun LoadedPakaApp(
         if (codesVisible && foreground) {
             while (true) {
                 nowMs = System.currentTimeMillis()
-                delay(1000)
+                // Wake on the next whole second so a code never lingers past its rollover.
+                delay(1_000L - nowMs % 1_000L)
             }
         }
     }
@@ -528,7 +533,7 @@ private fun LoadedPakaApp(
     }
 
     ProtectSensitiveContent(
-        showBackup || manualCode || (scanning && scanMode == ScanMode.CODE) || (mode == Mode.CODES && !demoModeEnabled),
+        showBackup || manualCode || (scanning && mode == Mode.CODES) || (mode == Mode.CODES && !demoModeEnabled),
     )
 
     // ---- routing (topmost overlay wins) ----
@@ -584,6 +589,12 @@ private fun LoadedPakaApp(
         ManageScreen(
             rows = rows,
             kind = if (managing == Mode.CARDS) ManageKind.PASSES else ManageKind.CODES,
+            // 2FA accounts have no details screen, so Reorder is where one is deleted.
+            onDelete = if (managing == Mode.CODES) {
+                { id -> saveCodes(activeCodes.filter { it.id != id }) }
+            } else {
+                null
+            },
             onUp = { id ->
                 if (managing == Mode.CARDS) saveCards(activeCards.moved(activeCards.indexOfFirst { it.id == id }, true))
                 else saveCodes(activeCodes.moved(activeCodes.indexOfFirst { it.id == id }, true))
@@ -799,7 +810,7 @@ private fun LoadedPakaApp(
             automaticLightEnabled = autoLightEnabled,
             onScanned = { result ->
                 scanning = false
-                if (scanMode == ScanMode.CODE) {
+                if (mode == Mode.CODES) {
                     val account = Totp.parseOtpauth(result.data, resources.getString(R.string.unknown_issuer))
                     if (account != null) addCode(account)
                     else Toast.makeText(context, R.string.scan_not_2fa, Toast.LENGTH_SHORT).show()
@@ -851,6 +862,7 @@ private fun LoadedPakaApp(
         StackScreen(
             name = stackName,
             cards = stackCards,
+            pageState = stackPage,
             forceMaximumBrightness = maxCodeBrightnessEnabled,
             onLongCurrent = { detailCard = it },
             onBack = { selectedStack = null },
@@ -910,6 +922,7 @@ private fun LoadedPakaApp(
                     else CardsList(
                         entries = buildEntries(activeCards),
                         textSize = textSize,
+                        pageState = cardsPage,
                         onOpenCard = { selectedCard = it },
                         onOpenStack = { selectedStack = it },
                     )
@@ -919,6 +932,7 @@ private fun LoadedPakaApp(
                         accounts = activeCodes,
                         nowMs = nowMs,
                         textSize = textSize,
+                        pageState = codesPage,
                         onCopy = { code ->
                             if (code.any { it == '-' }) return@CodesList
                             val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -953,12 +967,23 @@ private fun LoadedPakaApp(
             )
         }
 
+        // Real 2FA secrets must never join the screenshot-allowed, discarded-on-exit demo list.
+        val codeAddBlocked = mode == Mode.CODES && demoModeEnabled
+        val showCodeAddBlocked = {
+            Toast.makeText(context, R.string.entry_toast_code_demo_disabled, Toast.LENGTH_SHORT).show()
+        }
         BottomBar(
             mode = mode,
             lightGear = lightGearEnabled,
             onSettings = { showSettings = true },
-            onAdd = { scanMode = if (mode == Mode.CARDS) ScanMode.CARD else ScanMode.CODE; startScan() },
-            onAddLong = { if (mode == Mode.CARDS) manualCard = true else manualCode = true },
+            onAdd = { if (codeAddBlocked) showCodeAddBlocked() else startScan() },
+            onAddLong = {
+                when {
+                    mode == Mode.CARDS -> manualCard = true
+                    codeAddBlocked -> showCodeAddBlocked()
+                    else -> manualCode = true
+                }
+            },
             onToggleMode = { mode = if (mode == Mode.CARDS) Mode.CODES else Mode.CARDS },
         )
     }

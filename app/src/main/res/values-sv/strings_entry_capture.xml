@@ -39,6 +39,7 @@
     <string name="entry_placeholder_base32_key">Base32-nyckel</string>
     <string name="entry_toast_pdf_demo_disabled">PDF-kort är inte tillgängliga i demoläge</string>
     <string name="entry_toast_photo_demo_disabled">Fotokort är inte tillgängliga i demoläge</string>
+    <string name="entry_toast_code_demo_disabled">2FA-koder är inte tillgängliga i demoläge</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$d s.</string>
     <string name="entry_photo_source_privacy">Tagna foton går direkt till Pakas krypterade lagring. De sparas aldrig i galleriet eller som filer.</string>

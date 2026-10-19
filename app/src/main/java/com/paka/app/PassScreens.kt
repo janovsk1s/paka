@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -171,6 +172,7 @@ private fun BarcodePanel(
 internal fun StackScreen(
     name: String,
     cards: List<Card>,
+    pageState: MutableIntState,
     forceMaximumBrightness: Boolean,
     onLongCurrent: (Card) -> Unit,
     onBack: () -> Unit,
@@ -195,7 +197,7 @@ internal fun StackScreen(
             val documentTargetWidthPx = with(density) { (maxWidth - 32.dp).roundToPx() }
             // Matches PdfDocumentPreview's 420.dp box minus its 8.dp inner padding.
             val pdfHeightPx = with(density) { 404.dp.roundToPx() }
-            var currentIndex by remember(name, cards) { mutableIntStateOf(0) }
+            val currentIndex by pageState
             val rendered = remember(name, cards, availableWidthPx, documentTargetWidthPx) {
                 mutableStateMapOf<String, BarcodeRender>()
             }
@@ -313,7 +315,7 @@ internal fun StackScreen(
                 pageCount = cards.size,
                 showIndicator = false,
                 contentKind = PagerContentKind.PASS,
-                onPageChange = { currentIndex = it },
+                pageState = pageState,
             ) { index, advance ->
                 val card = cards[index]
                 val photoContent = card.photoContent

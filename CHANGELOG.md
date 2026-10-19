@@ -4,6 +4,15 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- 2FA accounts can be deleted again: tap an account's name in Reorder 2FA
+  codes, then confirm. Accounts had no delete path since Reorder became
+  movement-only in 0.12.9.
+- Adding 2FA accounts is unavailable in demo mode, so a real secret never
+  joins the screenshot-allowed demo list and is discarded when demo ends.
+- Back from a pass, stack card, or details returns to the same list page and
+  stack card instead of the first one; leaving Paka still resets to page one.
+- The 2FA ticker wakes on whole-second boundaries, so a code no longer lingers
+  up to a second past its rollover.
 - Transparent PNG, WebP, and GIF photos are composited onto white for review,
   display, and edits instead of turning transparent areas black.
 - PDFs are encrypted with a random data key wrapped by the PDF Keystore key,

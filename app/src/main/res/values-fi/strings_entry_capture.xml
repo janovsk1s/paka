@@ -39,6 +39,7 @@
     <string name="entry_placeholder_base32_key">Base32-avain</string>
     <string name="entry_toast_pdf_demo_disabled">PDF-kortit eivät ole käytettävissä demotilassa</string>
     <string name="entry_toast_photo_demo_disabled">Kuvakortit eivät ole käytettävissä demotilassa</string>
+    <string name="entry_toast_code_demo_disabled">2FA-koodit eivät ole käytettävissä demotilassa</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$d s.</string>
     <string name="entry_photo_source_privacy">Otetut kuvat siirtyvät suoraan Pakan salattuun tallennustilaan. Niitä ei koskaan tallenneta galleriaan tai tiedostoksi.</string>

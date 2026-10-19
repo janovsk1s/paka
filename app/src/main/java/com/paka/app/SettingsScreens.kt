@@ -369,7 +369,20 @@ internal fun ManageScreen(
     onUp: (String) -> Unit,
     onDown: (String) -> Unit,
     onBack: () -> Unit,
+    onDelete: ((String) -> Unit)? = null,
 ) {
+    var pendingDelete by remember { mutableStateOf<ManageRow?>(null) }
+    pendingDelete?.let { row ->
+        ConfirmDeleteScreen(
+            name = row.name,
+            onConfirm = {
+                onDelete?.invoke(row.id)
+                pendingDelete = null
+            },
+            onBack = { pendingDelete = null },
+        )
+        return
+    }
     BackHandler { onBack() }
     Column(
         modifier = Modifier
@@ -401,7 +414,13 @@ internal fun ManageScreen(
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(
+                            if (onDelete == null) {
+                                Modifier
+                            } else {
+                                tapModifier({ pendingDelete = row }, clickLabel = stringResource(R.string.detail_delete_action))
+                            },
+                        ),
                     )
                     ManageGlyphAction(
                         ManageGlyph.UP,

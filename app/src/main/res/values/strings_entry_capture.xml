@@ -39,6 +39,7 @@
     <string name="entry_placeholder_base32_key">base32 key</string>
     <string name="entry_toast_pdf_demo_disabled">PDF passes are unavailable in demo mode</string>
     <string name="entry_toast_photo_demo_disabled">Photo passes are unavailable in demo mode</string>
+    <string name="entry_toast_code_demo_disabled">2FA codes are unavailable in demo mode</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$dp</string>
     <string name="entry_photo_source_privacy">

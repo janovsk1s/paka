@@ -88,7 +88,7 @@ private fun Context.passReference(uri: Uri): PassReference {
 }
 
 @Composable
-private fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () -> Unit) {
+internal fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () -> Unit) {
     BackHandler { onBack() }
     Column(
         modifier = Modifier

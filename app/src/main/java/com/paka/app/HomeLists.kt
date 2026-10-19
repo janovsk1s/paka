@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,10 +52,11 @@ internal fun buildEntries(cards: List<Card>): List<Entry> {
 internal fun CardsList(
     entries: List<Entry>,
     textSize: Float,
+    pageState: MutableIntState,
     onOpenCard: (Card) -> Unit,
     onOpenStack: (String) -> Unit,
 ) {
-    PagedList(entries) { entry ->
+    PagedList(entries, pageState = pageState) { entry ->
         when (entry) {
             is SingleEntry -> Box(
                 modifier = Modifier.fillMaxSize().then(tapModifier { onOpenCard(entry.card) }),
@@ -91,12 +93,18 @@ internal fun CardsList(
 }
 
 @Composable
-internal fun CodesList(accounts: List<OtpAccount>, nowMs: Long, textSize: Float, onCopy: (String) -> Unit) {
+internal fun CodesList(
+    accounts: List<OtpAccount>,
+    nowMs: Long,
+    textSize: Float,
+    pageState: MutableIntState,
+    onCopy: (String) -> Unit,
+) {
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val localTextStyle = LocalTextStyle.current
     val copyLabel = stringResource(R.string.accessibility_copy_code)
-    PagedList(accounts) { account ->
+    PagedList(accounts, pageState = pageState) { account ->
         val code = Totp.code(account, nowMs)
         val remaining = Totp.secondsRemaining(account, nowMs)
         val remainingDescription = pluralStringResource(
