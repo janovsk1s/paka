@@ -749,7 +749,6 @@ internal fun TextEntryScreen(
     } else {
         TextEntryKeyboardProfile.NORMAL
     },
-    fieldLabel: String = title,
 ) {
     var text by remember { mutableStateOf(initial) }
     val canSave = allowBlank || text.isNotBlank()
@@ -814,7 +813,7 @@ internal fun TextEntryScreen(
                                 .heightIn(max = 180.dp),
                         )
                         .focusRequester(focusRequester)
-                        .semantics { contentDescription = fieldLabel },
+                        .semantics { contentDescription = title },
                 )
                 Spacer(Modifier.height(10.dp))
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.foreground))

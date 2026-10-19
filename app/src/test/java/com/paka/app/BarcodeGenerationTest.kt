@@ -277,7 +277,6 @@ class BarcodeGenerationTest {
             EncodeHintType.MARGIN,
             when (format) {
                 BarcodeFormat.QR_CODE, BarcodeFormat.PDF_417 -> 4
-                BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> 2
                 else -> 0
             },
         )

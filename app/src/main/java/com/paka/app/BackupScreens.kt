@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,31 +55,6 @@ import java.util.concurrent.atomic.AtomicReference
 private enum class BackupStep { MENU, EXPORT_PASSWORD, IMPORT_PASSWORD, CONFIRM_RESTORE }
 private enum class BackupField { PASSPHRASE, REPEAT }
 private enum class BackupMenuAction { EXPORT, RESTORE }
-
-@Composable
-private fun BackupBottomAction(
-    text: String,
-    color: Color,
-    fontSize: Int,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .then(if (enabled) tapModifier(onClick) else Modifier),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(
-            text = text,
-            color = color,
-            fontSize = fontSize.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
 
 @Composable
 internal fun BackupScreen(
@@ -272,7 +248,11 @@ internal fun BackupScreen(
                 val canExport = passphrase.length >= BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH &&
                     passphrase == confirmation && !busy
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(top = 28.dp)
+                        .hardSnapVerticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     Text(
@@ -310,7 +290,7 @@ internal fun BackupScreen(
                         )
                     }
                 }
-                BackupBottomAction(
+                ConfirmationAction(
                     text = if (busy) {
                         stringResource(R.string.backup_encrypting)
                     } else {
@@ -375,7 +355,7 @@ internal fun BackupScreen(
                         editingField = BackupField.PASSPHRASE
                     }
                 }
-                BackupBottomAction(
+                ConfirmationAction(
                     text = if (busy) {
                         stringResource(R.string.backup_unlocking)
                     } else {
@@ -455,7 +435,7 @@ internal fun BackupScreen(
                             )
                         }
                     }
-                    BackupBottomAction(
+                    ConfirmationAction(
                         text = if (busy) {
                             stringResource(R.string.backup_restoring)
                         } else {
@@ -498,7 +478,7 @@ internal fun BackupScreen(
                             context.setPakaCriticalFlowActive(false)
                         }
                     }
-                    BackupBottomAction(
+                    ConfirmationAction(
                         text = stringResource(R.string.backup_cancel_restore_action),
                         color = Palette.dim,
                         fontSize = 24,

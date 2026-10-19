@@ -46,9 +46,10 @@ private enum class ReferenceAction { OPEN, REPLACE, REMOVE }
 internal enum class DuplicateKind { PASS, CODE }
 
 @Composable
-private fun ConfirmationAction(
+internal fun ConfirmationAction(
     text: String,
     color: Color,
+    fontSize: Int = 24,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
@@ -62,7 +63,7 @@ private fun ConfirmationAction(
         Text(
             text = text,
             color = color,
-            fontSize = 24.sp,
+            fontSize = fontSize.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )

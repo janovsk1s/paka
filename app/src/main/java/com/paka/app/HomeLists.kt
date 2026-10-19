@@ -239,12 +239,12 @@ internal fun CodesList(
 
 private fun formatCode(code: String): String = when (code.length) {
     6 -> "${code.substring(0, 3)} ${code.substring(3)}"
-    7, 8 -> "${code.substring(0, 4)} ${code.substring(4)}"
+    8 -> "${code.substring(0, 4)} ${code.substring(4)}"
     else -> code
 }
 
 internal fun OtpAccount.duplicateKey(): String = listOf(
-    secret.filterNot { it.isWhitespace() || it == '-' }.uppercase(Locale.ROOT),
+    Totp.normalizedSecret(secret),
     digits.toString(),
     period.toString(),
     algorithm.uppercase(Locale.ROOT),

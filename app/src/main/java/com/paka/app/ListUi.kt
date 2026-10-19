@@ -108,7 +108,7 @@ internal fun EmptyHint(text: String) {
 /** A vertically scrolling column with a proportional scrollbar shown only on overflow. */
 @Composable
 internal fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Composable ColumnScope.() -> Unit) {
-    val state = rememberHapticScrollState()
+    val state = rememberScrollState()
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().padding(top = topPadding, end = 14.dp, bottom = 8.dp).hardSnapVerticalScroll(state),
@@ -117,11 +117,6 @@ internal fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @C
         )
         VerticalScrollbar(state, Modifier.align(Alignment.TopEnd))
     }
-}
-
-@Composable
-internal fun rememberHapticScrollState(): ScrollState {
-    return rememberScrollState()
 }
 
 /** Follow the finger while dragging, then cut immediately to the nearest viewport boundary. */

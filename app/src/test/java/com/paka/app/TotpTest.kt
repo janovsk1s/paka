@@ -40,6 +40,16 @@ class TotpTest {
     }
 
     @Test
+    fun `padding, grouping and case do not change a secret or hide a duplicate`() {
+        assertEquals("JBSWY3DPEHPK3PXP", Totp.normalizedSecret(" jbsw y3dp-ehpk 3pxp====\n"))
+        val plain = OtpAccount("Example", "me", "JBSWY3DPEHPK3PXP")
+        val padded = plain.copy(secret = "jbsw-y3dp-ehpk-3pxp====")
+        assertEquals(plain.duplicateKey(), padded.duplicateKey())
+        assertEquals(Totp.code(plain, 59_000L), Totp.code(padded, 59_000L))
+        assertNotNull(Totp.validationError(plain.copy(secret = "JBSW=Y3DP")))
+    }
+
+    @Test
     fun `ignores leftover Base32 bits like other authenticators`() {
         // 26 characters carry 130 bits; the final H leaves two set bits beyond 16 bytes.
         val lenient = OtpAccount("Example", "me", "JBSWY3DPEHPK3PXPJBSWY3DPEH")

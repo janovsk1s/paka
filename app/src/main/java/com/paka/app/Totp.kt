@@ -100,13 +100,16 @@ object Totp {
         return (binary % pow).toString().padStart(digits, '0')
     }
 
+    /** The Base32 characters that matter: grouping spaces/dashes, case and padding removed. */
+    internal fun normalizedSecret(secret: String): String =
+        secret.filterNot { it.isWhitespace() || it == '-' }.uppercase(Locale.ROOT).trimEnd('=')
+
     private fun base32Decode(input: String): ByteArray {
         val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-        val normalized = input.trim().replace(" ", "").replace("-", "").uppercase(Locale.ROOT)
-        require(normalized.isNotEmpty()) { "Empty Base32 value" }
-        require(normalized.matches(Regex("[A-Z2-7]+=*"))) { "Invalid Base32 character" }
-        require('=' !in normalized.dropLastWhile { it == '=' }) { "Invalid Base32 padding" }
-        val clean = normalized.trimEnd('=')
+        val clean = normalizedSecret(input)
+        require(clean.isNotEmpty()) { "Empty Base32 value" }
+        // Padding was trimmed, so any remaining '=' sat mid-string and fails here.
+        require(clean.matches(Regex("[A-Z2-7]+"))) { "Invalid Base32 character" }
         var buffer = 0
         var bits = 0
         val out = ArrayList<Byte>(clean.length)

@@ -418,7 +418,10 @@ internal fun ManageScreen(
                             if (onDelete == null) {
                                 Modifier
                             } else {
-                                tapModifier({ pendingDelete = row }, clickLabel = stringResource(R.string.detail_delete_action))
+                                tapModifier(
+                                    onClick = { pendingDelete = row },
+                                    clickLabel = stringResource(R.string.detail_delete_action),
+                                )
                             },
                         ),
                     )

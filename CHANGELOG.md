@@ -4,6 +4,10 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- The same 2FA secret entered with and without `=` padding is now recognised
+  as a duplicate.
+- Release verification reuses the CI permission check instead of keeping its
+  own copy.
 - 2FA accounts can be deleted again: tap an account's name in Reorder 2FA
   codes, then confirm. Accounts had no delete path since Reorder became
   movement-only in 0.12.9.

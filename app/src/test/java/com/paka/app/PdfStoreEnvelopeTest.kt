@@ -42,7 +42,8 @@ class PdfStoreEnvelopeTest {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, TestKeys.key("paka_pdf_key"))
         cipher.updateAAD("paka-pdf-v1:$id".toByteArray(Charsets.UTF_8))
-        val v1 = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), 1) + cipher.iv + cipher.doFinal(pdf)
+        val magic = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 'P'.code.toByte(), 1)
+        val v1 = magic + cipher.iv + cipher.doFinal(pdf)
         encryptedFile().apply { parentFile?.mkdirs() }.writeBytes(v1)
 
         assertArrayEquals(pdf, PdfStore.readPlaintext(context, id))

@@ -6,9 +6,6 @@ import uk.org.okapibarcode.backend.OkapiException
 
 private const val DATABAR_PREFERRED_COLUMNS = 4
 private const val DATABAR_QUIET_MODULES = 4
-private const val QUIET_ZONE_SIDE_COUNT = 2
-private const val BLACK_PIXEL = 0xFF000000.toInt()
-private const val WHITE_PIXEL = 0xFFFFFFFF.toInt()
 
 private data class PixelRectangle(val left: Int, val top: Int, val right: Int, val bottom: Int)
 

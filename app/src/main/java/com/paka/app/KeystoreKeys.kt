@@ -84,40 +84,38 @@ internal class WrappedDataKey(
     @Volatile
     private var cached: SecretKey? = null
 
-    fun get(context: Context): SecretKey {
-        cached?.let { return it }
-        synchronized(this) {
-            cached?.let { return it }
-            val file = File(File(context.filesDir, directory), fileName)
-            val master = KeystoreKeys.getOrCreateAes256(keyAlias)
-            fun unwrap(blob: ByteArray): ByteArray {
-                require(blob.size > MAGIC.size + IV_BYTES + TAG_BYTES) { "Data key is truncated" }
-                require(blob.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)) { "Unsupported data key" }
-                val cipher = Cipher.getInstance(TRANSFORM)
-                cipher.init(Cipher.DECRYPT_MODE, master, GCMParameterSpec(TAG_BITS, blob, MAGIC.size, IV_BYTES))
-                cipher.updateAAD(aad)
-                return cipher.doFinal(blob, MAGIC.size + IV_BYTES, blob.size - MAGIC.size - IV_BYTES)
-            }
-            val raw = if (file.exists() || AtomicStore.backupFile(file).exists()) {
-                AtomicStore.readWithBackup(file, ::unwrap).getOrElse {
-                    // Regenerating here would silently orphan every envelope-
-                    // encrypted file, so fail loudly instead.
-                    throw IllegalStateException("Data key could not be unwrapped", it)
-                }.value
-            } else {
-                ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes).also { fresh ->
-                    val cipher = Cipher.getInstance(TRANSFORM)
-                    cipher.init(Cipher.ENCRYPT_MODE, master)
-                    cipher.updateAAD(aad)
-                    AtomicStore.write(file, MAGIC + cipher.iv + cipher.doFinal(fresh)).getOrThrow()
-                }
-            }
-            require(raw.size == KEY_BYTES) { "Invalid data key" }
-            val key = SecretKeySpec(raw, "AES")
-            raw.fill(0)
-            cached = key
-            return key
+    fun get(context: Context): SecretKey =
+        cached ?: synchronized(this) { cached ?: load(context).also { cached = it } }
+
+    private fun load(context: Context): SecretKey {
+        val file = File(File(context.filesDir, directory), fileName)
+        val master = KeystoreKeys.getOrCreateAes256(keyAlias)
+        fun unwrap(blob: ByteArray): ByteArray {
+            require(blob.size > MAGIC.size + IV_BYTES + TAG_BYTES) { "Data key is truncated" }
+            require(blob.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)) { "Unsupported data key" }
+            val cipher = Cipher.getInstance(TRANSFORM)
+            cipher.init(Cipher.DECRYPT_MODE, master, GCMParameterSpec(TAG_BITS, blob, MAGIC.size, IV_BYTES))
+            cipher.updateAAD(aad)
+            return cipher.doFinal(blob, MAGIC.size + IV_BYTES, blob.size - MAGIC.size - IV_BYTES)
         }
+        val raw = if (file.exists() || AtomicStore.backupFile(file).exists()) {
+            AtomicStore.readWithBackup(file, ::unwrap).getOrElse {
+                // Regenerating here would silently orphan every envelope-
+                // encrypted file, so fail loudly instead.
+                throw IllegalStateException("Data key could not be unwrapped", it)
+            }.value
+        } else {
+            ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes).also { fresh ->
+                val cipher = Cipher.getInstance(TRANSFORM)
+                cipher.init(Cipher.ENCRYPT_MODE, master)
+                cipher.updateAAD(aad)
+                AtomicStore.write(file, MAGIC + cipher.iv + cipher.doFinal(fresh)).getOrThrow()
+            }
+        }
+        require(raw.size == KEY_BYTES) { "Invalid data key" }
+        val key = SecretKeySpec(raw, "AES")
+        raw.fill(0)
+        return key
     }
 
     private companion object {

@@ -99,6 +99,16 @@ private fun releaseUnreferencedPassContent(context: Context, card: Card) {
     )
 }
 
+/** Clears the clipboard only while it still holds Paka's code, never another app's later copy. */
+private fun clearOwnedClip(context: Context, value: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
+    if (current == value) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+        else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+    }
+}
+
 private fun <T> List<T>.moved(index: Int, up: Boolean): List<T> {
     val target = if (up) index - 1 else index + 1
     if (index < 0 || target < 0 || target >= size) return this
@@ -420,12 +430,7 @@ private fun LoadedPakaApp(
         delay(150)
         val activity = context as? Activity
         if (activity?.hasWindowFocus() != true) return@LaunchedEffect
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-        if (current == pending.value) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-        }
+        clearOwnedClip(context, pending.value)
         pendingClipboard = null
     }
 
@@ -656,14 +661,7 @@ private fun LoadedPakaApp(
             onDemoMode = { enabled ->
                 if (enabled) {
                     demoContent = DemoData.create(context)
-                    pendingClipboard?.let { pending ->
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-                        if (current == pending.value) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-                            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-                        }
-                    }
+                    pendingClipboard?.let { clearOwnedClip(context, it.value) }
                     pendingClipboard = null
                 }
                 demoModeEnabled = enabled

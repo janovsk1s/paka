@@ -204,38 +204,23 @@ internal fun StackScreen(
             val photoRenders = remember(name, cards, documentTargetWidthPx) {
                 mutableStateMapOf<String, BarcodeRender>()
             }
-            DisposableEffect(photoRenders) {
-                onDispose {
-                    val owned = photoRenders.values.mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                    photoRenders.clear()
-                    owned.forEach { if (!it.isRecycled) it.recycle() }
-                }
+            // Clears a map, then recycles only bitmaps this screen owns (decoded photos
+            // and PDF pages); shared-cache barcode bitmaps must never be recycled here.
+            fun MutableMap<String, BarcodeRender>.releaseOwned() {
+                val owned = values.filter(BarcodeRender::recycleOnDiscard)
+                    .mapNotNull(BarcodeRender::bitmap)
+                    .distinctBy(System::identityHashCode)
+                clear()
+                owned.forEach { if (!it.isRecycled) it.recycle() }
             }
-            // The rendered map mixes shared-cache barcode bitmaps (which must not
-            // be recycled) with owned PDF page bitmaps; recycle only the latter.
-            DisposableEffect(rendered) {
-                onDispose {
-                    rendered.values.filter(BarcodeRender::recycleOnDiscard)
-                        .mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                        .forEach { if (!it.isRecycled) it.recycle() }
-                    rendered.clear()
-                }
-            }
+            DisposableEffect(photoRenders) { onDispose { photoRenders.releaseOwned() } }
+            DisposableEffect(rendered) { onDispose { rendered.releaseOwned() } }
 
             LaunchedEffect(cards, availableWidthPx, documentTargetWidthPx, foreground, currentIndex) {
                 val uniqueCards = cards.distinctBy { it.id }
                 if (!foreground) {
-                    val photos = photoRenders.values.mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                    photoRenders.clear()
-                    photos.forEach { if (!it.isRecycled) it.recycle() }
-                    val documents = rendered.values.filter(BarcodeRender::recycleOnDiscard)
-                        .mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                    rendered.clear()
-                    documents.forEach { if (!it.isRecycled) it.recycle() }
+                    photoRenders.releaseOwned()
+                    rendered.releaseOwned()
                     return@LaunchedEffect
                 }
                 val index = currentIndex.coerceIn(0, uniqueCards.lastIndex)
@@ -270,7 +255,7 @@ internal fun StackScreen(
                             } catch (_: Exception) {
                                 null
                             }
-                            val previous = photoRenders.put(key, BarcodeRender(bitmap))?.bitmap
+                            val previous = photoRenders.put(key, BarcodeRender(bitmap, recycleOnDiscard = true))?.bitmap
                             if (previous != null && previous !== bitmap && !previous.isRecycled) previous.recycle()
                         }
                         return
