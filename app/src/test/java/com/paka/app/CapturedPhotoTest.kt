@@ -76,6 +76,27 @@ class CapturedPhotoTest {
         return output.toByteArray()
     }
 
+    @Test
+    fun transparentPngIsCompositedOntoWhiteInsteadOfBlack() {
+        val bitmap = Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888) // fully transparent
+        for (x in 10 until 30) for (y in 10 until 30) bitmap.setPixel(x, y, Color.BLACK)
+        val png = ByteArrayOutputStream().also { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            .toByteArray()
+        bitmap.recycle()
+
+        val preview = CapturedPhoto.decodePreview(png, 40)
+        val rotatedJpeg = CapturedPhoto.applyEdits(png, counterClockwiseTurns = 1, selection = CropRect.FULL)
+        val edited = BitmapFactory.decodeByteArray(rotatedJpeg, 0, rotatedJpeg.size)
+        try {
+            assertEquals(Color.WHITE, preview.getPixel(2, 2))
+            assertEquals(Color.BLACK, preview.getPixel(20, 20))
+            assertTrue(Color.red(edited.getPixel(2, 2)) > 240)
+        } finally {
+            preview.recycle()
+            edited.recycle()
+        }
+    }
+
     /** Adds a minimal little-endian EXIF orientation IFD after the JPEG SOI. */
     private fun withExifOrientation(jpeg: ByteArray, orientation: Int): ByteArray {
         val tiff = byteArrayOf(

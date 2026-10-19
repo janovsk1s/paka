@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import javax.crypto.Cipher
@@ -24,12 +23,11 @@ internal data class PhotoImport(
 internal object PhotoStore {
     const val MAX_PHOTO_BYTES = 10 * 1024 * 1024
     const val MAX_DIMENSION = 20_000
-    private const val MAX_PIXELS = 48_000_000L
+    const val MAX_PIXELS = 48_000_000L
     private const val DIRECTORY = "photos"
     private const val SUFFIX = ".image.enc"
     private const val DISPLAY_SUFFIX = ".display.enc"
     private const val DISPLAY_MAX_DIMENSION = 2_400
-    private const val DISPLAY_JPEG_QUALITY = 90
     private const val KEY_ALIAS = "paka_photo_key"
     private const val TRANSFORM = "AES/GCM/NoPadding"
     private const val DOCUMENT_LOCK_STRIPES = 64
@@ -52,15 +50,6 @@ internal object PhotoStore {
     // Serialises fallback display-copy creation and decryption per photo.
     private inline fun <T> withDocumentLock(documentId: String, block: () -> T): T =
         synchronized(documentLocks[(documentId.hashCode() and Int.MAX_VALUE) % documentLocks.size]) { block() }
-
-    fun import(context: Context, uri: Uri): Result<PhotoImport> = runCatching {
-        val bytes = readImportBytes(context, uri).getOrThrow()
-        try {
-            importBytes(context, bytes).getOrThrow()
-        } finally {
-            bytes.fill(0)
-        }
-    }
 
     /** Reads and validates an import candidate without storing it. The caller zeroes the returned bytes. */
     fun readImportBytes(context: Context, uri: Uri): Result<ByteArray> = runCatching {
@@ -89,16 +78,11 @@ internal object PhotoStore {
             try {
                 // Hardware bitmaps live in GPU memory, keeping pinch-zoom smooth.
                 decodeBytes(bytes, targetWidth, targetHeight, allowHardware = true)
-                    .second
             } finally {
                 bytes.fill(0)
             }
         }
     }
-
-    // Compatibility hook for MainActivity. Bitmap ownership now lives in the
-    // active viewer/stack, which clears itself on background and disposal.
-    fun trimMemory() = Unit
 
     fun delete(context: Context, documentId: String): Boolean =
         listOf(documentFile(context, documentId), displayFile(context, documentId))
@@ -165,31 +149,11 @@ internal object PhotoStore {
         }
     }
 
-    // Exposes the inherited buffer so compressed plaintext can be zeroed after
-    // the caller takes its copy.
-    private class ZeroableOutputStream : ByteArrayOutputStream() {
-        fun zero() = buf.fill(0)
-    }
-
-    private fun buildDisplayBytes(original: ByteArray): ByteArray {
-        // BitmapFactory does not apply EXIF on API 26/27. Share review's
-        // orientation-aware bounded path so mirrored and rotated originals are
-        // displayed consistently without rewriting the encrypted original.
-        val bitmap = CapturedPhoto.decodePreview(original, DISPLAY_MAX_DIMENSION)
-        return try {
-            val output = ZeroableOutputStream()
-            try {
-                check(bitmap.compress(Bitmap.CompressFormat.JPEG, DISPLAY_JPEG_QUALITY, output)) {
-                    "Photo could not be prepared for display"
-                }
-                output.toByteArray()
-            } finally {
-                output.zero()
-            }
-        } finally {
-            bitmap.recycle()
-        }
-    }
+    // BitmapFactory does not apply EXIF on API 26/27. Share review's
+    // orientation-aware bounded path so mirrored and rotated originals are
+    // displayed consistently without rewriting the encrypted original.
+    private fun buildDisplayBytes(original: ByteArray): ByteArray =
+        CapturedPhoto.encode(CapturedPhoto.decodePreview(original, DISPLAY_MAX_DIMENSION))
 
     internal fun inspect(bytes: ByteArray): Pair<Int, Int> {
         require(bytes.isNotEmpty() && bytes.size <= MAX_PHOTO_BYTES) { "Photo is too large" }
@@ -197,8 +161,7 @@ internal object PhotoStore {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         require(bounds.outWidth > 0 && bounds.outHeight > 0) { "The selected file is not a supported image" }
-        val (_, preview) = decodeBytes(bytes, 96, 96)
-        preview.recycle()
+        decodeBytes(bytes, 96, 96).recycle()
         val dimensions = CapturedPhoto.orientedDimensions(
             bytes,
             bounds.outWidth,
@@ -230,24 +193,21 @@ internal object PhotoStore {
         targetWidth: Int,
         targetHeight: Int,
         allowHardware: Boolean = false,
-    ): Pair<Pair<Int, Int>, Bitmap> {
+    ): Bitmap {
         val maxWidth = targetWidth.coerceAtLeast(1)
         val maxHeight = targetHeight.coerceAtLeast(1)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            var dimensions = 0 to 0
-            val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
+            return ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
                 val width = info.size.width
                 val height = info.size.height
                 require(width in 1..MAX_DIMENSION && height in 1..MAX_DIMENSION) { "Photo dimensions are unsupported" }
                 require(width.toLong() * height <= MAX_PIXELS) { "Photo has too many pixels" }
-                dimensions = width to height
                 val sample = ceil(max(width.toDouble() / maxWidth, height.toDouble() / maxHeight))
                     .toInt().coerceAtLeast(1)
                 decoder.setTargetSampleSize(sample)
                 decoder.allocator =
                     if (allowHardware) ImageDecoder.ALLOCATOR_DEFAULT else ImageDecoder.ALLOCATOR_SOFTWARE
             }
-            return dimensions to bitmap
         }
 
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -257,13 +217,12 @@ internal object PhotoStore {
         require(bounds.outWidth.toLong() * bounds.outHeight <= MAX_PIXELS) { "Photo has too many pixels" }
         var sample = 1
         while (bounds.outWidth / sample > maxWidth || bounds.outHeight / sample > maxHeight) sample *= 2
-        val bitmap = BitmapFactory.decodeByteArray(
+        return BitmapFactory.decodeByteArray(
             bytes,
             0,
             bytes.size,
             BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 },
         ) ?: error("The selected file is not a supported image")
-        return (bounds.outWidth to bounds.outHeight) to bitmap
     }
 
     private fun readUri(context: Context, uri: Uri): ByteArray = UriBytes.read(

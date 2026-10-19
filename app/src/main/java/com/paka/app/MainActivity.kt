@@ -177,17 +177,6 @@ class MainActivity : ComponentActivity() {
         if (Prefs.returnHome(this)) homeResetSignal++
     }
 
-    override fun onStop() {
-        super.onStop()
-        // Decoded photo bitmaps live only while Paka is in the foreground.
-        PhotoStore.trimMemory()
-    }
-
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        PhotoStore.trimMemory()
-    }
-
     private companion object {
         const val EXTRA_OPEN_DEVELOPER_ROUTE = "com.paka.app.OPEN_DEVELOPER_ROUTE"
     }

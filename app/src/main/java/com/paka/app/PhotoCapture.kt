@@ -493,7 +493,7 @@ internal fun PhotoReviewScreen(
                         onSelection = { if (!busy) cropRect = it },
                         onRotate = {
                             if (!busy) {
-                                pendingRotations = (pendingRotations + 1).floorMod(4)
+                                pendingRotations = (pendingRotations + 1).mod(4)
                                 cropRect = CropRect.FULL
                             }
                         },
@@ -537,7 +537,7 @@ internal fun PhotoReviewScreen(
                     alignment = Alignment.Center,
                     enabled = !busy && displayBitmap != null,
                     onClick = {
-                        pendingRotations = (pendingRotations + 1).floorMod(4)
+                        pendingRotations = (pendingRotations + 1).mod(4)
                         cropRect = CropRect.FULL
                     },
                 )
@@ -628,7 +628,7 @@ internal fun PhotoReviewScreen(
                                     // Untouched picker imports retain their exact
                                     // encrypted bytes. Any queued edit is baked
                                     // into one bounded JPEG.
-                                    transform = turns.floorMod(FULL_TURN_QUARTERS) != 0,
+                                    transform = turns.mod(FULL_TURN_QUARTERS) != 0,
                                 )
                                 val bytes = preparedResult.getOrElse {
                                     showError(resources.getString(R.string.capture_error_prepare_photo))
@@ -736,8 +736,6 @@ private suspend fun prepareReviewBytes(
         outcome.getAndSet(null)?.getOrNull()?.fill(0)
     }
 }
-
-private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
 
 private const val CROP_MIN_SIZE = 0.15f
 private const val ACCESSIBLE_CROP_STEP = 0.05f

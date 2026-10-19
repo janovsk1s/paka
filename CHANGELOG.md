@@ -4,6 +4,8 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- Transparent PNG, WebP, and GIF photos are composited onto white for review,
+  display, and edits instead of turning transparent areas black.
 - PDFs are encrypted with a random data key wrapped by the PDF Keystore key,
   the envelope photos already use, instead of pushing every byte through the
   Keystore. Existing PDFs migrate the first time they are opened.

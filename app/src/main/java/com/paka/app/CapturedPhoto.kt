@@ -3,6 +3,7 @@ package com.paka.app
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import androidx.exifinterface.media.ExifInterface
@@ -18,7 +19,6 @@ import kotlin.math.max
  */
 internal object CapturedPhoto {
     const val MAX_DIMENSION = 3072
-    private const val MAX_SOURCE_PIXELS = 48_000_000L
     private const val JPEG_QUALITY = 90
     private const val QUARTER_TURN_DEGREES = 90
     private const val FULL_TURN_QUARTERS = 4
@@ -40,7 +40,7 @@ internal object CapturedPhoto {
         require(rotationDegrees % QUARTER_TURN_DEGREES == 0) {
             "Capture rotation must be a multiple of 90 degrees"
         }
-        val clockwiseTurns = (rotationDegrees / QUARTER_TURN_DEGREES).floorMod(FULL_TURN_QUARTERS)
+        val clockwiseTurns = (rotationDegrees / QUARTER_TURN_DEGREES).mod(FULL_TURN_QUARTERS)
         return transform(
             bytes = jpeg,
             exifOrientation = ExifInterface.ORIENTATION_NORMAL,
@@ -110,7 +110,7 @@ internal object CapturedPhoto {
         require(bounds.outWidth <= PhotoStore.MAX_DIMENSION && bounds.outHeight <= PhotoStore.MAX_DIMENSION) {
             "Photo dimensions are unsupported"
         }
-        require(bounds.outWidth.toLong() * bounds.outHeight <= MAX_SOURCE_PIXELS) { "Photo has too many pixels" }
+        require(bounds.outWidth.toLong() * bounds.outHeight <= PhotoStore.MAX_PIXELS) { "Photo has too many pixels" }
         var sample = 1
         // A power-of-two sample that never leaves a 48 MP source fully decoded.
         // Undershooting the requested edge is preferable to a transient 100+ MB
@@ -134,7 +134,9 @@ internal object CapturedPhoto {
         transformedHeight: Int,
         selection: CropRect,
     ): Bitmap {
-        if (matrix.isIdentity && selection == CropRect.FULL) return source
+        // JPEG has no alpha: transparent pixels would encode as black, so
+        // transparent sources are always composited onto white like PDF pages.
+        if (matrix.isIdentity && selection == CropRect.FULL && !source.hasAlpha()) return source
         val left = (selection.left * transformedWidth).toInt().coerceIn(0, transformedWidth - 1)
         val top = (selection.top * transformedHeight).toInt().coerceIn(0, transformedHeight - 1)
         val right = (selection.right * transformedWidth).toInt().coerceIn(left + 1, transformedWidth)
@@ -144,6 +146,7 @@ internal object CapturedPhoto {
         return try {
             val target = Bitmap.createBitmap(right - left, bottom - top, Bitmap.Config.ARGB_8888)
             output = target
+            target.eraseColor(Color.WHITE)
             val cropTranslation = Matrix().apply { setTranslate(-left.toFloat(), -top.toFloat()) }
             val drawMatrix = Matrix().apply { setConcat(cropTranslation, matrix) }
             Canvas(target).drawBitmap(
@@ -189,7 +192,7 @@ internal object CapturedPhoto {
     }
 
     private fun quarterTurnTransform(counterClockwiseTurns: Int, width: Int, height: Int): PixelTransform {
-        val orientation = when (counterClockwiseTurns.floorMod(FULL_TURN_QUARTERS)) {
+        val orientation = when (counterClockwiseTurns.mod(FULL_TURN_QUARTERS)) {
             1 -> ExifInterface.ORIENTATION_ROTATE_270
             2 -> ExifInterface.ORIENTATION_ROTATE_180
             FULL_TURN_QUARTERS - 1 -> ExifInterface.ORIENTATION_ROTATE_90
@@ -199,11 +202,11 @@ internal object CapturedPhoto {
     }
 
     /** Encodes and recycles [bitmap], zeroing the compression buffer. */
-    private fun encode(bitmap: Bitmap): ByteArray = try {
+    fun encode(bitmap: Bitmap): ByteArray = try {
         val output = ZeroableOutputStream()
         try {
             check(bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)) {
-                "The captured photo could not be encoded"
+                "The photo could not be encoded"
             }
             output.toByteArray()
         } finally {
@@ -222,5 +225,3 @@ private fun exifOrientation(bytes: ByteArray): Int = runCatching {
         )
     }
 }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-
-private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
