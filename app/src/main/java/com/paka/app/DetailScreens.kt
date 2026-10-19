@@ -197,15 +197,7 @@ private fun ReferenceOptionsScreen(
                         ),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        Text(
-                            label,
-                            color = Palette.foreground,
-                            fontSize = 30.sp,
-                            lineHeight = LargeTextLineHeight,
-                            fontWeight = FontWeight.Normal,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        AutoFitText(text = label, color = Palette.foreground)
                     }
                 }
             }
@@ -490,7 +482,6 @@ internal fun CardDetail(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.dim.copy(alpha = 0.5f)))
                     ManualEntryRow(
                         stringResource(R.string.detail_notes_field),
                         notes,
@@ -506,14 +497,14 @@ internal fun CardDetail(
                     Text(
                         stringResource(R.string.detail_references_description),
                         color = Palette.dim,
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
                     )
                 }
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(

@@ -4,6 +4,13 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- UI consistency: the Backup and file-reference menus shrink long labels onto
+  one line like every other menu; Details and entry screens share one footer
+  lane, so "save" sits in the same place; explanatory and inline-error texts
+  use the same light weight and size everywhere; About's prose matches
+  onboarding's 18 sp; the read-only code field drops the rule that editable
+  fields carry; "Passphrases do not match" and "Preparing…" read as sentences
+  like their siblings in all eight languages.
 - Each 2FA account name now sits just above its own code at any font or font
   size. The name is placed from the code's baseline instead of inherited line
   boxes, which let it drift toward the previous row's code on fonts other than

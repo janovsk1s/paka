@@ -79,7 +79,7 @@
     <string name="capture_error_prepare_photo">Foto ließ sich nicht vorbereiten</string>
     <string name="capture_error_save_photo">Foto ließ sich nicht speichern</string>
     <string name="capture_error_preview_photo">Fotovorschau ließ sich nicht öffnen</string>
-    <string name="capture_status_preparing_preview">wird vorbereitet…</string>
+    <string name="capture_status_preparing_preview">Wird vorbereitet…</string>
     <string name="capture_action_rotate">drehen</string>
     <string name="capture_action_reset_crop">Zuschnitt zurücksetzen</string>
     <string name="capture_action_crop_smaller">Zuschnitt verkleinern</string>

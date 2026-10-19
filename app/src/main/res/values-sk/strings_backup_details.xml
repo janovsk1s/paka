@@ -13,7 +13,7 @@
     <string name="backup_photo_compatibility">Táto záloha obsahuje fotografické preukazy a možno ju obnoviť iba v Paka 0.14 alebo novšej.</string>
     <string name="backup_minimum_characters">aspoň %1$d znakov</string>
     <string name="backup_repeat_passphrase">zopakovať heslo</string>
-    <string name="backup_passphrases_do_not_match">heslá sa nezhodujú</string>
+    <string name="backup_passphrases_do_not_match">Heslá sa nezhodujú</string>
     <string name="backup_encrypting">šifruje sa…</string>
     <string name="backup_save_encrypted">uložiť šifrovanú zálohu</string>
     <string name="backup_import_instructions">Zadajte heslo tejto zálohy.</string>

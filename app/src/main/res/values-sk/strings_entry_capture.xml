@@ -79,7 +79,7 @@
     <string name="capture_error_prepare_photo">Fotografiu sa nepodarilo pripraviť</string>
     <string name="capture_error_save_photo">Fotografiu sa nepodarilo uložiť</string>
     <string name="capture_error_preview_photo">Náhľad fotografie sa nepodarilo otvoriť</string>
-    <string name="capture_status_preparing_preview">príprava…</string>
+    <string name="capture_status_preparing_preview">Príprava…</string>
     <string name="capture_action_rotate">otočiť</string>
     <string name="capture_action_reset_crop">obnoviť orezanie</string>
     <string name="capture_action_crop_smaller">zmenšiť oblasť orezania</string>

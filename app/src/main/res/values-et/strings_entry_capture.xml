@@ -79,7 +79,7 @@
     <string name="capture_error_prepare_photo">Fotot ei õnnestunud ette valmistada</string>
     <string name="capture_error_save_photo">Fotot ei õnnestunud salvestada</string>
     <string name="capture_error_preview_photo">Foto eelvaadet ei õnnestunud avada</string>
-    <string name="capture_status_preparing_preview">valmistan ette…</string>
+    <string name="capture_status_preparing_preview">Valmistan ette…</string>
     <string name="capture_action_rotate">pööra</string>
     <string name="capture_action_reset_crop">lähtesta kärbe</string>
     <string name="capture_action_crop_smaller">muuda kärpeala väiksemaks</string>

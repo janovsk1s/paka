@@ -182,14 +182,14 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                 Text(
                     stringResource(R.string.about_description),
                     color = Palette.foreground,
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Normal,
                 )
                 Column {
                     Text(
                         stringResource(R.string.about_byline),
                         color = Palette.foreground,
-                        fontSize = 20.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Normal,
                     )
                     Text("@janovsk1s", color = Palette.dim, fontSize = 16.sp, fontWeight = FontWeight.Light)

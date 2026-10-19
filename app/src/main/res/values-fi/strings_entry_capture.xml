@@ -79,7 +79,7 @@
     <string name="capture_error_prepare_photo">Kuvaa ei voitu valmistella</string>
     <string name="capture_error_save_photo">Kuvaa ei voitu tallentaa</string>
     <string name="capture_error_preview_photo">Kuvan esikatselua ei voitu avata</string>
-    <string name="capture_status_preparing_preview">valmistellaan…</string>
+    <string name="capture_status_preparing_preview">Valmistellaan…</string>
     <string name="capture_action_rotate">kierrä</string>
     <string name="capture_action_reset_crop">palauta rajaus</string>
     <string name="capture_action_crop_smaller">pienennä rajausta</string>

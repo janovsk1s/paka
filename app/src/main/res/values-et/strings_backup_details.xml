@@ -13,7 +13,7 @@
     <string name="backup_photo_compatibility">See varukoopia sisaldab fotopääsmeid ja seda saab taastada ainult Paka 0.14 või uuemaga.</string>
     <string name="backup_minimum_characters">vähemalt %1$d märki</string>
     <string name="backup_repeat_passphrase">korda parooli</string>
-    <string name="backup_passphrases_do_not_match">paroolid ei ühti</string>
+    <string name="backup_passphrases_do_not_match">Paroolid ei ühti</string>
     <string name="backup_encrypting">krüptimine…</string>
     <string name="backup_save_encrypted">salvesta krüptitud varukoopia</string>
     <string name="backup_import_instructions">Sisesta selle varukoopia parool.</string>

@@ -81,7 +81,7 @@
     <string name="capture_error_prepare_photo">Photo could not be prepared</string>
     <string name="capture_error_save_photo">Photo could not be saved</string>
     <string name="capture_error_preview_photo">Photo preview could not be opened</string>
-    <string name="capture_status_preparing_preview">preparing…</string>
+    <string name="capture_status_preparing_preview">Preparing…</string>
     <string name="capture_action_rotate">rotate</string>
     <string name="capture_action_reset_crop">reset crop</string>
     <string name="capture_action_crop_smaller">make crop smaller</string>

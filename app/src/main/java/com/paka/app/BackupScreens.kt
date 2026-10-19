@@ -231,14 +231,9 @@ internal fun BackupScreen(
                             ),
                             contentAlignment = Alignment.CenterStart,
                         ) {
-                            Text(
-                                label,
+                            AutoFitText(
+                                text = label,
                                 color = if (enabled) Palette.foreground else Palette.dim,
-                                fontSize = 30.sp,
-                                lineHeight = LargeTextLineHeight,
-                                fontWeight = FontWeight.Normal,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -274,12 +269,14 @@ internal fun BackupScreen(
                         ),
                         color = Palette.dim,
                         fontSize = 16.sp,
+                        fontWeight = FontWeight.Light,
                     )
                     if (cards.any { it.content is PassContent.Photos }) {
                         Text(
                             stringResource(R.string.backup_photo_compatibility),
                             color = Palette.dim,
                             fontSize = 16.sp,
+                            fontWeight = FontWeight.Light,
                         )
                     }
                     ManualEntryRow(
@@ -299,6 +296,7 @@ internal fun BackupScreen(
                             stringResource(R.string.backup_passphrases_do_not_match),
                             color = Palette.dim,
                             fontSize = 14.sp,
+                            fontWeight = FontWeight.Light,
                         )
                     }
                 }
@@ -358,7 +356,12 @@ internal fun BackupScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    Text(stringResource(R.string.backup_import_instructions), color = Palette.dim, fontSize = 16.sp)
+                    Text(
+                        stringResource(R.string.backup_import_instructions),
+                        color = Palette.dim,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Light,
+                    )
                     ManualEntryRow(
                         stringResource(R.string.backup_passphrase_field),
                         "•".repeat(passphrase.length),

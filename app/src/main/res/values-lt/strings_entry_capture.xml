@@ -79,7 +79,7 @@
     <string name="capture_error_prepare_photo">Nepavyko paruošti nuotraukos</string>
     <string name="capture_error_save_photo">Nepavyko įrašyti nuotraukos</string>
     <string name="capture_error_preview_photo">Nepavyko atverti nuotraukos peržiūros</string>
-    <string name="capture_status_preparing_preview">ruošiama…</string>
+    <string name="capture_status_preparing_preview">Ruošiama…</string>
     <string name="capture_action_rotate">pasukti</string>
     <string name="capture_action_reset_crop">atkurti apkarpymą</string>
     <string name="capture_action_crop_smaller">sumažinti apkarpymo sritį</string>

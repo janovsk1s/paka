@@ -890,7 +890,6 @@ private fun EntryBottomAction(status: String?, enabled: Boolean, onSave: () -> U
                 text = stringResource(R.string.entry_action_save),
                 color = if (enabled) Palette.foreground else Palette.dim,
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Light,
             )
         }
     }

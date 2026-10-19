@@ -79,7 +79,7 @@
     <string name="capture_error_prepare_photo">Foto neizdevās sagatavot</string>
     <string name="capture_error_save_photo">Foto neizdevās saglabāt</string>
     <string name="capture_error_preview_photo">Foto priekšskatījumu neizdevās atvērt</string>
-    <string name="capture_status_preparing_preview">sagatavo…</string>
+    <string name="capture_status_preparing_preview">Sagatavo…</string>
     <string name="capture_action_rotate">pagriezt</string>
     <string name="capture_action_reset_crop">atiestatīt apgriešanu</string>
     <string name="capture_action_crop_smaller">samazināt apgriešanas zonu</string>

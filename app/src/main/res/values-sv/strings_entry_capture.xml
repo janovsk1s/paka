@@ -79,7 +79,7 @@
     <string name="capture_error_prepare_photo">Fotot gick inte att förbereda</string>
     <string name="capture_error_save_photo">Fotot gick inte att spara</string>
     <string name="capture_error_preview_photo">Förhandsvisningen gick inte att öppna</string>
-    <string name="capture_status_preparing_preview">förbereder…</string>
+    <string name="capture_status_preparing_preview">Förbereder…</string>
     <string name="capture_action_rotate">rotera</string>
     <string name="capture_action_reset_crop">återställ beskärning</string>
     <string name="capture_action_crop_smaller">gör beskärningen mindre</string>
