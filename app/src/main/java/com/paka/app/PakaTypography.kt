@@ -15,10 +15,18 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import java.io.File
 
 internal val LocalPakaFontFamily = staticCompositionLocalOf<FontFamily?> { null }
 private const val SYSTEM_FONT_DIR = "/system/fonts"
+
+/**
+ * Material's body style carries a fixed 24 sp line height that 30 sp text
+ * inherits, so wrapped large lines would overlap. Large text that may wrap
+ * uses this instead.
+ */
+internal val LargeTextLineHeight = 36.sp
 
 /**
  * Mirrors the official Light SDK font lookup:

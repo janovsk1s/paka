@@ -4,6 +4,11 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- Polish: wrapped 30 sp text (delete and duplicate questions, backup and
+  reference menus, the restore warning) no longer inherits a 24 sp line height
+  that made its lines overlap; About moves a long development or preview
+  version below the name instead of breaking it mid-word; the scanner and
+  photo-capture back arrows sit exactly where every other screen's does.
 - The same 2FA secret entered with and without `=` padding is now recognised
   as a duplicate.
 - Release verification reuses the CI permission check instead of keeping its

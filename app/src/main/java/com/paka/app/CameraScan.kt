@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
@@ -318,7 +319,8 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
         }
 
         BackArrow(
-            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(8.dp),
+            // Same spot as SimpleTopBar's arrow: 12 dp below the status bar, 2 dp past the edge.
+            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(top = 12.dp).offset(x = (-2).dp),
             // The viewfinder backdrop is physically dark in both palette modes.
             color = White,
             onBack = onBack,

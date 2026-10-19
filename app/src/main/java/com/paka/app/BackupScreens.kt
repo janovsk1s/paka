@@ -228,6 +228,7 @@ internal fun BackupScreen(
                                 label,
                                 color = Palette.foreground,
                                 fontSize = 30.sp,
+                                lineHeight = LargeTextLineHeight,
                                 fontWeight = FontWeight.Normal,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -418,6 +419,7 @@ internal fun BackupScreen(
                                 stringResource(R.string.backup_replace_current_data),
                                 color = Palette.foreground,
                                 fontSize = 30.sp,
+                                lineHeight = LargeTextLineHeight,
                                 fontWeight = FontWeight.Normal,
                             )
                             Text(
