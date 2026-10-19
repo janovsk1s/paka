@@ -7,6 +7,11 @@ and visual spacing is compared with the hardware photos in
 Light Phone III: record them as `NOT RUN` unless an LP3 owner tests the
 preview build, and list them as unverified in the preview notes.
 
+For each candidate, copy [DEVICE_TEST_RESULT_TEMPLATE.md](DEVICE_TEST_RESULT_TEMPLATE.md),
+leave untested rows marked `NOT RUN`, and commit or attach the completed result
+to the release record. The checklist describes what to test; a completed result
+records what was actually tested.
+
 ## Emulator
 
 `Paka_LP3` gives Paka the Light Phone III's app area: 1080 × 1240 px at
@@ -16,13 +21,15 @@ is 1080 × 1384 px.
 
 ```sh
 export ANDROID_HOME=<sdk>   # for example /opt/homebrew/share/android-commandlinetools
-avdmanager create avd -n Paka_LP3 -k "system-images;android-36;google_apis;arm64-v8a"
+export JAVA_HOME=<jdk-17>   # avdmanager, sdkmanager and Gradle need Java 17
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "system-images;android-36;google_apis;arm64-v8a"
+$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n Paka_LP3 -k "system-images;android-36;google_apis;arm64-v8a"
 # In ~/.android/avd/Paka_LP3.avd/config.ini set:
 #   hw.lcd.width=1080  hw.lcd.height=1384  hw.lcd.density=480
 #   hw.ramSize=6144    hw.keyboard=no      hw.camera.back=webcam0
-emulator -avd Paka_LP3 -no-boot-anim
-adb shell cmd uimode night yes
-adb shell cmd overlay enable com.android.internal.systemui.navbar.gestural
+$ANDROID_HOME/emulator/emulator -avd Paka_LP3 -no-boot-anim
+$ANDROID_HOME/platform-tools/adb shell cmd uimode night yes
+$ANDROID_HOME/platform-tools/adb shell cmd overlay enable com.android.internal.systemui.navbar.gestural
 ./gradlew installDebug
 ```
 
@@ -31,10 +38,7 @@ but optics, focus, torch, and true low light still differ from the phone. The
 emulator has no Akkurat font: text uses the fallback face, so compare glyph
 shapes and fine spacing with the photos rather than the emulator alone.
 
-For each candidate, copy [DEVICE_TEST_RESULT_TEMPLATE.md](DEVICE_TEST_RESULT_TEMPLATE.md),
-leave untested rows marked `NOT RUN`, and commit or attach the completed result
-to the release record. The checklist describes what to test; a completed result
-records what was actually tested.
+Vibration cannot be felt on the emulator, so haptics rows would pass without being tested. After each gesture, run `adb shell dumpsys vibrator_manager` and read its "Recent vibrations" list instead.
 
 ## Before testing
 
