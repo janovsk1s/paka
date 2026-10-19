@@ -27,9 +27,11 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -136,10 +138,14 @@ internal fun CodesList(
                 .then(tapModifier(onClick = { onCopy(code) }, clickLabel = copyLabel)),
         ) {
             val timerStyle = localTextStyle.merge(
-                TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
+                TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light).withTypeSizedLines(),
             )
             val labelStyle = localTextStyle.merge(
-                TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Light),
+                TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Light).withTypeSizedLines(),
+            )
+            fun codeStyle(size: Float) = localTextStyle.merge(
+                TextStyle(fontSize = size.sp, fontWeight = FontWeight.Normal, letterSpacing = 2.sp)
+                    .withTypeSizedLines(),
             )
             val timerWidthPx = remember(localTextStyle, density) {
                 textMeasurer.measure(
@@ -149,14 +155,15 @@ internal fun CodesList(
                     softWrap = false,
                 ).size.width
             }
-            val labelHeightPx = remember(localTextStyle, density) {
+            val labelLayout = remember(localTextStyle, density) {
                 textMeasurer.measure(
                     text = "Åg",
                     style = labelStyle,
                     maxLines = 1,
                     softWrap = false,
-                ).size.height
+                )
             }
+            val labelHeightPx = labelLayout.size.height
             val representativeCode = when (code.length) {
                 6 -> "888 888"
                 7, 8 -> "8888 8888"
@@ -164,7 +171,7 @@ internal fun CodesList(
             }
             val codeWidthPx = (constraints.maxWidth - timerWidthPx - with(density) { 8.dp.roundToPx() })
                 .coerceAtLeast(1)
-            val verticalGapPx = with(density) { 4.dp.roundToPx() }
+            val verticalGapPx = with(density) { 6.dp.roundToPx() }
             val fittedTextSize = remember(
                 representativeCode,
                 textSize,
@@ -178,13 +185,7 @@ internal fun CodesList(
                 while (candidate > 16f) {
                     val measured = textMeasurer.measure(
                         text = representativeCode,
-                        style = localTextStyle.merge(
-                            TextStyle(
-                                fontSize = candidate.sp,
-                                fontWeight = FontWeight.Normal,
-                                letterSpacing = 2.sp,
-                            ),
-                        ),
+                        style = codeStyle(candidate),
                         maxLines = 1,
                         softWrap = false,
                     ).size
@@ -195,28 +196,27 @@ internal fun CodesList(
                 }
                 candidate
             }
-            val fittedCodeHeightPx = remember(representativeCode, fittedTextSize, localTextStyle, density) {
+            val codeLayout = remember(representativeCode, fittedTextSize, localTextStyle, density) {
                 textMeasurer.measure(
                     text = representativeCode,
-                    style = localTextStyle.merge(
-                        TextStyle(
-                            fontSize = fittedTextSize.sp,
-                            fontWeight = FontWeight.Normal,
-                            letterSpacing = 2.sp,
-                        ),
-                    ),
+                    style = codeStyle(fittedTextSize),
                     maxLines = 1,
                     softWrap = false,
-                ).size.height
+                )
             }
+            // Place the label by baselines, not line boxes: its baseline sits a fixed gap
+            // above the top of the code's digits, so it reads as this code's account on any
+            // font and font scale instead of drifting toward the previous row.
             val labelOffset = with(density) {
-                (-(fittedCodeHeightPx / 2f + verticalGapPx + labelHeightPx / 2f)).toDp()
+                val codeBaseline = codeLayout.firstBaseline - codeLayout.size.height / 2f
+                val digitTop = codeBaseline - DIGIT_HEIGHT_EM * fittedTextSize.sp.toPx()
+                val labelBaseline = digitTop - verticalGapPx
+                (labelBaseline - labelLayout.firstBaseline + labelHeightPx / 2f).toDp()
             }
             Text(
                 account.title(),
                 color = Palette.dim,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Light,
+                style = labelStyle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.CenterStart).offset(y = labelOffset),
@@ -228,9 +228,7 @@ internal fun CodesList(
                 Text(
                     formatCode(code),
                     color = Palette.foreground,
-                    fontSize = fittedTextSize.sp,
-                    fontWeight = FontWeight.Normal,
-                    letterSpacing = 2.sp,
+                    style = codeStyle(fittedTextSize),
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Clip,
@@ -239,8 +237,7 @@ internal fun CodesList(
                 Text(
                     remaining.toString(),
                     color = Palette.dim,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Light,
+                    style = timerStyle,
                     textAlign = TextAlign.End,
                     modifier = Modifier
                         .width(with(density) { timerWidthPx.toDp() })
@@ -250,6 +247,19 @@ internal fun CodesList(
         }
     }
 }
+
+// Lining digits stand about 0.72 em in sans faces such as Akkurat and Roboto.
+private const val DIGIT_HEIGHT_EM = 0.72f
+
+/**
+ * Explicit one-em line heights with centred glyphs, so 2FA rows do not inherit
+ * Material's 24 sp body line height, which is taller than the 12 sp label and
+ * shorter than the 30 sp code.
+ */
+private fun TextStyle.withTypeSizedLines(): TextStyle = copy(
+    lineHeight = 1.em,
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+)
 
 private fun formatCode(code: String): String = when (code.length) {
     6 -> "${code.substring(0, 3)} ${code.substring(3)}"

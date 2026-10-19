@@ -4,6 +4,10 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- Each 2FA account name now sits just above its own code at any font or font
+  size. The name is placed from the code's baseline instead of inherited line
+  boxes, which let it drift toward the previous row's code on fonts other than
+  Akkurat and at larger text sizes.
 - Read-only storage now explains its recovery path on the Backup screen and
   disables restore there, instead of a toast that Android 12+ cuts to two
   lines; the photo backup-limit message stays on the review screen.
