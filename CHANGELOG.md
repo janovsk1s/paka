@@ -23,6 +23,11 @@ Notable changes to Paka are documented here.
   pass. Leaving unchanged details no longer rewrites the pass store, so Back
   works while storage is read-only.
 - Zoomed landscape PDF pages stay centred instead of overflowing the bottom.
+- The scanner library is updated to zxing-cpp 3.1.1. Stacked GS1 DataBar
+  Expanded codes now scan, and Code 39 variants (Code 32, PZN, full-ASCII), or
+  stacked DataBar elsewhere in view, no longer silently block every scan in
+  that frame. Those Code 39 variants are still not imported, because Paka
+  could not redisplay them exactly.
 
 ## 0.15.3 — 2026-07-24
 

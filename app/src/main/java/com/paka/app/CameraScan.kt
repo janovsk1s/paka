@@ -524,10 +524,11 @@ private fun mapFormat(f: BarcodeReader.Format): PakaFormat? = when (f) {
     BarcodeReader.Format.UPC_A -> PakaFormat.UPCA
     BarcodeReader.Format.UPC_E -> PakaFormat.UPCE
     BarcodeReader.Format.CODE_128 -> PakaFormat.CODE128
-    BarcodeReader.Format.CODE_39 -> PakaFormat.CODE39
+    BarcodeReader.Format.CODE_39, BarcodeReader.Format.CODE_39_STD -> PakaFormat.CODE39
     BarcodeReader.Format.CODE_93 -> PakaFormat.CODE93
     BarcodeReader.Format.CODABAR -> PakaFormat.CODABAR
     BarcodeReader.Format.ITF -> PakaFormat.ITF
-    BarcodeReader.Format.DATA_BAR_EXPANDED -> PakaFormat.DATABAR_EXPANDED
+    BarcodeReader.Format.DATA_BAR_EXP, BarcodeReader.Format.DATA_BAR_EXP_STK -> PakaFormat.DATABAR_EXPANDED
+    // CODE_39_EXT, CODE_32 and PZN report converted text, so Paka could not re-render the printed symbol.
     else -> null
 }
