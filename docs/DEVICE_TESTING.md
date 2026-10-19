@@ -77,6 +77,21 @@ can only confirm that the work stops.
 
 ## Camera, scanner, and torch
 
+`ScannerDecodeCorpusTest` covers the decoding side of the first item:
+run `./gradlew connectedDebugAndroidTest` on `Paka_LP3`. It renders synthetic
+dense binary Aztec, QR, PDF417, GS1 DataBar Expanded, EAN-13, UPC-A, Data
+Matrix, Code 128, Code 39, and ITF with Paka's own renderer, damages them in
+memory (small modules, tilt, blur, glare, simulated low light, faded print,
+specks, a line in the quiet zone), and decodes them through the scanner's
+zxing-cpp readers, payload rules, and aim selection. It fails on any wrong
+payload and on any clean or moderate level that does not decode exactly,
+apart from the zxing-cpp limits listed in the test; harsher levels are
+reported per format in `adb logcat -s PakaScanCorpus`. A pass fills the result
+template's "Exact payload confirmed" column and the decoder side of "Normal
+light" and "Glare/damage". Still scan printed samples through the webcam for
+the live camera path. Simulated low light does not replace the **(hardware)**
+items, which stay `NOT RUN`.
+
 - Scan dense Aztec, QR, PDF417, GS1 DataBar Expanded, EAN/UPC, and damaged or
   glared print samples.
 - Test genuinely low light; a sharp preview is not enough, decoding must
