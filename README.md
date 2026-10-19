@@ -74,7 +74,8 @@ cannot recover a forgotten backup passphrase.
   switches sides on a tap and uses pinch to zoom.
 - Paka follows a supported device language on first run and otherwise uses
   English. Developer options can set an explicit language, change return-home
-  behaviour, and enable an isolated in-memory demo mode.
+  behaviour, switch to a light mode for e-ink screens, show gesture hints for
+  hold actions, and enable an isolated in-memory demo mode.
 
 ## Compatibility and independence
 

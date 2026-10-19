@@ -26,6 +26,9 @@ key.
 - Update the README stable or beta line.
 - Update `CHANGELOG.md` with user-visible, security, privacy, and compatibility
   changes.
+- Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`: a single
+  plain-text paragraph under 500 characters summarising what this
+  `versionCode` delivers since the last published release.
 - For preview releases, describe what changed since the previous preview and
   what still needs hardware testing.
 - If a change touches storage, backups, permissions, security boundaries, or
