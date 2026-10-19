@@ -41,6 +41,8 @@ android {
         versionCode = 55
         versionName = "0.15.3"
         buildConfigField("String", "RELEASE_CHANNEL_LABEL", "\"$releaseChannelLabel\"")
+        // Emulator-only scanner decode corpus (src/androidTest).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -159,4 +161,5 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
 }

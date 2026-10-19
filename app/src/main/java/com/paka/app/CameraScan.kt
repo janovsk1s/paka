@@ -70,34 +70,7 @@ fun ScanScreen(
     var torchEnabled by remember { mutableStateOf(false) }
     var autoLight by remember { mutableStateOf(false) }
     var lowLight by remember { mutableStateOf(false) }
-    val readers = remember {
-        // Reading several symbols per frame lets selectAimedSymbol require the
-        // guide square to disambiguate documents that carry more than one code.
-        listOf(
-            BarcodeReader(
-                BarcodeReader.Options(
-                    formats = emptySet(),
-                    tryHarder = true,
-                    tryRotate = true,
-                    tryInvert = true,
-                    tryDownscale = false,
-                    binarizer = BarcodeReader.Binarizer.LOCAL_AVERAGE,
-                    maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
-                ),
-            ),
-            BarcodeReader(
-                BarcodeReader.Options(
-                    formats = emptySet(),
-                    tryHarder = true,
-                    tryRotate = true,
-                    tryInvert = true,
-                    tryDownscale = false,
-                    binarizer = BarcodeReader.Binarizer.GLOBAL_HISTOGRAM,
-                    maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
-                ),
-            ),
-        )
-    }
+    val readers = remember { scanReaderOptions.map(::BarcodeReader) }
     val handled = remember { AtomicBoolean(false) }
     val refusalShown = remember { AtomicBoolean(false) }
     val disposed = remember { AtomicBoolean(false) }
@@ -228,23 +201,10 @@ fun ScanScreen(
                                                     }
                                                 }
 
-                                                val symbols = readers.firstNotNullOfOrNull { reader ->
-                                                    reader.read(image).filter {
-                                                        (it.text != null || it.bytes != null) &&
-                                                            mapFormat(it.format) != null
-                                                    }.takeIf { it.isNotEmpty() }
-                                                }.orEmpty()
+                                                val symbols = readScanSymbols(readers) { read(image) }
                                                 // A refused symbol does not end the scan: the wanted
                                                 // code may sit beside it.
-                                                val accepted = symbols.mapNotNull { symbol ->
-                                                    val format = mapFormat(symbol.format) ?: return@mapNotNull null
-                                                    selectScanPayload(
-                                                        format,
-                                                        symbol.contentType,
-                                                        symbol.text,
-                                                        symbol.bytes,
-                                                    )?.let { ScanResult(it, format) to symbol.position.center() }
-                                                }
+                                                val accepted = acceptedScans(symbols)
                                                 val onlyRefused = symbols.isNotEmpty() && accepted.isEmpty()
                                                 if (onlyRefused && refusalShown.compareAndSet(false, true)) {
                                                     previewView.post {
@@ -382,6 +342,42 @@ private const val BRIGHT_LIGHT_FRAMES = 4
 internal const val FOCUS_RETRY_MS = 2_200L
 private const val MAX_SCAN_SYMBOLS = 5
 internal const val SCAN_GUIDE_FRACTION = 0.70f
+
+/**
+ * The camera's decoder settings, shared with the emulator decode corpus test.
+ * Reading several symbols per frame lets selectAimedSymbol require the guide
+ * square to disambiguate documents that carry more than one code.
+ */
+internal val scanReaderOptions: List<BarcodeReader.Options>
+    get() = listOf(BarcodeReader.Binarizer.LOCAL_AVERAGE, BarcodeReader.Binarizer.GLOBAL_HISTOGRAM).map {
+        BarcodeReader.Options(
+            formats = emptySet(),
+            tryHarder = true,
+            tryRotate = true,
+            tryInvert = true,
+            tryDownscale = false,
+            binarizer = it,
+            maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
+        )
+    }
+
+/** Symbols Paka can map, from the first reader that finds any. */
+internal fun readScanSymbols(
+    readers: List<BarcodeReader>,
+    read: BarcodeReader.() -> List<BarcodeReader.Result>,
+): List<BarcodeReader.Result> = readers.firstNotNullOfOrNull { reader ->
+    reader.read().filter {
+        (it.text != null || it.bytes != null) && mapFormat(it.format) != null
+    }.takeIf { it.isNotEmpty() }
+}.orEmpty()
+
+/** The symbols whose exact payload Paka can import, with their centres. */
+internal fun acceptedScans(symbols: List<BarcodeReader.Result>): List<Pair<ScanResult, SymbolCenter>> =
+    symbols.mapNotNull { symbol ->
+        val format = mapFormat(symbol.format) ?: return@mapNotNull null
+        selectScanPayload(format, symbol.contentType, symbol.text, symbol.bytes)
+            ?.let { ScanResult(it, format) to symbol.position.center() }
+    }
 
 /** Symbol centre in the display-oriented analysis frame zxing-cpp reports. */
 internal data class SymbolCenter(val x: Float, val y: Float)

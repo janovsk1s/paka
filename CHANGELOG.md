@@ -101,6 +101,9 @@ Notable changes to Paka are documented here.
   stacked DataBar elsewhere in view, no longer silently block every scan in
   that frame. Those Code 39 variants are still not imported, because Paka
   could not redisplay them exactly.
+- An emulator test now decodes Paka's own renders, clean and degraded, through
+  the scanner's real zxing-cpp path and requires the exact original payload,
+  covering the decoder side of the scanner checklist without a phone.
 
 ## 0.15.3 — 2026-07-24
 
