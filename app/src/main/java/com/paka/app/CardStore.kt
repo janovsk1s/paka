@@ -119,39 +119,10 @@ internal object CardStore {
     private fun serialize(cards: List<Card>): String {
         val array = JSONArray()
         cards.forEach { card ->
-            val item = JSONObject()
-                .put("id", card.id)
-                .put("name", card.name)
-                .put("createdAt", card.createdAt)
-                .put("notes", card.notes)
-                .put("stack", card.stack ?: JSONObject.NULL)
-                .put("references", JSONArray().also { references ->
-                    require(card.references.size <= 2) { "A pass can have at most two references" }
-                    card.references.forEach { reference -> references.put(serializeReference(reference)) }
-                })
-            when (val content = card.content) {
-                is PassContent.Barcode -> item
-                    .put("type", "barcode")
-                    .put("data", content.data)
-                    .put("format", content.format.name)
-                is PassContent.Pdf -> item
-                    .put("type", "pdf")
-                    .put("documentId", content.documentId)
-                    .put("pageCount", content.pageCount)
-                is PassContent.Photos -> item
-                    .put("type", "photos")
-                    .put("pages", JSONArray().also { pages ->
-                        content.pages.forEach { page ->
-                            pages.put(
-                                JSONObject()
-                                    .put("documentId", page.documentId)
-                                    .put("width", page.width)
-                                    .put("height", page.height),
-                            )
-                        }
-                    })
-            }
-            array.put(item)
+            require(card.references.size <= 2) { "A pass can have at most two references" }
+            val references = JSONArray()
+            card.references.forEach { reference -> references.put(serializeReference(reference)) }
+            array.put(card.toJson().put("references", references))
         }
         return JSONObject().put("schema", SCHEMA).put("cards", array).toString()
     }

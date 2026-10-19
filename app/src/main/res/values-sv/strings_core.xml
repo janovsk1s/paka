@@ -72,7 +72,7 @@
     <string name="scan_camera_permission">Kameraåtkomst krävs för att skanna</string>
     <string name="demo_enabled">Tillfälliga demodata aktiverade</string>
     <string name="demo_disabled">Riktiga data återställda</string>
-    <string name="restore_storage_unhealthy">Lagringen måste vara felfri före återställning</string>
+    <string name="restore_storage_unhealthy">Lagringen är skrivskyddad. Öppna Paka igen; om den förblir skrivskyddad, rensa Pakas lagring i Android-inställningarna och återställ sedan</string>
     <string name="restore_failed">Säkerhetskopian gick inte att återställa</string>
     <string name="restore_interrupted">Återställningen avbröts; öppna Paka igen och kontrollera data</string>
     <string name="storage_read_only_notice">Lagringen är skrivskyddad tills den har återställts.</string>

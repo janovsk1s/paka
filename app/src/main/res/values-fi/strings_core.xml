@@ -72,7 +72,7 @@
     <string name="scan_camera_permission">Skannaus vaatii kameran käyttöoikeuden</string>
     <string name="demo_enabled">Väliaikaiset demotiedot käytössä</string>
     <string name="demo_disabled">Oikeat tiedot palautettu</string>
-    <string name="restore_storage_unhealthy">Tallennustilan on oltava kunnossa ennen palautusta</string>
+    <string name="restore_storage_unhealthy">Tallennustila on vain luettavissa. Avaa Paka uudelleen; jos tilanne jatkuu, tyhjennä Pakan tallennustila Androidin asetuksista ja palauta sitten</string>
     <string name="restore_failed">Varmuuskopiota ei voitu palauttaa</string>
     <string name="restore_interrupted">Palautus keskeytyi; avaa Paka uudelleen ja tarkista tiedot</string>
     <string name="storage_read_only_notice">Tallennustila on vain luettavissa, kunnes se korjataan.</string>

@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF passes require Android 11 or newer</string>
     <string name="entry_error_password_pdf_unsupported">Password-protected PDFs are not supported</string>
     <string name="entry_error_pdf_open">PDF could not be opened</string>
+    <string name="entry_error_backup_limit">Too large for a backup: PDFs can total %1$d MB and photos %2$d MB</string>
     <string name="entry_error_photos_open">Photos could not be opened</string>
     <string name="entry_error_camera_permission">Camera permission is needed to take photos</string>
     <string name="entry_title_front_side">front side</string>

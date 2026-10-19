@@ -72,7 +72,7 @@
     <string name="scan_camera_permission">Na skenovanie je potrebný prístup ku kamere</string>
     <string name="demo_enabled">Dočasné demo údaje zapnuté</string>
     <string name="demo_disabled">Skutočné údaje obnovené</string>
-    <string name="restore_storage_unhealthy">Úložisko musí byť pred obnovením v poriadku</string>
+    <string name="restore_storage_unhealthy">Úložisko je iba na čítanie. Znova otvorte Paka; ak zostane iba na čítanie, vymažte úložisko Paka v nastaveniach Androidu a potom obnovte</string>
     <string name="restore_failed">Zálohu sa nepodarilo obnoviť</string>
     <string name="restore_interrupted">Obnovenie bolo prerušené; znova otvorte Paka a overte údaje</string>
     <string name="storage_read_only_notice">Úložisko je iba na čítanie, kým sa neobnoví.</string>

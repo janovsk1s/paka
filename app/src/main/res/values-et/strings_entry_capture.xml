@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF-pääsmed vajavad Android 11 või uuemat</string>
     <string name="entry_error_password_pdf_unsupported">Parooliga kaitstud PDF-faile ei toetata</string>
     <string name="entry_error_pdf_open">PDF-faili ei õnnestunud avada</string>
+    <string name="entry_error_backup_limit">Varukoopia jaoks liiga suur: PDF-failid võivad kokku olla kuni %1$d MB ja fotod kuni %2$d MB</string>
     <string name="entry_error_photos_open">Fotosid ei õnnestunud avada</string>
     <string name="entry_error_camera_permission">Pildistamiseks on vaja kaamera luba</string>
     <string name="entry_title_front_side">esikülg</string>

@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF-kort kräver Android 11 eller senare</string>
     <string name="entry_error_password_pdf_unsupported">Lösenordsskyddade PDF-filer stöds inte</string>
     <string name="entry_error_pdf_open">PDF-filen gick inte att öppna</string>
+    <string name="entry_error_backup_limit">För stort för en säkerhetskopia: PDF-filer får vara högst %1$d MB och foton %2$d MB totalt</string>
     <string name="entry_error_photos_open">Bilderna gick inte att öppna</string>
     <string name="entry_error_camera_permission">Kamerabehörighet krävs för att fotografera</string>
     <string name="entry_title_front_side">framsida</string>

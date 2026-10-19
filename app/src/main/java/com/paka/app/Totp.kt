@@ -1,6 +1,7 @@
 package com.paka.app
 
 import android.net.Uri
+import org.json.JSONObject
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import java.util.Locale
@@ -19,6 +20,17 @@ data class OtpAccount(
 )
 
 fun OtpAccount.title(): String = if (account.isBlank()) issuer else "$issuer · $account"
+
+/** Account fields shared by the encrypted 2FA store and portable backups. */
+internal fun OtpAccount.toJson(): JSONObject = JSONObject()
+    .put("id", id)
+    .put("issuer", issuer)
+    .put("account", account)
+    .put("secret", secret)
+    .put("digits", digits)
+    .put("period", period)
+    .put("algorithm", algorithm)
+    .put("createdAt", createdAt)
 
 object Totp {
     private val SUPPORTED_ALGORITHMS = setOf("SHA1", "SHA256", "SHA512")

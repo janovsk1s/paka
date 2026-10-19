@@ -72,7 +72,7 @@
     <string name="scan_camera_permission">Nuskaitymui reikia prieigos prie kameros</string>
     <string name="demo_enabled">Įjungti laikini demo duomenys</string>
     <string name="demo_disabled">Tikrieji duomenys atkurti</string>
-    <string name="restore_storage_unhealthy">Prieš atkuriant saugykla turi veikti tinkamai</string>
+    <string name="restore_storage_unhealthy">Saugyklą galima tik skaityti. Vėl atidarykite Paka; jei taip ir lieka, „Android“ nustatymuose išvalykite Paka saugyklą ir tada atkurkite</string>
     <string name="restore_failed">Nepavyko atkurti atsarginės kopijos</string>
     <string name="restore_interrupted">Atkūrimas nutrūko; vėl atidarykite Paka ir patikrinkite duomenis</string>
     <string name="storage_read_only_notice">Saugyklą galima tik skaityti, kol ji bus atkurta.</string>

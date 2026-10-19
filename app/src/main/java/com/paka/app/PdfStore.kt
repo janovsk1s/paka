@@ -182,6 +182,8 @@ internal object PdfStore {
         try {
             require(hasPdfHeader(bytes)) { "The selected file is not a PDF" }
             val documentId = pdfDocumentId(bytes)
+            val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, documentId)
+            if (stored + bytes.size > BackupStore.MAX_PDF_TOTAL_BYTES) throw BackupLimitException()
             val pageCount = PdfDocumentSession.fromBytes(bytes).use { session ->
                 require(session.pageCount in 1..1_000) { "PDF has an unsupported page count" }
                 val preview = session.renderPage(0, 320)

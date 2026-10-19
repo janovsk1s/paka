@@ -205,6 +205,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                     }.onFailure { error ->
                         pdfError = when (error) {
                             is SecurityException -> resources.getString(R.string.entry_error_password_pdf_unsupported)
+                            is BackupLimitException -> resources.backupLimitMessage()
                             else -> resources.getString(R.string.entry_error_pdf_open)
                         }
                     }

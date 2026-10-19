@@ -82,7 +82,7 @@
     <string name="scan_camera_permission">Camera permission is needed to scan codes</string>
     <string name="demo_enabled">Temporary demo data enabled</string>
     <string name="demo_disabled">Real data restored</string>
-    <string name="restore_storage_unhealthy">Storage must be healthy before restoring</string>
+    <string name="restore_storage_unhealthy">Storage is read-only. Reopen Paka; if it stays read-only, clear Paka\'s storage in Android settings, then restore</string>
     <string name="restore_failed">Backup could not be restored</string>
     <string name="restore_interrupted">Restore was interrupted; reopen Paka to verify data</string>
     <string name="storage_read_only_notice">Storage is read-only until it is recovered.</string>

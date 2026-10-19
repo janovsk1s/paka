@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF leidimams reikia Android 11 ar naujesnės versijos</string>
     <string name="entry_error_password_pdf_unsupported">Slaptažodžiu apsaugoti PDF nepalaikomi</string>
     <string name="entry_error_pdf_open">Nepavyko atverti PDF</string>
+    <string name="entry_error_backup_limit">Per didelis atsarginei kopijai: PDF iš viso gali būti iki %1$d MB, nuotraukos – iki %2$d MB</string>
     <string name="entry_error_photos_open">Nepavyko atverti nuotraukų</string>
     <string name="entry_error_camera_permission">Fotografavimui reikia prieigos prie kameros</string>
     <string name="entry_title_front_side">priekinė pusė</string>

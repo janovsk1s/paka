@@ -72,7 +72,7 @@
     <string name="scan_camera_permission">Skenēšanai vajadzīga piekļuve kamerai</string>
     <string name="demo_enabled">Ieslēgti pagaidu demo dati</string>
     <string name="demo_disabled">Atjaunoti īstie dati</string>
-    <string name="restore_storage_unhealthy">Pirms atjaunošanas jāatkopj krātuve</string>
+    <string name="restore_storage_unhealthy">Krātuve ir tikai lasāma. Atver Paka vēlreiz; ja tā joprojām ir tikai lasāma, notīri Paka krātuvi Android iestatījumos un tad atjauno</string>
     <string name="restore_failed">Dublējumu neizdevās atjaunot</string>
     <string name="restore_interrupted">Atjaunošana pārtraukta; atver Paka vēlreiz, lai pārbaudītu datus</string>
     <string name="storage_read_only_notice">Krātuve ir tikai lasāma, kamēr tā nav atkopta.</string>

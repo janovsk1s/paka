@@ -642,8 +642,11 @@ internal fun PhotoReviewScreen(
                                 val result = imported.getAndSet(null)
                                     ?: Result.failure(IllegalStateException("Photo import did not finish"))
                                 busy = false
-                                result.onSuccess(onUsed).onFailure {
-                                    showError(resources.getString(R.string.capture_error_save_photo))
+                                result.onSuccess(onUsed).onFailure { error ->
+                                    showError(
+                                        if (error is BackupLimitException) resources.backupLimitMessage()
+                                        else resources.getString(R.string.capture_error_save_photo),
+                                    )
                                 }
                             } finally {
                                 prepared?.fill(0)

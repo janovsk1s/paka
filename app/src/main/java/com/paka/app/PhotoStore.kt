@@ -74,6 +74,8 @@ internal object PhotoStore {
     fun importBytes(context: Context, bytes: ByteArray): Result<PhotoImport> = runCatching {
         val dimensions = inspect(bytes)
         val documentId = photoDocumentId(bytes)
+        val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, documentId)
+        if (stored + bytes.size > BackupStore.MAX_PHOTO_TOTAL_BYTES) throw BackupLimitException()
         val file = documentFile(context, documentId)
         val created = !file.exists()
         // inspect() and the content-derived identifier verify these bytes, so

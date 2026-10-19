@@ -72,7 +72,7 @@
     <string name="scan_camera_permission">Zum Scannen ist Kamerazugriff nötig</string>
     <string name="demo_enabled">Temporäre Demo-Daten aktiviert</string>
     <string name="demo_disabled">Echte Daten wiederhergestellt</string>
-    <string name="restore_storage_unhealthy">Der Speicher muss vor der Wiederherstellung fehlerfrei sein</string>
+    <string name="restore_storage_unhealthy">Der Speicher ist schreibgeschützt. Paka erneut öffnen; bleibt er schreibgeschützt, den Speicher von Paka in den Android-Einstellungen löschen und dann wiederherstellen</string>
     <string name="restore_failed">Sicherung ließ sich nicht wiederherstellen</string>
     <string name="restore_interrupted">Wiederherstellung unterbrochen; Paka zur Datenprüfung erneut öffnen</string>
     <string name="storage_read_only_notice">Der Speicher ist schreibgeschützt, bis er repariert ist.</string>

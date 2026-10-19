@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF caurlaidēm vajadzīga Android 11 vai jaunāka versija</string>
     <string name="entry_error_password_pdf_unsupported">Ar paroli aizsargāti PDF netiek atbalstīti</string>
     <string name="entry_error_pdf_open">PDF failu neizdevās atvērt</string>
+    <string name="entry_error_backup_limit">Pārāk liels dublējumam: PDF faili kopā var būt līdz %1$d MB, foto līdz %2$d MB</string>
     <string name="entry_error_photos_open">Fotoattēlus neizdevās atvērt</string>
     <string name="entry_error_camera_permission">Lai fotografētu, vajadzīga kameras atļauja</string>
     <string name="entry_title_front_side">priekšpuse</string>

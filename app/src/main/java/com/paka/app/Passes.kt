@@ -1,5 +1,7 @@
 package com.paka.app
 
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.UUID
 
 sealed interface PassContent {
@@ -44,6 +46,39 @@ data class Card(
         stack: String? = null,
         references: List<PassReference> = emptyList(),
     ) : this(name, PassContent.Barcode(format, data), id, createdAt, notes, stack, references)
+}
+
+/** Pass fields shared by the encrypted card store and portable backups (references excluded). */
+internal fun Card.toJson(): JSONObject {
+    val item = JSONObject()
+        .put("id", id)
+        .put("name", name)
+        .put("createdAt", createdAt)
+        .put("notes", notes)
+        .put("stack", stack ?: JSONObject.NULL)
+    when (val content = content) {
+        is PassContent.Barcode -> item
+            .put("type", "barcode")
+            .put("data", content.data)
+            .put("format", content.format.name)
+        is PassContent.Pdf -> item
+            .put("type", "pdf")
+            .put("documentId", content.documentId)
+            .put("pageCount", content.pageCount)
+        is PassContent.Photos -> item
+            .put("type", "photos")
+            .put("pages", JSONArray().also { pages ->
+                content.pages.forEach { page ->
+                    pages.put(
+                        JSONObject()
+                            .put("documentId", page.documentId)
+                            .put("width", page.width)
+                            .put("height", page.height),
+                    )
+                }
+            })
+    }
+    return item
 }
 
 internal val Card.barcodeContent: PassContent.Barcode?

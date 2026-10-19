@@ -4,6 +4,13 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- Imports that would push stored PDFs past 20 MB or photos past 32 MB are
+  refused with a clear message, so an export can always include every pass.
+- A restore refused because storage is read-only now explains the recovery
+  path: reopen Paka, and if storage stays read-only, clear Paka's storage in
+  Android Settings, then restore.
+- The card store and portable backups share one pass and 2FA account JSON
+  writer, and a full export/restore round trip is now tested.
 - Scanning no longer saves a decoder's display text as a pass payload. GS1
   symbols (other than DataBar Expanded) and codes containing control or binary
   bytes, other than Aztec and PDF417, are refused with "cannot be rendered

@@ -72,7 +72,7 @@
     <string name="scan_camera_permission">Skannimiseks on vaja kaamera luba</string>
     <string name="demo_enabled">Ajutised demoandmed on lubatud</string>
     <string name="demo_disabled">Pärisandmed taastatud</string>
-    <string name="restore_storage_unhealthy">Salvestusruum peab enne taastamist korras olema</string>
+    <string name="restore_storage_unhealthy">Salvestusruum on kirjutuskaitstud. Ava Paka uuesti; kui see jääb kirjutuskaitstuks, tühjenda Androidi seadetes Paka salvestusruum ja taasta siis</string>
     <string name="restore_failed">Varukoopiat ei õnnestunud taastada</string>
     <string name="restore_interrupted">Taastamine katkes; andmete kontrollimiseks ava Paka uuesti</string>
     <string name="storage_read_only_notice">Salvestusruum on kirjutuskaitstud, kuni see taastatakse.</string>

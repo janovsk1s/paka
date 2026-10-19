@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF-kortit vaativat Android 11:n tai uudemman</string>
     <string name="entry_error_password_pdf_unsupported">Salasanasuojattuja PDF-tiedostoja ei tueta</string>
     <string name="entry_error_pdf_open">PDF-tiedostoa ei voitu avata</string>
+    <string name="entry_error_backup_limit">Liian suuri varmuuskopioon: PDF-tiedostot voivat olla yhteensä %1$d Mt ja kuvat %2$d Mt</string>
     <string name="entry_error_photos_open">Kuvia ei voitu avata</string>
     <string name="entry_error_camera_permission">Kameran käyttöoikeus tarvitaan kuvaamiseen</string>
     <string name="entry_title_front_side">etupuoli</string>
