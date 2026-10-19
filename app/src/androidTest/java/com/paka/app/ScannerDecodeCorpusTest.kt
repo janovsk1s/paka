@@ -59,6 +59,17 @@ class ScannerDecodeCorpusTest {
     }
 
     @Test
+    fun tiltedItfNeverImportsAShorterPayload() {
+        // Without Paka's guard, zxing-cpp read only a shorter, valid ITF at these tilts.
+        listOf("123456" to 40f, "0123456789" to 26f, "00012345678905" to 24f).forEach { (payload, degrees) ->
+            val sample = Sample(PakaFormat.ITF, payload)
+            val frame = render(sample).onPaper().onPaper().rotated(degrees)
+            val read = outcome(sample, "tilt° ${degrees.label()}", frame)
+            assertTrue("ITF $payload tilted ${degrees.label()}° imported a wrong payload", read != Outcome.WRONG)
+        }
+    }
+
+    @Test
     fun payloadsPakaCannotReRenderAreRefused() {
         // GS1-128: FNC1 in the first position is not part of a stored payload.
         // ZXing writes \u00f1 as FNC1: (01)09501101530003 (17)261231 (10)PAKA42.
@@ -226,11 +237,8 @@ class ScannerDecodeCorpusTest {
         val KNOWN_LIMITS = setOf(
             // This wide, 13-column PDF417 decodes at 2° of tilt but no further.
             "PDF417 tilt° 4",
-            // ITF needs its whole 10-module quiet zone, which guards against partial reads...
+            // ITF needs its whole 10-module quiet zone.
             "ITF quiet zone clear 0.75",
-            // ...yet at 20° a scan line still ends inside the bars and imports a shorter ITF.
-            // shortcut: exempts a real misread, remove once the scanner rejects partial ITF reads.
-            "ITF tilt° 20",
         )
     }
 }

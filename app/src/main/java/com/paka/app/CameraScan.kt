@@ -46,6 +46,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import zxingcpp.BarcodeReader
 import kotlin.math.abs
+import kotlin.math.hypot
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -341,6 +342,9 @@ private const val LOW_LIGHT_FRAMES = 6
 private const val BRIGHT_LIGHT_FRAMES = 4
 internal const val FOCUS_RETRY_MS = 2_200L
 private const val MAX_SCAN_SYMBOLS = 5
+private const val ITF_MODULES_PER_DIGIT = 9
+private const val ITF_GUARD_MODULES = 9
+private const val MIN_ITF_READ_HEIGHT_MODULES = 5
 internal const val SCAN_GUIDE_FRACTION = 0.70f
 
 /**
@@ -361,13 +365,25 @@ internal val scanReaderOptions: List<BarcodeReader.Options>
         )
     }
 
-/** Symbols Paka can map, from the first reader that finds any. */
+/**
+ * Symbols Paka can map, from the first reader that finds any. ITF has no mandatory check
+ * digit and its stop pattern also occurs inside the data, so scan lines leaving a tilted
+ * code through its top or bottom edge can decode a shorter, valid ITF. Those lines all
+ * exit within one wide space, so they span at most three modules of bar height; a whole
+ * read spans far more. Modules assume 3:1 wide bars.
+ */
 internal fun readScanSymbols(
     readers: List<BarcodeReader>,
     read: BarcodeReader.() -> List<BarcodeReader.Result>,
 ): List<BarcodeReader.Result> = readers.firstNotNullOfOrNull { reader ->
     reader.read().filter {
-        (it.text != null || it.bytes != null) && mapFormat(it.format) != null
+        val p = it.position
+        val length = hypot((p.topRight.x - p.topLeft.x).toFloat(), (p.topRight.y - p.topLeft.y).toFloat())
+        val height = hypot((p.bottomLeft.x - p.topLeft.x).toFloat(), (p.bottomLeft.y - p.topLeft.y).toFloat())
+        val modules = ITF_MODULES_PER_DIGIT * (it.text?.length ?: 0) + ITF_GUARD_MODULES
+        val partialItf = it.format == BarcodeReader.Format.ITF &&
+            height * modules < length * MIN_ITF_READ_HEIGHT_MODULES
+        (it.text != null || it.bytes != null) && mapFormat(it.format) != null && !partialItf
     }.takeIf { it.isNotEmpty() }
 }.orEmpty()
 

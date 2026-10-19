@@ -104,6 +104,12 @@ Notable changes to Paka are documented here.
 - An emulator test now decodes Paka's own renders, clean and degraded, through
   the scanner's real zxing-cpp path and requires the exact original payload,
   covering the decoder side of the scanner checklist without a phone.
+- A tilted ITF barcode can no longer scan as a shorter, wrong number. Scan
+  lines leaving the code through its top or bottom edge could stop early on a
+  pattern that is itself valid ITF; the scanner now ignores ITF reads that
+  span only a thin band of the bars. The same shorter read used to sit beside
+  the real one and block the scan, so an ITF-14 tilted up to about 16° now
+  scans where it stopped at about 5°.
 
 ## 0.15.3 — 2026-07-24
 
