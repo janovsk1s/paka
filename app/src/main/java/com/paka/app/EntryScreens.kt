@@ -195,7 +195,8 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                 scope.launch {
                     pdfChecking = true
                     pdfError = null
-                    val result = importPdfOwned(context, uri)
+                    val replacing = setOfNotNull(pdfImport?.takeIf { it.created }?.documentId)
+                    val result = importPdfOwned(context, uri, replacing)
                     pdfChecking = false
                     result.onSuccess { imported ->
                         pdfImport?.takeIf { it.created && it.documentId != imported.documentId }?.let { orphan ->
@@ -235,6 +236,13 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
             photos = photoImports.filter { it.created && it.page.documentId !in keptIds },
         )
         photoImports = normalized
+    }
+
+    // Pending photos that a pick of [sides] will replace in mergePhotoImports.
+    fun replacedPhotoIds(sides: Int): Set<String> = if (photoImports.size == 1 && sides == 1) {
+        emptySet()
+    } else {
+        photoImports.filter { it.created }.map { it.page.documentId }.toSet()
     }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -278,6 +286,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
 
     if (capturing) {
         PhotoCaptureScreen(
+            replacing = replacedPhotoIds(1),
             onCaptured = { imported ->
                 mergePhotoImports(listOf(imported))
                 capturing = false
@@ -307,7 +316,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                 initialBytes = currentBytes,
                 cancelLabel = stringResource(R.string.entry_action_cancel),
                 contentDescription = stringResource(R.string.entry_cd_selected_document_photo),
-                onUse = { bytes -> PhotoStore.importBytes(context, bytes) },
+                onUse = { bytes -> PhotoStore.importBytes(context, bytes, replacedPhotoIds(reviewBatch.bytes.size)) },
                 onUsed = { imported ->
                     val reviewed = reviewBatch.reviewed + imported
                     if (reviewed.size >= reviewBatch.bytes.size) {
@@ -331,8 +340,11 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
             onTake = startCapture,
             onChoose = {
                 photoSourceMenu = false
-                context.setPakaExternalFlowActive(true)
-                photoPicker.launch(arrayOf("image/*"))
+                context.launchPakaExternal(
+                    photoPicker,
+                    arrayOf("image/*"),
+                    resources.getString(R.string.detail_file_picker_failed),
+                )
             },
             onBack = { photoSourceMenu = false },
         )
@@ -415,8 +427,11 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                                 if (photoMode) {
                                     photoSourceMenu = true
                                 } else {
-                                    context.setPakaExternalFlowActive(true)
-                                    pdfPicker.launch(arrayOf("application/pdf"))
+                                    context.launchPakaExternal(
+                                        pdfPicker,
+                                        arrayOf("application/pdf"),
+                                        resources.getString(R.string.detail_file_picker_failed),
+                                    )
                                 }
                             },
                         )
@@ -475,8 +490,11 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                                     pdfError = null
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                         if (!pdfChecking) {
-                                            context.setPakaExternalFlowActive(true)
-                                            pdfPicker.launch(arrayOf("application/pdf"))
+                                            context.launchPakaExternal(
+                                                pdfPicker,
+                                                arrayOf("application/pdf"),
+                                                resources.getString(R.string.detail_file_picker_failed),
+                                            )
                                         }
                                     } else {
                                         pdfError = resources.getString(R.string.entry_error_pdf_requires_android_11)

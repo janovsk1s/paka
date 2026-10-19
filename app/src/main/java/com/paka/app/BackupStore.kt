@@ -31,9 +31,9 @@ internal data class BackupData(
 internal class BackupLimitException : IllegalStateException("Stored documents would exceed the backup limit")
 
 /** Plaintext bytes of the primary encrypted files ending in [suffix], skipping [excludeId]. */
-internal fun storedPlaintextBytes(directory: File, suffix: String, excludeId: String): Long =
+internal fun storedPlaintextBytes(directory: File, suffix: String, excludeIds: Set<String>): Long =
     directory.listFiles().orEmpty()
-        .filter { it.name.endsWith(suffix) && it.name != "$excludeId$suffix" }
+        .filter { it.name.endsWith(suffix) && it.name.removeSuffix(suffix) !in excludeIds }
         .sumOf { (it.length() - ENVELOPE_OVERHEAD_BYTES).coerceAtLeast(0) }
 
 // Magic, IV and GCM tag: every PDF and photo envelope version carries 32 bytes.

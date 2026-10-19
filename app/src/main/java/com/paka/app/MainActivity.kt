@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.os.Bundle
 import android.os.Build
 import android.os.PersistableBundle
@@ -16,6 +17,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -199,6 +201,15 @@ internal fun Context.setPakaCriticalFlowActive(active: Boolean) {
     (this as? MainActivity)?.setCriticalFlowActive(active)
 }
 
+/** Opens a system picker or viewer; a phone without one shows [failureMessage] instead of crashing. */
+internal fun <I> Context.launchPakaExternal(launcher: ActivityResultLauncher<I>, input: I, failureMessage: String) {
+    setPakaExternalFlowActive(true)
+    runCatching { launcher.launch(input) }.onFailure {
+        setPakaExternalFlowActive(false)
+        Toast.makeText(this, failureMessage, Toast.LENGTH_LONG).show()
+    }
+}
+
 @Composable
 internal fun PakaApp(
     homeResetSignal: Int = 0,
@@ -233,30 +244,14 @@ private fun PakaAppContent(
     val resources = LocalResources.current
     var initialLoad by remember { mutableStateOf<InitialAppLoad?>(null) }
     LaunchedEffect(Unit) {
-        StoreWriteCoordinator.awaitPendingWrites()
-        initialLoad = withContext(Dispatchers.IO) {
-            val recovery = StoreWriteCoordinator.recoverInterruptedRestore(context)
-            val loadedCards = CardStore.load(context)
-            val loadedCodes = SecureStore.loadAccounts(context)
-            val recoveryWarning = when (recovery) {
-                RestoreRecoveryOutcome.NONE -> null
-                RestoreRecoveryOutcome.ROLLED_BACK -> resources.getString(R.string.restore_rolled_back_notice)
-                RestoreRecoveryOutcome.COMMITTED -> resources.getString(R.string.restore_completed_notice)
-                RestoreRecoveryOutcome.FAILED -> resources.getString(R.string.restore_failed_notice)
+        val load = loadStores(context, resources)
+        if (load.cards.writable) {
+            withContext(Dispatchers.IO) {
+                PdfStore.deleteOrphans(context, load.cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
+                PhotoStore.deleteOrphans(context, load.cards.value.photoDocumentIds())
             }
-            val cards = loadedCards.copy(
-                warning = listOfNotNull(recoveryWarning, loadedCards.warning)
-                    .joinToString(" ")
-                    .takeIf { it.isNotBlank() },
-                writable = loadedCards.writable && recovery != RestoreRecoveryOutcome.FAILED,
-            )
-            val codes = loadedCodes.copy(writable = loadedCodes.writable && recovery != RestoreRecoveryOutcome.FAILED)
-            if (cards.writable) {
-                PdfStore.deleteOrphans(context, cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
-                PhotoStore.deleteOrphans(context, cards.value.photoDocumentIds())
-            }
-            InitialAppLoad(cards = cards, codes = codes)
         }
+        initialLoad = load
     }
 
     val loaded = initialLoad
@@ -288,6 +283,30 @@ private fun PakaAppContent(
         officialFontEnabled = officialFontEnabled,
         onOfficialFont = onOfficialFont,
     )
+}
+
+/** Reads both stores the way a fresh start does, finishing any interrupted restore first. */
+private suspend fun loadStores(context: Context, resources: Resources): InitialAppLoad {
+    StoreWriteCoordinator.awaitPendingWrites()
+    return withContext(Dispatchers.IO) {
+        val recovery = StoreWriteCoordinator.recoverInterruptedRestore(context)
+        val loadedCards = CardStore.load(context)
+        val loadedCodes = SecureStore.loadAccounts(context)
+        val recoveryWarning = when (recovery) {
+            RestoreRecoveryOutcome.NONE -> null
+            RestoreRecoveryOutcome.ROLLED_BACK -> resources.getString(R.string.restore_rolled_back_notice)
+            RestoreRecoveryOutcome.COMMITTED -> resources.getString(R.string.restore_completed_notice)
+            RestoreRecoveryOutcome.FAILED -> resources.getString(R.string.restore_failed_notice)
+        }
+        val cards = loadedCards.copy(
+            warning = listOfNotNull(recoveryWarning, loadedCards.warning)
+                .joinToString(" ")
+                .takeIf { it.isNotBlank() },
+            writable = loadedCards.writable && recovery != RestoreRecoveryOutcome.FAILED,
+        )
+        val codes = loadedCodes.copy(writable = loadedCodes.writable && recovery != RestoreRecoveryOutcome.FAILED)
+        InitialAppLoad(cards = cards, codes = codes)
+    }
 }
 
 @Composable
@@ -406,6 +425,26 @@ private fun LoadedPakaApp(
     LaunchedEffect(Unit) {
         cardLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
         codeLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
+
+    // A failed save leaves a store read-only. Each return to Paka re-reads the
+    // disk, so the "Reopen Paka" advice works without clearing storage. No
+    // orphan cleanup here: an unsaved entry may hold a fresh import.
+    LaunchedEffect(resumeSignal) {
+        if (cardsWritable && codesWritable) return@LaunchedEffect
+        val disk = loadStores(context, resources)
+        if (!cardsWritable && disk.cards.writable) {
+            cards = disk.cards.value
+            committedCards = disk.cards.value
+            cardsWritable = true
+            disk.cards.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        }
+        if (!codesWritable && disk.codes.writable) {
+            codes = disk.codes.value
+            committedCodes = disk.codes.value
+            codesWritable = true
+            disk.codes.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        }
     }
 
     LaunchedEffect(pendingClipboard, resumeSignal) {
@@ -793,6 +832,11 @@ private fun LoadedPakaApp(
         BackHandler { scanning = false }
         ScanScreen(
             automaticLightEnabled = autoLightEnabled,
+            refusalMessage = if (mode == Mode.CODES) {
+                R.string.scan_not_2fa
+            } else {
+                R.string.entry_error_code_cannot_render_exactly
+            },
             onScanned = { result ->
                 scanning = false
                 if (mode == Mode.CODES) {
@@ -800,11 +844,12 @@ private fun LoadedPakaApp(
                     if (account != null) addCode(account)
                     else Toast.makeText(context, R.string.scan_not_2fa, Toast.LENGTH_SHORT).show()
                 } else {
-                    // Same render-and-verify gate as manual entry: never save a pass that cannot display.
+                    // Same render-and-verify gate as manual entry, at the width the pass will
+                    // display, so the verified bitmap is the one the cache then shows.
                     scope.launch {
                         val renders = withContext(Dispatchers.Default) {
-                            Barcodes.generate(result.format, result.data, passWidthPx)
-                                ?.also { it.recycle() } != null
+                            val targetWidthPx = BarcodeDisplay.targetWidthPx(result.format, screenWidthPx, passWidthPx)
+                            Barcodes.generateCached(result.format, result.data, targetWidthPx) != null
                         }
                         if (renders) {
                             pendingScan = result
@@ -834,7 +879,12 @@ private fun LoadedPakaApp(
             stackMembers = { stackName ->
                 activeCards.filter { it.stack == stackName }.map { ManageRow(it.id, it.name) }
             },
-            onStackMove = { id, up -> saveCards(activeCards.movedWithinStack(id, up)) },
+            onStackMove = { id, up ->
+                val moved = activeCards.movedWithinStack(id, up)
+                // Back returns to the stack page that shows this pass, not to its old position.
+                val page = moved.filter { it.stack == fresh.stack }.indexOfFirst { it.id == fresh.id }
+                if (saveCards(moved) && page >= 0) stackPage.intValue = page
+            },
             onBack = { detailCard = null },
         )
         return

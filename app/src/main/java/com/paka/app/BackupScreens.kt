@@ -223,8 +223,11 @@ internal fun BackupScreen(
                                         if (action == BackupMenuAction.EXPORT) {
                                             step = BackupStep.EXPORT_PASSWORD
                                         } else {
-                                            context.setPakaExternalFlowActive(true)
-                                            importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                                            context.launchPakaExternal(
+                                                importLauncher,
+                                                arrayOf("application/octet-stream", "application/*"),
+                                                resources.getString(R.string.detail_file_picker_failed),
+                                            )
                                         }
                                     }
                                 },
@@ -336,8 +339,11 @@ internal fun BackupScreen(
                         result.onSuccess { bytes ->
                             pendingExport = bytes
                             val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                            context.setPakaExternalFlowActive(true)
-                            exportLauncher.launch(resources.getString(R.string.backup_export_filename, stamp))
+                            context.launchPakaExternal(
+                                exportLauncher,
+                                resources.getString(R.string.backup_export_filename, stamp),
+                                resources.getString(R.string.detail_file_picker_failed),
+                            )
                         }.onFailure { error ->
                             val message = if (error.message?.contains("too large", ignoreCase = true) == true) {
                                 resources.getString(R.string.backup_too_large)

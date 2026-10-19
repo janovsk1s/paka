@@ -3,6 +3,7 @@ package com.paka.app
 import android.os.SystemClock
 import android.util.Size
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
@@ -54,7 +55,12 @@ import java.util.concurrent.atomic.AtomicReference
 data class ScanResult(val data: String, val format: PakaFormat)
 
 @Composable
-fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
+fun ScanScreen(
+    automaticLightEnabled: Boolean,
+    @StringRes refusalMessage: Int,
+    onScanned: (ScanResult) -> Unit,
+    onBack: () -> Unit,
+) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val haptics = LocalHapticFeedback.current
@@ -93,6 +99,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
         )
     }
     val handled = remember { AtomicBoolean(false) }
+    val refusalShown = remember { AtomicBoolean(false) }
     val disposed = remember { AtomicBoolean(false) }
     val executor = remember {
         Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "paka-barcode-scan") }
@@ -227,43 +234,41 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                                                             mapFormat(it.format) != null
                                                     }.takeIf { it.isNotEmpty() }
                                                 }.orEmpty()
+                                                // A refused symbol does not end the scan: the wanted
+                                                // code may sit beside it.
+                                                val accepted = symbols.mapNotNull { symbol ->
+                                                    val format = mapFormat(symbol.format) ?: return@mapNotNull null
+                                                    selectScanPayload(
+                                                        format,
+                                                        symbol.contentType,
+                                                        symbol.text,
+                                                        symbol.bytes,
+                                                    )?.let { ScanResult(it, format) to symbol.position.center() }
+                                                }
+                                                val onlyRefused = symbols.isNotEmpty() && accepted.isEmpty()
+                                                if (onlyRefused && refusalShown.compareAndSet(false, true)) {
+                                                    previewView.post {
+                                                        Toast.makeText(context, refusalMessage, Toast.LENGTH_LONG)
+                                                            .show()
+                                                    }
+                                                }
                                                 // zxing-cpp reports positions in the rotated
                                                 // (display-oriented) frame.
                                                 val rotated = image.imageInfo.rotationDegrees % 180 != 0
                                                 val viewSize = viewSizeRef.get()
                                                 val result = selectAimedSymbol(
-                                                    centers = symbols.map { it.position.center() },
+                                                    centers = accepted.map { it.second },
                                                     geometry = ScanGeometry(
                                                         frameWidth = if (rotated) image.height else image.width,
                                                         frameHeight = if (rotated) image.width else image.height,
                                                         viewWidth = viewSize[0],
                                                         viewHeight = viewSize[1],
                                                     ),
-                                                )?.let(symbols::get)
-                                                val format = result?.let { mapFormat(it.format) }
-                                                if (
-                                                    result != null &&
-                                                    format != null &&
-                                                    handled.compareAndSet(false, true)
-                                                ) {
-                                                    val data = selectScanPayload(
-                                                        format,
-                                                        result.contentType,
-                                                        result.text,
-                                                        result.bytes,
-                                                    )
+                                                )?.let { accepted[it].first }
+                                                if (result != null && handled.compareAndSet(false, true)) {
                                                     previewView.post {
-                                                        if (data == null) {
-                                                            Toast.makeText(
-                                                                context,
-                                                                R.string.entry_error_code_cannot_render_exactly,
-                                                                Toast.LENGTH_LONG,
-                                                            ).show()
-                                                            onBack()
-                                                        } else {
-                                                            performPakaHaptic(context, haptics)
-                                                            onScanned(ScanResult(data, format))
-                                                        }
+                                                        performPakaHaptic(context, haptics)
+                                                        onScanned(result)
                                                     }
                                                 }
                                             }

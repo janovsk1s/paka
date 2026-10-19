@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,6 +60,25 @@ class PdfStoreEnvelopeTest {
 
         assertThrows(IllegalStateException::class.java) { key.get(context) }
         assertEquals(64L, File(directory, "test.dek").length())
+    }
+
+    @Test
+    fun wrappedKeyReloadsFromDiskAndSurvivesALostPrimary() {
+        // Fresh instances bypass the in-memory cache, so these reads really unwrap the file.
+        fun key() = WrappedDataKey("keys", "test.dek", "paka_test_key", "test-dek".toByteArray())
+        val file = File(File(context.filesDir, "keys"), "test.dek")
+        val created = key().get(context).encoded
+
+        assertTrue(AtomicStore.backupFile(file).exists())
+        assertArrayEquals(created, key().get(context).encoded)
+
+        // A key written before the .bak existed gains one on its next load.
+        AtomicStore.backupFile(file).delete()
+        assertArrayEquals(created, key().get(context).encoded)
+        assertTrue(AtomicStore.backupFile(file).exists())
+
+        file.writeBytes(ByteArray(64) { 7 })
+        assertArrayEquals(created, key().get(context).encoded)
     }
 
     private fun encryptedFile() = File(File(context.filesDir, "pdfs"), "$id.pdf.enc")

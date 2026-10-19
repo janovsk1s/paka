@@ -4,6 +4,21 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- A store left read-only by a failed save is read again each time you return
+  to Paka, so "reopen Paka" recovers it without clearing storage.
+- The PDF and photo data keys now keep a backup copy like every other store;
+  an existing single key file gains one on its next load. One damaged key file
+  no longer locks every PDF or photo.
+- Swapping a pending PDF or photo pick no longer counts the one being replaced
+  against the backup size limit.
+- A phone without a file picker shows "File picker could not be opened" for
+  backup import/export, PDF, and photo picks instead of crashing.
+- The scanner skips a code it cannot reproduce exactly and keeps looking, so a
+  GS1 barcode next to the wanted code no longer ends the scan; in 2FA mode the
+  refusal reads "Not a 2FA QR code".
+- Scanned passes verify at the width the pass screen uses, and that render is
+  cached for display. Reordering a stack from Details keeps the stack on the
+  pass you were viewing.
 - UI consistency: the Backup and file-reference menus shrink long labels onto
   one line like every other menu; Details and entry screens share one footer
   lane, so "save" sits in the same place; explanatory and inline-error texts

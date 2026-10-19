@@ -186,12 +186,17 @@ internal object PdfStore {
     )
 
     @RequiresApi(30)
-    suspend fun import(context: Context, uri: Uri): Result<PdfImport> = runCatching {
+    suspend fun import(
+        context: Context,
+        uri: Uri,
+        // Pending imports about to be deleted do not count against the backup limit.
+        replacing: Set<String> = emptySet(),
+    ): Result<PdfImport> = runCatching {
         val bytes = readUri(context, uri)
         try {
             require(hasPdfHeader(bytes)) { "The selected file is not a PDF" }
             val documentId = documentDigest(bytes)
-            val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, documentId)
+            val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, replacing + documentId)
             if (stored + bytes.size > BackupStore.MAX_PDF_TOTAL_BYTES) throw BackupLimitException()
             val pageCount = PdfDocumentSession.fromBytes(bytes).use { session ->
                 require(session.pageCount in 1..1_000) { "PDF has an unsupported page count" }

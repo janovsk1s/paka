@@ -56,11 +56,18 @@ internal object PhotoStore {
         readUri(context, uri).also { inspect(it) }
     }
 
-    /** Ingests photo bytes already in memory (an in-app capture). The caller zeroes them. */
-    fun importBytes(context: Context, bytes: ByteArray): Result<PhotoImport> = runCatching {
+    /**
+     * Ingests photo bytes already in memory. The caller zeroes them. Pending
+     * imports in [replacing] are about to be deleted, so they do not count.
+     */
+    fun importBytes(
+        context: Context,
+        bytes: ByteArray,
+        replacing: Set<String> = emptySet(),
+    ): Result<PhotoImport> = runCatching {
         val dimensions = inspect(bytes)
         val documentId = documentDigest(bytes)
-        val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, documentId)
+        val stored = storedPlaintextBytes(File(context.filesDir, DIRECTORY), SUFFIX, replacing + documentId)
         if (stored + bytes.size > BackupStore.MAX_PHOTO_TOTAL_BYTES) throw BackupLimitException()
         val file = documentFile(context, documentId)
         val created = !file.exists()

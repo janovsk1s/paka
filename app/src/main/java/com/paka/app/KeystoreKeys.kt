@@ -98,20 +98,23 @@ internal class WrappedDataKey(
             cipher.updateAAD(aad)
             return cipher.doFinal(blob, MAGIC.size + IV_BYTES, blob.size - MAGIC.size - IV_BYTES)
         }
-        val raw = if (file.exists() || AtomicStore.backupFile(file).exists()) {
-            AtomicStore.readWithBackup(file, ::unwrap).getOrElse {
+        val backup = AtomicStore.backupFile(file)
+        val (blob, raw) = if (file.exists() || backup.exists()) {
+            AtomicStore.readWithBackup(file) { it to unwrap(it) }.getOrElse {
                 // Regenerating here would silently orphan every envelope-
                 // encrypted file, so fail loudly instead.
                 throw IllegalStateException("Data key could not be unwrapped", it)
             }.value
         } else {
-            ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes).also { fresh ->
-                val cipher = Cipher.getInstance(TRANSFORM)
-                cipher.init(Cipher.ENCRYPT_MODE, master)
-                cipher.updateAAD(aad)
-                AtomicStore.write(file, MAGIC + cipher.iv + cipher.doFinal(fresh)).getOrThrow()
-            }
+            val fresh = ByteArray(KEY_BYTES).also(SecureRandom()::nextBytes)
+            val cipher = Cipher.getInstance(TRANSFORM)
+            cipher.init(Cipher.ENCRYPT_MODE, master)
+            cipher.updateAAD(aad)
+            (MAGIC + cipher.iv + cipher.doFinal(fresh)) to fresh
         }
+        if (!file.exists()) AtomicStore.write(file, blob).getOrThrow()
+        // One damaged key file would orphan every envelope, so keep a .bak like the other stores.
+        if (!backup.exists()) AtomicStore.write(file, blob)
         require(raw.size == KEY_BYTES) { "Invalid data key" }
         val key = SecretKeySpec(raw, "AES")
         raw.fill(0)

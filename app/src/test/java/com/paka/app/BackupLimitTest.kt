@@ -17,8 +17,10 @@ class BackupLimitTest {
             file("a.display.enc", 500) // display copy, not part of backups
             file("c.image.enc", 4_000)
 
-            assertEquals(7_000L, storedPlaintextBytes(directory, ".image.enc", excludeId = "none"))
-            assertEquals(3_000L, storedPlaintextBytes(directory, ".image.enc", excludeId = "c"))
+            assertEquals(7_000L, storedPlaintextBytes(directory, ".image.enc", excludeIds = emptySet()))
+            assertEquals(3_000L, storedPlaintextBytes(directory, ".image.enc", excludeIds = setOf("c")))
+            // Swapping a pending pick: the one being replaced does not count either.
+            assertEquals(1_000L, storedPlaintextBytes(directory, ".image.enc", excludeIds = setOf("b", "c")))
         } finally {
             directory.deleteRecursively()
         }

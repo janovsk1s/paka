@@ -85,6 +85,7 @@ import kotlin.math.min
  */
 @Composable
 internal fun PhotoCaptureScreen(
+    replacing: Set<String>,
     onCaptured: (PhotoImport) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -179,7 +180,7 @@ internal fun PhotoCaptureScreen(
             initialBytes = captured,
             cancelLabel = stringResource(R.string.capture_action_retake),
             contentDescription = stringResource(R.string.capture_cd_captured_document_photo),
-            onUse = { bytes -> PhotoStore.importBytes(context, bytes) },
+            onUse = { bytes -> PhotoStore.importBytes(context, bytes, replacing) },
             onUsed = { imported ->
                 capturedBytes = null
                 onCaptured(imported)

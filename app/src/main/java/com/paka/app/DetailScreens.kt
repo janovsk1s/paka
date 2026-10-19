@@ -286,18 +286,18 @@ internal fun CardDetail(
         context.setPakaExternalFlowActive(false)
     }
     val chooseReferences: () -> Unit = {
-        context.setPakaExternalFlowActive(true)
-        runCatching { addReferencePicker.launch(arrayOf("*/*")) }.onFailure {
-            context.setPakaExternalFlowActive(false)
-            Toast.makeText(context, resources.getString(R.string.detail_file_picker_failed), Toast.LENGTH_LONG).show()
-        }
+        context.launchPakaExternal(
+            addReferencePicker,
+            arrayOf("*/*"),
+            resources.getString(R.string.detail_file_picker_failed),
+        )
     }
     val replaceReference: () -> Unit = {
-        context.setPakaExternalFlowActive(true)
-        runCatching { replaceReferencePicker.launch(arrayOf("*/*")) }.onFailure {
-            context.setPakaExternalFlowActive(false)
-            Toast.makeText(context, resources.getString(R.string.detail_file_picker_failed), Toast.LENGTH_LONG).show()
-        }
+        context.launchPakaExternal(
+            replaceReferencePicker,
+            arrayOf("*/*"),
+            resources.getString(R.string.detail_file_picker_failed),
+        )
     }
     val openReference: (Int) -> Unit = { index ->
         references.getOrNull(index)?.let { selected ->
@@ -305,11 +305,7 @@ internal fun CardDetail(
                 setDataAndType(Uri.parse(selected.uri), selected.mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.setPakaExternalFlowActive(true)
-            runCatching { referenceViewer.launch(intent) }.onFailure {
-                context.setPakaExternalFlowActive(false)
-                Toast.makeText(context, resources.getString(R.string.detail_file_open_failed), Toast.LENGTH_LONG).show()
-            }
+            context.launchPakaExternal(referenceViewer, intent, resources.getString(R.string.detail_file_open_failed))
         }
     }
     val persistAndBack = {
