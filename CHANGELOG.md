@@ -9,8 +9,11 @@ Notable changes to Paka are documented here.
   the list in the first frame once they are ready instead of showing
   "Opening…" first. Startup no longer flushes the app directory to disk
   when there is nothing to clean up, and encryption reuses each Keystore key
-  handle instead of looking it up on every read and write. On the `Paka_LP3`
-  emulator the list appears about 1.4× sooner (median of 24 cold starts).
+  handle instead of looking it up on every read and write. Demo content is
+  generated only when demo mode is on. On the `Paka_LP3` emulator the list
+  appears 1.3–1.4× sooner (medians of 24 cold starts). An empty Compose
+  screen takes 188 ms against the old build's 270 ms there, so Paka's own
+  share of startup fell from about 82 ms to about 20 ms.
 - A pass whose code was prefetched shows the code in the first frame instead
   of a brief "Rendering…", and the home list prefetches the page being looked
   at rather than always the first six passes. Opening a pass is about 2.3×

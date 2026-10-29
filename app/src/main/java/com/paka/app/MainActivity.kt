@@ -395,7 +395,10 @@ private fun LoadedPakaApp(
             insets.isAppearanceLightNavigationBars = Palette.lightMode
         }
     }
-    var demoContent by remember { mutableStateOf(DemoData.create(context)) }
+    // Enabling demo mode always generates fresh content, so a launch with it off skips the work.
+    var demoContent by remember {
+        mutableStateOf(if (demoModeEnabled) DemoData.create(context) else DemoContent(emptyList(), emptyList()))
+    }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
     var pendingClipboard by remember { mutableStateOf<PendingClipboard?>(null) }
     val scope = rememberCoroutineScope()
