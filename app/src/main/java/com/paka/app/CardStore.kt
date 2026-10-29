@@ -189,22 +189,26 @@ internal object CardStore {
         }
     }
 
-    private fun serializeReference(reference: PassReference): JSONObject = JSONObject()
-        .put("uri", reference.uri)
-        .put("name", reference.name)
-        .put("mimeType", reference.mimeType)
+    /** The rules [parse] enforces; a reference written without them would make the store unreadable. */
+    fun requireValidReference(reference: PassReference) {
+        require(reference.uri.startsWith("content://") && reference.uri.length <= 8_192) { "Invalid reference URI" }
+        require(reference.name.isNotBlank() && reference.name.length <= 512) { "Invalid reference name" }
+        require(reference.mimeType.isNotBlank() && reference.mimeType.length <= 256) { "Invalid reference type" }
+    }
+
+    private fun serializeReference(reference: PassReference): JSONObject {
+        requireValidReference(reference)
+        return JSONObject()
+            .put("uri", reference.uri)
+            .put("name", reference.name)
+            .put("mimeType", reference.mimeType)
+    }
 
     private fun parseReference(reference: JSONObject): PassReference = PassReference(
-        uri = reference.getString("uri").also {
-            require(it.startsWith("content://") && it.length <= 8_192) { "Invalid reference URI" }
-        },
-        name = reference.getString("name").also {
-            require(it.isNotBlank() && it.length <= 512) { "Invalid reference name" }
-        },
-        mimeType = reference.optString("mimeType", "application/octet-stream").also {
-            require(it.isNotBlank() && it.length <= 256) { "Invalid reference type" }
-        },
-    )
+        uri = reference.getString("uri"),
+        name = reference.getString("name"),
+        mimeType = reference.optString("mimeType", "application/octet-stream"),
+    ).also(::requireValidReference)
 
     private fun erasePlaintext(file: File) {
         if (!file.exists()) return

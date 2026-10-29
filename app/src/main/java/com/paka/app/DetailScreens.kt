@@ -83,21 +83,23 @@ private fun Context.formatDate(ms: Long): String =
  */
 private fun Context.retainedReference(uri: Uri): PassReference? = runCatching {
     contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-}.mapCatching { passReference(uri) }.getOrNull()
+}.mapCatching { passReference(uri) }.onFailure {
+    // A link CardStore would refuse is never saved, so its grant would only leak.
+    runCatching { contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+}.getOrNull()
 
 private fun Context.passReference(uri: Uri): PassReference {
     val displayName = runCatching {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0) else null
         }
-    }.getOrNull().orEmpty().ifBlank {
-        uri.lastPathSegment?.substringAfterLast('/') ?: getString(R.string.detail_reference_fallback)
-    }
+    }.getOrNull().orEmpty().ifBlank { uri.lastPathSegment?.substringAfterLast('/').orEmpty() }
+    // Every field must pass CardStore's reference checks, or the saved store could not be read back.
     return PassReference(
         uri = uri.toString(),
-        name = displayName.take(512),
-        mimeType = (contentResolver.getType(uri) ?: "application/octet-stream").take(256),
-    )
+        name = displayName.take(512).ifBlank { getString(R.string.detail_reference_fallback) },
+        mimeType = contentResolver.getType(uri)?.take(256)?.takeIf(String::isNotBlank) ?: "application/octet-stream",
+    ).also(CardStore::requireValidReference)
 }
 
 @Composable

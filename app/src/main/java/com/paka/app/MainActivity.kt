@@ -111,7 +111,8 @@ private fun releaseUnreferencedPassContent(context: Context, card: Card) {
 /** Clears the clipboard only while it still holds Paka's code, never another app's later copy. */
 private fun clearOwnedClip(context: Context, value: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
+    // Paka copies plain text; coerceToText could read another app's URI clip on the UI thread.
+    val current = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
     if (current == value) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
         else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))

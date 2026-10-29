@@ -4,6 +4,32 @@ Notable changes to Paka are documented here.
 
 ## Unreleased
 
+- Faster cold start: Paka decrypts passes and 2FA codes while its first
+  screen is still being built, decrypts both stores side by side, and draws
+  the list in the first frame once they are ready instead of showing
+  "Opening…" first. Startup no longer flushes the app directory to disk
+  when there is nothing to clean up, and encryption reuses each Keystore key
+  handle instead of looking it up on every read and write. On the `Paka_LP3`
+  emulator the list appears about 1.4× sooner (median of 24 cold starts).
+- A pass whose code was prefetched shows the code in the first frame instead
+  of a brief "Rendering…", and the home list prefetches the page being looked
+  at rather than always the first six passes. Opening a pass is about 2.3×
+  faster on the emulator.
+- The baseline profile is re-recorded over onboarding, the pass list, opening
+  a pass, and the 2FA list; the old one predated most current screens. The
+  generator now follows each screen change instead of racing it.
+- Pressing Home while a captured document photo is still processing no longer
+  crashes Paka.
+- A linked file whose provider reports a blank type or name is saved with a
+  fallback, and the pass store refuses any reference it could not read back.
+  Before, such a link saved fine but left a store that failed to load on the
+  next start.
+- An unexpected barcode-library error on an unusual payload shows "Couldn't
+  render this code" instead of crashing; on the first home page it would have
+  crashed every launch.
+- Clearing a copied 2FA code no longer reads another app's clipboard content
+  on the UI thread.
+
 - A store left read-only by a failed save is read again each time you return
   to Paka, so "reopen Paka" recovers it without clearing storage.
 - The PDF and photo data keys now keep a backup copy like every other store;

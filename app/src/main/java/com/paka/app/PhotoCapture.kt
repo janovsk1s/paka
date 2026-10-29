@@ -136,8 +136,12 @@ internal fun PhotoCaptureScreen(
         onDispose {
             disposed.set(true)
             latestCapturedBytes.value?.fill(0)
-            mainExecutor.execute { stopCamera(resetUi = false) }
-            captureExecutor.shutdownNow()
+            // Unbinding aborts an in-flight capture by posting its callback to
+            // captureExecutor; shutting that down first would crash the app.
+            mainExecutor.execute {
+                stopCamera(resetUi = false)
+                captureExecutor.shutdown()
+            }
         }
     }
 

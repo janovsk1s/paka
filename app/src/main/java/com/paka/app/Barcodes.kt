@@ -239,7 +239,9 @@ private fun zxingRawMatrix(format: BarcodeFormat, data: String): BitMatrix? = tr
         }
 } catch (_: WriterException) {
     null
-} catch (_: IllegalArgumentException) {
+} catch (_: RuntimeException) {
+    // Encoder internals can throw other runtime errors on odd input; a stored
+    // pass that crashed home prefetch would crash every launch.
     null
 }
 

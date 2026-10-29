@@ -38,7 +38,8 @@ internal fun generateDataBar(data: String, targetWidthPx: Int): Bitmap? = try {
     verifiedBitmap(width, height, pixels, PakaFormat.DATABAR_EXPANDED, data)
 } catch (_: OkapiException) {
     null
-} catch (_: IllegalArgumentException) {
+} catch (_: RuntimeException) {
+    // As for ZXing: an encoder failure must not crash home prefetch on every launch.
     null
 }
 
