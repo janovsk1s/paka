@@ -13,7 +13,7 @@
     <string name="backup_photo_compatibility">Šajā dublējumā ir foto caurlaides — to var atjaunot tikai ar Paka 0.14 vai jaunāku versiju.</string>
     <string name="backup_minimum_characters">vismaz %1$d rakstzīmes</string>
     <string name="backup_repeat_passphrase">atkārtot paroles frāzi</string>
-    <string name="backup_passphrases_do_not_match">paroles frāzes nesakrīt</string>
+    <string name="backup_passphrases_do_not_match">Paroles frāzes nesakrīt</string>
     <string name="backup_encrypting">šifrē…</string>
     <string name="backup_save_encrypted">saglabāt šifrētu dublējumu</string>
     <string name="backup_import_instructions">Ievadi šī dublējuma paroles frāzi.</string>

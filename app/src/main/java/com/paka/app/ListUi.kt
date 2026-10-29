@@ -23,6 +23,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -107,7 +108,7 @@ internal fun EmptyHint(text: String) {
 /** A vertically scrolling column with a proportional scrollbar shown only on overflow. */
 @Composable
 internal fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @Composable ColumnScope.() -> Unit) {
-    val state = rememberHapticScrollState()
+    val state = rememberScrollState()
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().padding(top = topPadding, end = 14.dp, bottom = 8.dp).hardSnapVerticalScroll(state),
@@ -116,11 +117,6 @@ internal fun ScrollList(topPadding: Dp = 44.dp, spacing: Dp = 36.dp, content: @C
         )
         VerticalScrollbar(state, Modifier.align(Alignment.TopEnd))
     }
-}
-
-@Composable
-internal fun rememberHapticScrollState(): ScrollState {
-    return rememberScrollState()
 }
 
 /** Follow the finger while dragging, then cut immediately to the nearest viewport boundary. */
@@ -228,22 +224,19 @@ internal fun AutoFitText(
     }
 }
 
-private const val ITEMS_PER_PAGE = 5
+internal const val ITEMS_PER_PAGE = 5
 
 /** Five fixed row slots per page. Swipes replace the page instantly on release. */
 @Composable
 internal fun <T> PagedList(
     items: List<T>,
     endPadding: Dp = 14.dp,
-    onPageChange: ((List<T>) -> Unit)? = null,
+    pageState: MutableIntState? = null,
     content: @Composable (T) -> Unit,
 ) {
     val pages = remember(items) { items.chunked(ITEMS_PER_PAGE) }
     if (pages.isEmpty()) return
-    HardCutPager(
-        pageCount = pages.size,
-        onPageChange = onPageChange?.let { report -> { page -> report(pages[page]) } },
-    ) { currentPage, _ ->
+    HardCutPager(pageCount = pages.size, pageState = pageState) { currentPage, _ ->
         Column(
             modifier = Modifier.fillMaxSize().padding(top = 8.dp, end = endPadding, bottom = 8.dp),
         ) {
@@ -273,13 +266,15 @@ internal fun HardCutPager(
     indicatorColor: Color = Palette.foreground,
     gesturesEnabled: Boolean = true,
     contentKind: PagerContentKind = PagerContentKind.PAGE,
+    // Caller-owned page survives this pager leaving composition, e.g. Back from a pass.
+    pageState: MutableIntState? = null,
     onPageChange: ((Int) -> Unit)? = null,
     content: @Composable (Int, () -> Unit) -> Unit,
 ) {
     if (pageCount <= 0) return
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    var page by remember { mutableIntStateOf(0) }
+    var page by pageState ?: remember { mutableIntStateOf(0) }
     val currentPage = page.coerceIn(0, pageCount - 1)
     val pagePosition = when (contentKind) {
         PagerContentKind.PAGE -> stringResource(R.string.accessibility_page_position, currentPage + 1, pageCount)

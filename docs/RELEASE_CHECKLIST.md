@@ -27,7 +27,8 @@ key.
 - Update `CHANGELOG.md` with user-visible, security, privacy, and compatibility
   changes.
 - For preview releases, describe what changed since the previous preview and
-  what still needs hardware testing.
+  which **(hardware)** items from [DEVICE_TESTING.md](DEVICE_TESTING.md) are
+  still unverified.
 - If a change touches storage, backups, permissions, security boundaries, or
   release artifacts, update the relevant file under `docs/`.
 
@@ -67,10 +68,11 @@ Expected for 0.15:
 - No `android.permission.INTERNET`.
 - No `android.permission.ACCESS_NETWORK_STATE`.
 
-## 4. Hardware smoke test
+## 4. Device smoke test
 
-Install the release-signed APK on the Light Phone III and run the short pass
-from [DEVICE_TESTING.md](DEVICE_TESTING.md):
+Install the release-signed APK on the `Paka_LP3` emulator (and on a Light Phone
+III when an owner can test) and run the short pass from
+[DEVICE_TESTING.md](DEVICE_TESTING.md):
 
 - Upgrade over the previous stable or preview.
 - Open pass list, TOTP list, scanner, capture, PDF, photo, Details, and backup.
@@ -81,7 +83,8 @@ from [DEVICE_TESTING.md](DEVICE_TESTING.md):
 - Confirm haptics occur only on real actions and available page changes.
 - Copy [DEVICE_TEST_RESULT_TEMPLATE.md](DEVICE_TEST_RESULT_TEMPLATE.md), record
   the candidate and device details, and leave anything not exercised as
-  `NOT RUN` rather than assuming it passed.
+  `NOT RUN` rather than assuming it passed. On the emulator, every
+  **(hardware)** item stays `NOT RUN`.
 
 ## 5. Tag and wait for CI
 

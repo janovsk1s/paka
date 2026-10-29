@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,15 +41,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Date
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class DetailField { NAME, STACK, NOTES }
 private enum class ReferenceAction { OPEN, REPLACE, REMOVE }
 internal enum class DuplicateKind { PASS, CODE }
 
 @Composable
-private fun ConfirmationAction(
+internal fun ConfirmationAction(
     text: String,
     color: Color,
+    fontSize: Int = 24,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
@@ -62,7 +67,7 @@ private fun ConfirmationAction(
         Text(
             text = text,
             color = color,
-            fontSize = 24.sp,
+            fontSize = fontSize.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -72,23 +77,33 @@ private fun ConfirmationAction(
 private fun Context.formatDate(ms: Long): String =
     SimpleDateFormat(getString(R.string.detail_date_pattern), resources.configuration.locales[0]).format(Date(ms))
 
+/**
+ * Keeps read access to a picked file and describes it, or null when the
+ * provider refuses. Provider calls can block, so callers run this off the UI thread.
+ */
+private fun Context.retainedReference(uri: Uri): PassReference? = runCatching {
+    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+}.mapCatching { passReference(uri) }.onFailure {
+    // A link CardStore would refuse is never saved, so its grant would only leak.
+    runCatching { contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+}.getOrNull()
+
 private fun Context.passReference(uri: Uri): PassReference {
     val displayName = runCatching {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0) else null
         }
-    }.getOrNull().orEmpty().ifBlank {
-        uri.lastPathSegment?.substringAfterLast('/') ?: getString(R.string.detail_reference_fallback)
-    }
+    }.getOrNull().orEmpty().ifBlank { uri.lastPathSegment?.substringAfterLast('/').orEmpty() }
+    // Every field must pass CardStore's reference checks, or the saved store could not be read back.
     return PassReference(
         uri = uri.toString(),
-        name = displayName.take(512),
-        mimeType = (contentResolver.getType(uri) ?: "application/octet-stream").take(256),
-    )
+        name = displayName.take(512).ifBlank { getString(R.string.detail_reference_fallback) },
+        mimeType = contentResolver.getType(uri)?.take(256)?.takeIf(String::isNotBlank) ?: "application/octet-stream",
+    ).also(CardStore::requireValidReference)
 }
 
 @Composable
-private fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () -> Unit) {
+internal fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () -> Unit) {
     BackHandler { onBack() }
     Column(
         modifier = Modifier
@@ -102,6 +117,7 @@ private fun ConfirmDeleteScreen(name: String, onConfirm: () -> Unit, onBack: () 
                 stringResource(R.string.detail_delete_question, name),
                 color = Palette.foreground,
                 fontSize = 30.sp,
+                lineHeight = LargeTextLineHeight,
                 fontWeight = FontWeight.Normal,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
@@ -138,6 +154,7 @@ internal fun DuplicateConfirmScreen(
                     ),
                     color = Palette.foreground,
                     fontSize = 30.sp,
+                    lineHeight = LargeTextLineHeight,
                     fontWeight = FontWeight.Normal,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -194,14 +211,7 @@ private fun ReferenceOptionsScreen(
                         ),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        Text(
-                            label,
-                            color = Palette.foreground,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Normal,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        AutoFitText(text = label, color = Palette.foreground)
                     }
                 }
             }
@@ -245,44 +255,44 @@ internal fun CardDetail(
     var editingField by remember(card.id) { mutableStateOf<DetailField?>(null) }
     var activeReferenceIndex by remember(card.id) { mutableStateOf<Int?>(null) }
     var managingStack by remember(card.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val addReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         context.setPakaExternalFlowActive(false)
         val remaining = (2 - references.size).coerceAtLeast(0)
-        val additions = uris
+        val candidates = uris
             .distinctBy(Uri::toString)
             .filterNot { candidate -> references.any { it.uri == candidate.toString() } }
             .take(remaining)
-            .mapNotNull { uri ->
-                val retained = runCatching {
-                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }.isSuccess
-                if (retained) context.passReference(uri) else null
+        scope.launch {
+            val additions = withContext(Dispatchers.IO) { candidates.mapNotNull { context.retainedReference(it) } }
+            if (additions.isNotEmpty()) references = (references + additions).distinctBy { it.uri }.take(2)
+            if (uris.isNotEmpty() && additions.isEmpty() && remaining > 0) {
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.detail_reference_access_many_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
             }
-        if (additions.isNotEmpty()) references = references + additions
-        if (uris.isNotEmpty() && additions.isEmpty() && remaining > 0) {
-            Toast.makeText(
-                context,
-                resources.getString(R.string.detail_reference_access_many_failed),
-                Toast.LENGTH_LONG,
-            ).show()
         }
     }
     val replaceReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         context.setPakaExternalFlowActive(false)
         val index = activeReferenceIndex
         if (uri != null && index != null && index in references.indices) {
-            val retained = runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }.isSuccess
-            if (retained) {
-                references = references.toMutableList().also { it[index] = context.passReference(uri) }
-                activeReferenceIndex = null
-            } else {
-                Toast.makeText(
-                    context,
-                    resources.getString(R.string.detail_reference_access_one_failed),
-                    Toast.LENGTH_LONG,
-                ).show()
+            scope.launch {
+                val replacement = withContext(Dispatchers.IO) { context.retainedReference(uri) }
+                if (replacement != null) {
+                    if (index in references.indices) {
+                        references = references.toMutableList().also { it[index] = replacement }
+                    }
+                    activeReferenceIndex = null
+                } else {
+                    Toast.makeText(
+                        context,
+                        resources.getString(R.string.detail_reference_access_one_failed),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             }
         }
     }
@@ -290,18 +300,18 @@ internal fun CardDetail(
         context.setPakaExternalFlowActive(false)
     }
     val chooseReferences: () -> Unit = {
-        context.setPakaExternalFlowActive(true)
-        runCatching { addReferencePicker.launch(arrayOf("*/*")) }.onFailure {
-            context.setPakaExternalFlowActive(false)
-            Toast.makeText(context, resources.getString(R.string.detail_file_picker_failed), Toast.LENGTH_LONG).show()
-        }
+        context.launchPakaExternal(
+            addReferencePicker,
+            arrayOf("*/*"),
+            resources.getString(R.string.detail_file_picker_failed),
+        )
     }
     val replaceReference: () -> Unit = {
-        context.setPakaExternalFlowActive(true)
-        runCatching { replaceReferencePicker.launch(arrayOf("*/*")) }.onFailure {
-            context.setPakaExternalFlowActive(false)
-            Toast.makeText(context, resources.getString(R.string.detail_file_picker_failed), Toast.LENGTH_LONG).show()
-        }
+        context.launchPakaExternal(
+            replaceReferencePicker,
+            arrayOf("*/*"),
+            resources.getString(R.string.detail_file_picker_failed),
+        )
     }
     val openReference: (Int) -> Unit = { index ->
         references.getOrNull(index)?.let { selected ->
@@ -309,16 +319,19 @@ internal fun CardDetail(
                 setDataAndType(Uri.parse(selected.uri), selected.mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.setPakaExternalFlowActive(true)
-            runCatching { referenceViewer.launch(intent) }.onFailure {
-                context.setPakaExternalFlowActive(false)
-                Toast.makeText(context, resources.getString(R.string.detail_file_open_failed), Toast.LENGTH_LONG).show()
-            }
+            context.launchPakaExternal(referenceViewer, intent, resources.getString(R.string.detail_file_open_failed))
         }
     }
     val persistAndBack = {
         val savedName = name.trim().ifBlank { card.name }
-        if (onUpdate(card.copy(name = savedName, notes = notes.trim(), stack = stack.trim().ifBlank { null }, references = references))) onBack()
+        val updated = card.copy(
+            name = savedName,
+            notes = notes.trim(),
+            stack = stack.trim().ifBlank { null },
+            references = references,
+        )
+        // Unchanged details need no write, so Back still works while storage is read-only.
+        if (updated == card || onUpdate(updated)) onBack()
     }
 
     val savedStack = card.stack
@@ -479,7 +492,6 @@ internal fun CardDetail(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.dim.copy(alpha = 0.5f)))
                     ManualEntryRow(
                         stringResource(R.string.detail_notes_field),
                         notes,
@@ -495,14 +507,14 @@ internal fun CardDetail(
                     Text(
                         stringResource(R.string.detail_references_description),
                         color = Palette.dim,
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
                     )
                 }
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(

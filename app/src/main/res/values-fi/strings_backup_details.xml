@@ -13,7 +13,7 @@
     <string name="backup_photo_compatibility">Tämä varmuuskopio sisältää kuvakortteja, ja sen voi palauttaa vain Paka 0.14:llä tai uudemmalla.</string>
     <string name="backup_minimum_characters">vähintään %1$d merkkiä</string>
     <string name="backup_repeat_passphrase">toista salasana</string>
-    <string name="backup_passphrases_do_not_match">salasanat eivät täsmää</string>
+    <string name="backup_passphrases_do_not_match">Salasanat eivät täsmää</string>
     <string name="backup_encrypting">salataan…</string>
     <string name="backup_save_encrypted">tallenna salattu varmuuskopio</string>
     <string name="backup_import_instructions">Anna tämän varmuuskopion salasana.</string>

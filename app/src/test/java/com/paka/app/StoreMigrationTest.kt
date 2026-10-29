@@ -56,6 +56,21 @@ class StoreMigrationTest {
     }
 
     @Test
+    fun referenceTheStoreCouldNotReadBackIsRefusedBeforeWriting() {
+        val good = listOf(Card(name = "Ticket", data = "PAKA-REF", format = PakaFormat.QR))
+        assertTrue(CardStore.save(context, good).isSuccess)
+        // A provider whose getType returns "" once produced this; parse rejects it.
+        val blankType = PassReference("content://docs/ticket", "ticket.pdf", "")
+
+        val saved = CardStore.save(context, listOf(good.single().copy(references = listOf(blankType))))
+
+        assertTrue(saved.isFailure)
+        val reloaded = CardStore.load(context)
+        assertTrue(reloaded.writable)
+        assertEquals(good, reloaded.value)
+    }
+
+    @Test
     fun corruptEncryptedCardsRecoverFromBackup() {
         val cards = listOf(Card(name = "Konzertkarte", data = "PAKA-1", format = PakaFormat.QR))
         assertTrue(CardStore.save(context, cards).isSuccess)

@@ -83,19 +83,7 @@ internal object SecureStore {
 
     private fun serialize(accounts: List<OtpAccount>): String {
         val arr = JSONArray()
-        for (a in accounts) {
-            arr.put(
-                JSONObject()
-                    .put("id", a.id)
-                    .put("issuer", a.issuer)
-                    .put("account", a.account)
-                    .put("secret", a.secret)
-                    .put("digits", a.digits)
-                    .put("period", a.period)
-                    .put("algorithm", a.algorithm)
-                    .put("createdAt", a.createdAt),
-            )
-        }
+        accounts.forEach { arr.put(it.toJson()) }
         return JSONObject().put("schema", SCHEMA).put("accounts", arr).toString()
     }
 

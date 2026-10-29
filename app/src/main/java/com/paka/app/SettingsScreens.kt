@@ -5,7 +5,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -138,14 +140,18 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
         SimpleTopBar(stringResource(R.string.about_title), onBack)
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             ScrollList(topPadding = 20.dp, spacing = 36.dp) {
-                Row(
+                // Name and version share a row when they fit, as in release builds.
+                // A longer development or preview version moves to its own line
+                // instead of breaking mid-word beside the name.
+                FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .pointerInput(Unit) {
                             detectTapGestures(onTap = { hiddenDeveloperTap() })
                         },
-                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         stringResource(R.string.app_name),
@@ -154,9 +160,7 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
                     )
-                    // The name measures first; the version column takes the rest and
-                    // wraps its long channel label instead of squeezing the name.
-                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f)) {
+                    Column(horizontalAlignment = Alignment.End) {
                         Text(
                             "v${BuildConfig.VERSION_NAME} · ${BuildConfig.VERSION_CODE}",
                             color = Palette.dim,
@@ -178,14 +182,14 @@ internal fun AboutScreen(onDev: () -> Unit, onBack: () -> Unit) {
                 Text(
                     stringResource(R.string.about_description),
                     color = Palette.foreground,
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Normal,
                 )
                 Column {
                     Text(
                         stringResource(R.string.about_byline),
                         color = Palette.foreground,
-                        fontSize = 20.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Normal,
                     )
                     Text("@janovsk1s", color = Palette.dim, fontSize = 16.sp, fontWeight = FontWeight.Light)
@@ -369,7 +373,20 @@ internal fun ManageScreen(
     onUp: (String) -> Unit,
     onDown: (String) -> Unit,
     onBack: () -> Unit,
+    onDelete: ((String) -> Unit)? = null,
 ) {
+    var pendingDelete by remember { mutableStateOf<ManageRow?>(null) }
+    pendingDelete?.let { row ->
+        ConfirmDeleteScreen(
+            name = row.name,
+            onConfirm = {
+                onDelete?.invoke(row.id)
+                pendingDelete = null
+            },
+            onBack = { pendingDelete = null },
+        )
+        return
+    }
     BackHandler { onBack() }
     Column(
         modifier = Modifier
@@ -401,7 +418,16 @@ internal fun ManageScreen(
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).then(
+                            if (onDelete == null) {
+                                Modifier
+                            } else {
+                                tapModifier(
+                                    onClick = { pendingDelete = row },
+                                    clickLabel = stringResource(R.string.detail_delete_action),
+                                )
+                            },
+                        ),
                     )
                     ManageGlyphAction(
                         ManageGlyph.UP,

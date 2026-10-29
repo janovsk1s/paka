@@ -1,6 +1,5 @@
 package com.paka.app
 
-import android.content.Context
 import android.graphics.fonts.SystemFonts
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -11,16 +10,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import java.io.File
 
 internal val LocalPakaFontFamily = staticCompositionLocalOf<FontFamily?> { null }
 private const val SYSTEM_FONT_DIR = "/system/fonts"
+
+/**
+ * Material's body style carries a fixed 24 sp line height that 30 sp text
+ * inherits, so wrapped large lines would overlap. Large text that may wrap
+ * uses this instead.
+ */
+internal val LargeTextLineHeight = 36.sp
 
 /**
  * Mirrors the official Light SDK font lookup:
@@ -32,9 +38,8 @@ internal fun ProvidePakaTypography(
     officialFont: Boolean,
     content: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
-    val fontFamily = remember(context, officialFont) {
-        if (officialFont) lightPhoneFontFamily(context) else null
+    val fontFamily = remember(officialFont) {
+        if (officialFont) lightPhoneFontFamily() else null
     }
     val baseStyle = LocalTextStyle.current
     val materialTypography = MaterialTheme.typography.withPakaFont(fontFamily)
@@ -56,13 +61,13 @@ internal fun TextStyle.withPakaFont(fontFamily: FontFamily? = null): TextStyle {
     return if (family == null) this else copy(fontFamily = family)
 }
 
-private fun lightPhoneFontFamily(context: Context): FontFamily {
+private fun lightPhoneFontFamily(): FontFamily {
     val systemFamily = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         systemAkkuratFonts()
     } else {
         null
     }
-    return systemFamily ?: systemAkkuratFontFiles() ?: bundledAkkuratFonts(context) ?: FontFamily.Default
+    return systemFamily ?: systemAkkuratFontFiles() ?: FontFamily.Default
 }
 
 private fun systemAkkuratFontFiles(): FontFamily? {
@@ -72,23 +77,6 @@ private fun systemAkkuratFontFiles(): FontFamily? {
         "AkkuratLLTT-Bold.ttf" to FontWeight.Bold,
     ).mapNotNull { (name, weight) ->
         File(SYSTEM_FONT_DIR, name).takeIf { it.canRead() }?.let { Font(it, weight) }
-    }
-    return if (fonts.isEmpty()) null else FontFamily(fonts)
-}
-
-private fun bundledAkkuratFonts(context: Context): FontFamily? {
-    val res = context.resources
-    val pkg = context.packageName
-    fun fontId(name: String): Int = res.getIdentifier(name, "font", pkg)
-    val fonts = buildList {
-        fontId("akkuratll_light").takeIf { it != 0 }
-            ?.let { add(Font(it, FontWeight.Light)) }
-        fontId("akkuratll_regular").takeIf { it != 0 }
-            ?.let { add(Font(it, FontWeight.Normal)) }
-        fontId("akkuratll_medium").takeIf { it != 0 }
-            ?.let { add(Font(it, FontWeight.Medium)) }
-        fontId("akkuratll_bold").takeIf { it != 0 }
-            ?.let { add(Font(it, FontWeight.Bold)) }
     }
     return if (fonts.isEmpty()) null else FontFamily(fonts)
 }

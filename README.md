@@ -62,7 +62,10 @@ passes need a camera and Android 11.
 
 Export a backup before uninstalling Paka or moving devices. An invalidated
 Android Keystore key leaves only that backup as a recovery path, and Paka
-cannot recover a forgotten backup passphrase.
+cannot recover a forgotten backup passphrase. If storage stays read-only after
+reopening Paka, clear Paka's storage in Android Settings, then restore the
+backup. Stored PDFs can total 20 MB and photos 32 MB, so every pass still fits
+in one backup.
 
 ## Using Paka
 

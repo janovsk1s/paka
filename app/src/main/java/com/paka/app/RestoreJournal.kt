@@ -182,7 +182,7 @@ internal object RestoreJournal {
     private fun JSONArray.ids(): Set<String> {
         require(length() <= MAX_IDS) { "Restore journal has too many identifiers" }
         return (0 until length()).mapTo(linkedSetOf()) { index ->
-            getString(index).also { require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid restore identifier" } }
+            getString(index).also { require(it.matches(DOCUMENT_ID_PATTERN)) { "Invalid restore identifier" } }
         }
     }
 

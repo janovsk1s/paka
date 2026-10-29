@@ -119,39 +119,10 @@ internal object CardStore {
     private fun serialize(cards: List<Card>): String {
         val array = JSONArray()
         cards.forEach { card ->
-            val item = JSONObject()
-                .put("id", card.id)
-                .put("name", card.name)
-                .put("createdAt", card.createdAt)
-                .put("notes", card.notes)
-                .put("stack", card.stack ?: JSONObject.NULL)
-                .put("references", JSONArray().also { references ->
-                    require(card.references.size <= 2) { "A pass can have at most two references" }
-                    card.references.forEach { reference -> references.put(serializeReference(reference)) }
-                })
-            when (val content = card.content) {
-                is PassContent.Barcode -> item
-                    .put("type", "barcode")
-                    .put("data", content.data)
-                    .put("format", content.format.name)
-                is PassContent.Pdf -> item
-                    .put("type", "pdf")
-                    .put("documentId", content.documentId)
-                    .put("pageCount", content.pageCount)
-                is PassContent.Photos -> item
-                    .put("type", "photos")
-                    .put("pages", JSONArray().also { pages ->
-                        content.pages.forEach { page ->
-                            pages.put(
-                                JSONObject()
-                                    .put("documentId", page.documentId)
-                                    .put("width", page.width)
-                                    .put("height", page.height),
-                            )
-                        }
-                    })
-            }
-            array.put(item)
+            require(card.references.size <= 2) { "A pass can have at most two references" }
+            val references = JSONArray()
+            card.references.forEach { reference -> references.put(serializeReference(reference)) }
+            array.put(card.toJson().put("references", references))
         }
         return JSONObject().put("schema", SCHEMA).put("cards", array).toString()
     }
@@ -178,7 +149,7 @@ internal object CardStore {
                 )
                 "pdf" -> PassContent.Pdf(
                     documentId = item.getString("documentId").also {
-                        require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid PDF identifier" }
+                        require(it.matches(DOCUMENT_ID_PATTERN)) { "Invalid PDF identifier" }
                     },
                     pageCount = item.getInt("pageCount").also { require(it in 1..1_000) { "Invalid PDF page count" } },
                 )
@@ -189,7 +160,7 @@ internal object CardStore {
                             val page = pages.getJSONObject(pageIndex)
                             PhotoPage(
                                 documentId = page.getString("documentId").also {
-                                    require(it.matches(Regex("[0-9a-f]{64}"))) { "Invalid photo identifier" }
+                                    require(it.matches(DOCUMENT_ID_PATTERN)) { "Invalid photo identifier" }
                                 },
                                 width = page.getInt("width").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
                                 height = page.getInt("height").also { require(it in 1..PhotoStore.MAX_DIMENSION) },
@@ -218,22 +189,26 @@ internal object CardStore {
         }
     }
 
-    private fun serializeReference(reference: PassReference): JSONObject = JSONObject()
-        .put("uri", reference.uri)
-        .put("name", reference.name)
-        .put("mimeType", reference.mimeType)
+    /** The rules [parse] enforces; a reference written without them would make the store unreadable. */
+    fun requireValidReference(reference: PassReference) {
+        require(reference.uri.startsWith("content://") && reference.uri.length <= 8_192) { "Invalid reference URI" }
+        require(reference.name.isNotBlank() && reference.name.length <= 512) { "Invalid reference name" }
+        require(reference.mimeType.isNotBlank() && reference.mimeType.length <= 256) { "Invalid reference type" }
+    }
+
+    private fun serializeReference(reference: PassReference): JSONObject {
+        requireValidReference(reference)
+        return JSONObject()
+            .put("uri", reference.uri)
+            .put("name", reference.name)
+            .put("mimeType", reference.mimeType)
+    }
 
     private fun parseReference(reference: JSONObject): PassReference = PassReference(
-        uri = reference.getString("uri").also {
-            require(it.startsWith("content://") && it.length <= 8_192) { "Invalid reference URI" }
-        },
-        name = reference.getString("name").also {
-            require(it.isNotBlank() && it.length <= 512) { "Invalid reference name" }
-        },
-        mimeType = reference.optString("mimeType", "application/octet-stream").also {
-            require(it.isNotBlank() && it.length <= 256) { "Invalid reference type" }
-        },
-    )
+        uri = reference.getString("uri"),
+        name = reference.getString("name"),
+        mimeType = reference.optString("mimeType", "application/octet-stream"),
+    ).also(::requireValidReference)
 
     private fun erasePlaintext(file: File) {
         if (!file.exists()) return

@@ -9,7 +9,6 @@ import com.google.zxing.WriterException
 import com.google.zxing.common.BitMatrix
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import java.security.MessageDigest
-import java.util.Locale
 
 /** Every symbology Paka can render. */
 enum class PakaFormat(private val displayLabel: String) {
@@ -49,9 +48,9 @@ private const val PDF417_LANDSCAPE_PROBE_WIDTH = 2
 private const val QR_MARGIN_MODULES = 4
 private const val COMPACT_MATRIX_MARGIN_MODULES = 2
 private const val LINEAR_MARGIN_MODULES = 10
-private const val QUIET_ZONE_SIDE_COUNT = 2
-private const val BLACK_PIXEL = 0xFF000000.toInt()
-private const val WHITE_PIXEL = 0xFFFFFFFF.toInt()
+internal const val QUIET_ZONE_SIDE_COUNT = 2
+internal const val BLACK_PIXEL = 0xFF000000.toInt()
+internal const val WHITE_PIXEL = 0xFFFFFFFF.toInt()
 
 private fun PakaFormat.zxing(): BarcodeFormat? = when (this) {
     PakaFormat.QR -> BarcodeFormat.QR_CODE
@@ -94,20 +93,19 @@ internal object Barcodes {
             PakaFormat.ITF -> itfValidationError(data)
             PakaFormat.CODE39 -> code39ValidationError(data)
             PakaFormat.CODABAR -> codabarValidationError(data)
-            PakaFormat.AZTEC, PakaFormat.PDF417 -> latin1ValidationError(format, data)
+            PakaFormat.AZTEC, PakaFormat.PDF417, PakaFormat.DATA_MATRIX -> latin1ValidationError(format, data)
             else -> null
         }
     }
 
     private fun itfValidationError(data: String): LocalizedMessage? = when {
-        !data.all(Char::isDigit) -> LocalizedMessage(R.string.validation_digits_only, listOf("ITF"))
+        !data.all { it in '0'..'9' } -> LocalizedMessage(R.string.validation_digits_only, listOf("ITF"))
         data.length % 2 != 0 -> LocalizedMessage(R.string.validation_itf_even)
         else -> null
     }
 
     private fun code39ValidationError(data: String): LocalizedMessage? =
         if (
-            data.uppercase(Locale.ROOT) != data ||
             data.any { it !in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%" }
         ) {
             LocalizedMessage(R.string.validation_code39)
@@ -151,12 +149,17 @@ internal object Barcodes {
             val modulePx = snapped / rawMatrix.width
             val height = when {
                 format in SQUARE_FORMATS -> snapped
-                format == PakaFormat.DATA_MATRIX -> rawMatrix.height * modulePx
-                format == PakaFormat.PDF417 -> rawMatrix.height * modulePx
-                else -> (snapped * 0.30f).toInt().coerceAtLeast(180)
+                format.stretchesVertically() -> (snapped * 0.30f).toInt().coerceAtLeast(180)
+                else -> rawMatrix.height * modulePx
             }
             generateRawMatrix(rawMatrix, snapped, height, format, data)
         }
+    }
+
+    /** A render [generateCached] already verified, or null; cheap enough for the UI thread. */
+    fun cached(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
+        val key = cacheKey(format, data, targetWidthPx.coerceIn(240, MAX_RENDER_PX))
+        return synchronized(bitmapCache) { bitmapCache.get(key) }
     }
 
     /** Bounded cache for passes already verified by [generate]. */
@@ -184,7 +187,7 @@ internal object Barcodes {
 }
 
 private fun digitLengthError(data: String, short: Int, full: Int, label: String): LocalizedMessage? = when {
-    !data.all(Char::isDigit) -> LocalizedMessage(R.string.validation_digits_only, listOf(label))
+    !data.all { it in '0'..'9' } -> LocalizedMessage(R.string.validation_digits_only, listOf(label))
     data.length != short && data.length != full ->
         LocalizedMessage(R.string.validation_length, listOf(label, short, full))
     else -> null
@@ -200,18 +203,19 @@ private fun cacheKey(format: PakaFormat, data: String, width: Int): String {
 /** Encoder hints shared by the raw module-count probe and the final render. */
 private fun zxingHints(format: BarcodeFormat): HashMap<EncodeHintType, Any> {
     val hints = HashMap<EncodeHintType, Any>()
+    // AztecWriter and DataMatrixWriter never read MARGIN, and
+    // OneDimensionalCodeWriter treats it as a total allowance rather than a
+    // per-side quiet zone; those symbols are padded explicitly below.
     hints[EncodeHintType.MARGIN] = when (format) {
-        BarcodeFormat.QR_CODE -> QR_MARGIN_MODULES
-        BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> COMPACT_MATRIX_MARGIN_MODULES
-        BarcodeFormat.PDF_417 -> QR_MARGIN_MODULES
-        // OneDimensionalCodeWriter treats MARGIN as a total allowance rather
-        // than a per-side quiet zone. Pad linear symbols explicitly below.
+        BarcodeFormat.QR_CODE, BarcodeFormat.PDF_417 -> QR_MARGIN_MODULES
         else -> 0
     }
-    // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1.
+    // Binary payloads (e.g. a KlimaTicket Aztec) map bytes 1:1 via Latin-1. Aztec and
+    // Data Matrix already encode Latin-1 without a hint: an Aztec charset hint only adds
+    // an ECI header the original never carried, and Data Matrix reads it only in compact mode.
     when (format) {
-        BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
-        BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
+        BarcodeFormat.PDF_417 -> hints[EncodeHintType.CHARACTER_SET] = "ISO-8859-1"
+        BarcodeFormat.QR_CODE -> hints[EncodeHintType.CHARACTER_SET] = "UTF-8"
         else -> Unit
     }
     if (format == BarcodeFormat.QR_CODE) hints[EncodeHintType.ERROR_CORRECTION] = ErrorCorrectionLevel.M
@@ -224,44 +228,39 @@ private fun zxingRawMatrix(format: BarcodeFormat, data: String): BitMatrix? = tr
     MultiFormatWriter().encode(data, format, probeWidth, ZXING_PROBE_SIZE, zxingHints(format))
         .takeIf { it.width > 0 && it.height > 0 }
         ?.let { matrix ->
-            // AztecWriter and DataMatrixWriter ignore EncodeHintType.MARGIN.
-            // Add the requested quiet zone explicitly without changing the
-            // symbol's natural (possibly rectangular) aspect ratio.
+            // Add the quiet zone explicitly without changing the symbol's
+            // natural (possibly rectangular) aspect ratio.
             when {
                 format == BarcodeFormat.AZTEC || format == BarcodeFormat.DATA_MATRIX ->
-                    matrix.withQuietZone(COMPACT_MATRIX_MARGIN_MODULES)
-                format in LINEAR_ZXING_FORMATS -> matrix.withHorizontalQuietZone(LINEAR_MARGIN_MODULES)
+                    matrix.withQuietZone(COMPACT_MATRIX_MARGIN_MODULES, COMPACT_MATRIX_MARGIN_MODULES)
+                format in LINEAR_ZXING_FORMATS -> matrix.withQuietZone(LINEAR_MARGIN_MODULES, 0)
                 else -> matrix
             }
         }
 } catch (_: WriterException) {
     null
-} catch (_: IllegalArgumentException) {
+} catch (_: RuntimeException) {
+    // Encoder internals can throw other runtime errors on odd input; a stored
+    // pass that crashed home prefetch would crash every launch.
     null
 }
 
-private fun BitMatrix.withQuietZone(quietModules: Int): BitMatrix {
+private fun BitMatrix.withQuietZone(horizontalModules: Int, verticalModules: Int): BitMatrix {
     return BitMatrix(
-        width + quietModules * QUIET_ZONE_SIDE_COUNT,
-        height + quietModules * QUIET_ZONE_SIDE_COUNT,
+        width + horizontalModules * QUIET_ZONE_SIDE_COUNT,
+        height + verticalModules * QUIET_ZONE_SIDE_COUNT,
     ).also { padded ->
         for (y in 0 until height) {
             for (x in 0 until width) {
-                if (get(x, y)) padded.set(quietModules + x, quietModules + y)
+                if (get(x, y)) padded.set(horizontalModules + x, verticalModules + y)
             }
         }
     }
 }
 
-private fun BitMatrix.withHorizontalQuietZone(quietModules: Int): BitMatrix {
-    return BitMatrix(width + quietModules * QUIET_ZONE_SIDE_COUNT, height).also { padded ->
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                if (get(x, y)) padded.set(quietModules + x, y)
-            }
-        }
-    }
-}
+/** Linear symbols stretch their single module row; 2D symbols keep square modules. */
+private fun PakaFormat.stretchesVertically(): Boolean =
+    this !in SQUARE_FORMATS && this != PakaFormat.DATA_MATRIX && this != PakaFormat.PDF417
 
 private fun generateRawMatrix(
     raw: BitMatrix,
@@ -271,10 +270,7 @@ private fun generateRawMatrix(
     data: String,
 ): Bitmap? {
     val modulePx = width / raw.width
-    if (modulePx < 1) return null
-    val stretchVertically = format !in SQUARE_FORMATS &&
-        format != PakaFormat.DATA_MATRIX &&
-        format != PakaFormat.PDF417
+    val stretchVertically = format.stretchesVertically()
     val pixels = IntArray(width * height) { index ->
         val x = index % width
         val y = index / width

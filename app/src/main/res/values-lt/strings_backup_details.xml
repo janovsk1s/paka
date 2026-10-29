@@ -13,7 +13,7 @@
     <string name="backup_photo_compatibility">Šioje atsarginėje kopijoje yra nuotraukų leidimų. Ją galima atkurti tik naudojant Paka 0.14 ar naujesnę versiją.</string>
     <string name="backup_minimum_characters">bent %1$d simbolių</string>
     <string name="backup_repeat_passphrase">pakartokite slaptafrazę</string>
-    <string name="backup_passphrases_do_not_match">slaptafrazės nesutampa</string>
+    <string name="backup_passphrases_do_not_match">Slaptafrazės nesutampa</string>
     <string name="backup_encrypting">šifruojama…</string>
     <string name="backup_save_encrypted">išsaugoti šifruotą kopiją</string>
     <string name="backup_import_instructions">Įveskite šios atsarginės kopijos slaptafrazę.</string>

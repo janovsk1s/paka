@@ -51,9 +51,12 @@ restore/storage hardening. Consult `CHANGELOG.md` for recent work.
   owner explicitly changes the interaction model.
 - Lone barcode and QR displays do not vibrate on ordinary taps. Haptics belong
   to actual actions, long-press discovery, and successful page changes.
-- Hardware photographs and official LightOS screens supplied by the owner are
-  the strongest visual references. Judge spacing on the Light Phone III, not
-  only an Android emulator.
+- Hardware photographs (`docs/screenshots/`) and official LightOS screens
+  supplied by the owner are the strongest visual references. The owner no
+  longer has a Light Phone III: judge spacing on the `Paka_LP3` emulator
+  described in `docs/DEVICE_TESTING.md`, compare it with those photos, and
+  treat hardware-only behaviour as unverified until an LP3 owner tests a
+  preview build.
 
 ## Navigation behaviour
 
@@ -84,7 +87,9 @@ barcode is not sufficient: scanners must receive the exact original payload.
   cache for frequently viewed passes.
 - Scanner changes must be tested against dense Aztec, GS1 DataBar Expanded,
   EAN/UPC, damaged print, glare, and genuinely low-light samples. A sharp camera
-  preview does not prove that decoding succeeds.
+  preview does not prove that decoding succeeds. Without a device, check
+  decoding on the emulator against sample images; camera optics (focus, torch,
+  real glare and low light) stay unverified until an LP3 owner tests.
 
 ## PDF pass invariants
 
@@ -184,7 +189,9 @@ Developer demo mode exists so the owner can show and photograph Paka safely.
 - Pre-render the visible and next likely pass when useful, but keep caches
   bounded and do not delay initial interaction.
 - Avoid broad dependency upgrades in the same commit as behavioural changes.
-  Upgrade and verify CameraX, Compose, Kotlin, and AGP separately on hardware.
+  Upgrade CameraX, Compose, Kotlin, and AGP separately, verify each on the
+  `Paka_LP3` emulator, and list what still needs a real device in the preview
+  notes.
 
 ## Important files
 
@@ -263,7 +270,9 @@ pattern exactly:
 5. Keep security boundaries explicit. Demo data, real data, clipboard data, and
    backup data must not leak into one another.
 6. Add focused tests for parsers, validators, encryption, migration, and payload
-   fidelity. Visual changes also require real-device inspection.
+   fidelity. Visual changes also require inspection on the `Paka_LP3` emulator
+   against the hardware photos; name anything only a real Light Phone III can
+   confirm.
 7. Before handing off a release, bump both `versionCode` and `versionName`, update
    `CHANGELOG.md` and the README release number, then run:
 

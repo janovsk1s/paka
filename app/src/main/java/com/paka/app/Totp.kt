@@ -1,6 +1,7 @@
 package com.paka.app
 
 import android.net.Uri
+import org.json.JSONObject
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import java.util.Locale
@@ -19,6 +20,17 @@ data class OtpAccount(
 )
 
 fun OtpAccount.title(): String = if (account.isBlank()) issuer else "$issuer · $account"
+
+/** Account fields shared by the encrypted 2FA store and portable backups. */
+internal fun OtpAccount.toJson(): JSONObject = JSONObject()
+    .put("id", id)
+    .put("issuer", issuer)
+    .put("account", account)
+    .put("secret", secret)
+    .put("digits", digits)
+    .put("period", period)
+    .put("algorithm", algorithm)
+    .put("createdAt", createdAt)
 
 object Totp {
     private val SUPPORTED_ALGORITHMS = setOf("SHA1", "SHA256", "SHA512")
@@ -88,13 +100,16 @@ object Totp {
         return (binary % pow).toString().padStart(digits, '0')
     }
 
+    /** The Base32 characters that matter: grouping spaces/dashes, case and padding removed. */
+    internal fun normalizedSecret(secret: String): String =
+        secret.filterNot { it.isWhitespace() || it == '-' }.uppercase(Locale.ROOT).trimEnd('=')
+
     private fun base32Decode(input: String): ByteArray {
         val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-        val normalized = input.trim().replace(" ", "").replace("-", "").uppercase(Locale.ROOT)
-        require(normalized.isNotEmpty()) { "Empty Base32 value" }
-        require(normalized.matches(Regex("[A-Z2-7]+=*"))) { "Invalid Base32 character" }
-        require('=' !in normalized.dropLastWhile { it == '=' }) { "Invalid Base32 padding" }
-        val clean = normalized.trimEnd('=')
+        val clean = normalizedSecret(input)
+        require(clean.isNotEmpty()) { "Empty Base32 value" }
+        // Padding was trimmed, so any remaining '=' sat mid-string and fails here.
+        require(clean.matches(Regex("[A-Z2-7]+"))) { "Invalid Base32 character" }
         var buffer = 0
         var bits = 0
         val out = ArrayList<Byte>(clean.length)
@@ -108,10 +123,8 @@ object Totp {
                 out.add(((buffer shr bits) and 0xff).toByte())
             }
         }
-        if (bits > 0) {
-            val paddingMask = (1 shl bits) - 1
-            require(buffer and paddingMask == 0) { "Invalid Base32 trailing bits" }
-        }
+        // Leftover bits are ignored, as Paka did before 0.12.6 and other authenticators do:
+        // rejecting them hid stored accounts and made whole backups unrestorable.
         return out.toByteArray()
     }
 

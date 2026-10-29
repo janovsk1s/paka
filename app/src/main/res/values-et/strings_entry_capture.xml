@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF-pääsmed vajavad Android 11 või uuemat</string>
     <string name="entry_error_password_pdf_unsupported">Parooliga kaitstud PDF-faile ei toetata</string>
     <string name="entry_error_pdf_open">PDF-faili ei õnnestunud avada</string>
+    <string name="entry_error_backup_limit">Varukoopia jaoks liiga suur: PDF-failid võivad kokku olla kuni %1$d MB ja fotod kuni %2$d MB</string>
     <string name="entry_error_photos_open">Fotosid ei õnnestunud avada</string>
     <string name="entry_error_camera_permission">Pildistamiseks on vaja kaamera luba</string>
     <string name="entry_title_front_side">esikülg</string>
@@ -38,6 +39,7 @@
     <string name="entry_placeholder_base32_key">Base32-võti</string>
     <string name="entry_toast_pdf_demo_disabled">PDF-pääsmed pole demorežiimis saadaval</string>
     <string name="entry_toast_photo_demo_disabled">Fotopääsmed pole demorežiimis saadaval</string>
+    <string name="entry_toast_code_demo_disabled">2FA koodid pole demorežiimis saadaval</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$d lk</string>
     <string name="entry_photo_source_privacy">Tehtud fotod lähevad otse Paka krüptitud salvestisse. Neid ei salvestata kunagi galeriisse ega failina.</string>
@@ -77,7 +79,7 @@
     <string name="capture_error_prepare_photo">Fotot ei õnnestunud ette valmistada</string>
     <string name="capture_error_save_photo">Fotot ei õnnestunud salvestada</string>
     <string name="capture_error_preview_photo">Foto eelvaadet ei õnnestunud avada</string>
-    <string name="capture_status_preparing_preview">valmistan ette…</string>
+    <string name="capture_status_preparing_preview">Valmistan ette…</string>
     <string name="capture_action_rotate">pööra</string>
     <string name="capture_action_reset_crop">lähtesta kärbe</string>
     <string name="capture_action_crop_smaller">muuda kärpeala väiksemaks</string>

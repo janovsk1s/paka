@@ -1,6 +1,7 @@
 package com.paka.app
 
 import android.content.Context
+import android.content.res.AssetFileDescriptor
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -8,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,34 +58,11 @@ private enum class BackupField { PASSPHRASE, REPEAT }
 private enum class BackupMenuAction { EXPORT, RESTORE }
 
 @Composable
-private fun BackupBottomAction(
-    text: String,
-    color: Color,
-    fontSize: Int,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .then(if (enabled) tapModifier(onClick) else Modifier),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Text(
-            text = text,
-            color = color,
-            fontSize = fontSize.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
 internal fun BackupScreen(
     cards: List<Card>,
     accounts: List<OtpAccount>,
+    // Read-only storage cannot be restored over; say how to recover up front.
+    restoreBlocked: Boolean,
     onRestore: suspend (BackupData) -> Boolean,
     onBack: () -> Unit,
 ) {
@@ -235,32 +214,40 @@ internal fun BackupScreen(
                             BackupMenuAction.EXPORT -> stringResource(R.string.backup_encrypted_export)
                             BackupMenuAction.RESTORE -> stringResource(R.string.backup_restore_backup)
                         }
+                        val enabled = action == BackupMenuAction.EXPORT || !restoreBlocked
                         Box(
                             modifier = Modifier.fillMaxSize().then(
-                                tapModifier {
-                                    if (action == BackupMenuAction.EXPORT) {
-                                        step = BackupStep.EXPORT_PASSWORD
-                                    } else {
-                                        context.setPakaExternalFlowActive(true)
-                                        importLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                                if (!enabled) {
+                                    Modifier
+                                } else {
+                                    tapModifier {
+                                        if (action == BackupMenuAction.EXPORT) {
+                                            step = BackupStep.EXPORT_PASSWORD
+                                        } else {
+                                            context.launchPakaExternal(
+                                                importLauncher,
+                                                arrayOf("application/octet-stream", "application/*"),
+                                                resources.getString(R.string.detail_file_picker_failed),
+                                            )
+                                        }
                                     }
                                 },
                             ),
                             contentAlignment = Alignment.CenterStart,
                         ) {
-                            Text(
-                                label,
-                                color = Palette.foreground,
-                                fontSize = 30.sp,
-                                fontWeight = FontWeight.Normal,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                            AutoFitText(
+                                text = label,
+                                color = if (enabled) Palette.foreground else Palette.dim,
                             )
                         }
                     }
                     Text(
-                        stringResource(R.string.backup_offline_description),
-                        color = Palette.dim,
+                        if (restoreBlocked) {
+                            stringResource(R.string.restore_storage_unhealthy)
+                        } else {
+                            stringResource(R.string.backup_offline_description)
+                        },
+                        color = if (restoreBlocked) Palette.foreground else Palette.dim,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Light,
                         modifier = Modifier.align(Alignment.BottomStart).padding(end = 14.dp, bottom = 20.dp),
@@ -272,7 +259,11 @@ internal fun BackupScreen(
                 val canExport = passphrase.length >= BackupCrypto.MIN_NEW_PASSPHRASE_LENGTH &&
                     passphrase == confirmation && !busy
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp).hardSnapVerticalScroll(rememberHapticScrollState()),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(top = 28.dp)
+                        .hardSnapVerticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     Text(
@@ -282,12 +273,14 @@ internal fun BackupScreen(
                         ),
                         color = Palette.dim,
                         fontSize = 16.sp,
+                        fontWeight = FontWeight.Light,
                     )
                     if (cards.any { it.content is PassContent.Photos }) {
                         Text(
                             stringResource(R.string.backup_photo_compatibility),
                             color = Palette.dim,
                             fontSize = 16.sp,
+                            fontWeight = FontWeight.Light,
                         )
                     }
                     ManualEntryRow(
@@ -307,10 +300,11 @@ internal fun BackupScreen(
                             stringResource(R.string.backup_passphrases_do_not_match),
                             color = Palette.dim,
                             fontSize = 14.sp,
+                            fontWeight = FontWeight.Light,
                         )
                     }
                 }
-                BackupBottomAction(
+                ConfirmationAction(
                     text = if (busy) {
                         stringResource(R.string.backup_encrypting)
                     } else {
@@ -346,8 +340,11 @@ internal fun BackupScreen(
                         result.onSuccess { bytes ->
                             pendingExport = bytes
                             val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                            context.setPakaExternalFlowActive(true)
-                            exportLauncher.launch(resources.getString(R.string.backup_export_filename, stamp))
+                            context.launchPakaExternal(
+                                exportLauncher,
+                                resources.getString(R.string.backup_export_filename, stamp),
+                                resources.getString(R.string.detail_file_picker_failed),
+                            )
                         }.onFailure { error ->
                             val message = if (error.message?.contains("too large", ignoreCase = true) == true) {
                                 resources.getString(R.string.backup_too_large)
@@ -366,7 +363,12 @@ internal fun BackupScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    Text(stringResource(R.string.backup_import_instructions), color = Palette.dim, fontSize = 16.sp)
+                    Text(
+                        stringResource(R.string.backup_import_instructions),
+                        color = Palette.dim,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Light,
+                    )
                     ManualEntryRow(
                         stringResource(R.string.backup_passphrase_field),
                         "•".repeat(passphrase.length),
@@ -375,7 +377,7 @@ internal fun BackupScreen(
                         editingField = BackupField.PASSPHRASE
                     }
                 }
-                BackupBottomAction(
+                ConfirmationAction(
                     text = if (busy) {
                         stringResource(R.string.backup_unlocking)
                     } else {
@@ -438,6 +440,7 @@ internal fun BackupScreen(
                                 stringResource(R.string.backup_replace_current_data),
                                 color = Palette.foreground,
                                 fontSize = 30.sp,
+                                lineHeight = LargeTextLineHeight,
                                 fontWeight = FontWeight.Normal,
                             )
                             Text(
@@ -455,7 +458,7 @@ internal fun BackupScreen(
                             )
                         }
                     }
-                    BackupBottomAction(
+                    ConfirmationAction(
                         text = if (busy) {
                             stringResource(R.string.backup_restoring)
                         } else {
@@ -498,7 +501,7 @@ internal fun BackupScreen(
                             context.setPakaCriticalFlowActive(false)
                         }
                     }
-                    BackupBottomAction(
+                    ConfirmationAction(
                         text = stringResource(R.string.backup_cancel_restore_action),
                         color = Palette.dim,
                         fontSize = 24,
@@ -513,6 +516,13 @@ internal fun BackupScreen(
 }
 
 private fun readBackupBlob(context: Context, uri: Uri): ByteArray {
+    // A provider that reports the size lets the read fill one exact array; the
+    // growing stream below can briefly need 2.5x the file size.
+    val declared = runCatching {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+    }.getOrNull() ?: AssetFileDescriptor.UNKNOWN_LENGTH
+    require(declared <= BackupStore.MAX_BACKUP_BYTES) { "Backup is too large" }
+    if (declared > 0) readDeclaredSize(context, uri, declared.toInt())?.let { return it }
     val input = context.contentResolver.openInputStream(uri) ?: error("Document could not be opened")
     return input.use {
         val output = ByteArrayOutputStream()
@@ -527,6 +537,23 @@ private fun readBackupBlob(context: Context, uri: Uri): ByteArray {
         }
         output.toByteArray()
     }
+}
+
+/** Reads exactly [size] bytes, or null when the provider's size was wrong so the caller can stream instead. */
+private fun readDeclaredSize(context: Context, uri: Uri, size: Int): ByteArray? {
+    val input = context.contentResolver.openInputStream(uri) ?: error("Document could not be opened")
+    val bytes = ByteArray(size)
+    val exact = input.use { stream ->
+        var offset = 0
+        while (offset < size) {
+            val read = stream.read(bytes, offset, size - offset)
+            if (read < 0) break
+            offset += read
+        }
+        offset == size && stream.read() < 0
+    }
+    if (!exact) bytes.fill(0)
+    return bytes.takeIf { exact }
 }
 
 /** Keeps ownership of a completed read until the calling coroutine accepts it. */
@@ -544,22 +571,21 @@ private suspend fun readBackupBlobOwned(context: Context, uri: Uri): Result<Byte
 }
 
 /** Decryption is not cancellable; clear any plaintext result that cannot be transferred to UI state. */
-private suspend fun decryptBackupOwned(blob: ByteArray, password: CharArray): Result<BackupData> {
-    val input = blob.copyOf()
+internal suspend fun decryptBackupOwned(blob: ByteArray, password: CharArray): Result<BackupData> {
+    // Reads the caller's ciphertext in place: a private copy of a full-size
+    // backup cost 52 MB of heap on unlock and protected nothing secret.
     val outcome = AtomicReference<Result<BackupData>?>(null)
     return try {
         withContext(NonCancellable + Dispatchers.Default) {
             try {
-                outcome.set(runCatching { BackupStore.decrypt(input, password) })
+                outcome.set(runCatching { BackupStore.decrypt(blob, password) })
             } finally {
-                input.fill(0)
                 password.fill('\u0000')
             }
         }
         currentCoroutineContext().ensureActive()
         outcome.getAndSet(null) ?: Result.failure(IllegalStateException("Backup unlock did not finish"))
     } finally {
-        input.fill(0)
         password.fill('\u0000')
         outcome.getAndSet(null)?.getOrNull()?.clearDocuments()
     }

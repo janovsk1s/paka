@@ -195,16 +195,21 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                 scope.launch {
                     pdfChecking = true
                     pdfError = null
-                    val result = importPdfOwned(context, uri)
+                    val replacing = setOfNotNull(pdfImport?.takeIf { it.created }?.documentId)
+                    val result = importPdfOwned(context, uri, replacing)
                     pdfChecking = false
                     result.onSuccess { imported ->
-                        pdfImport?.takeIf { it.created && it.documentId != imported.documentId }?.let { orphan ->
+                        val previous = pdfImport
+                        previous?.takeIf { it.created && it.documentId != imported.documentId }?.let { orphan ->
                             deleteAbandonedImports(pdfs = listOf(orphan))
                         }
-                        pdfImport = imported
+                        // Re-picking the same PDF finds it already stored, but cancelling must still delete it.
+                        val stillOwned = previous?.created == true && previous.documentId == imported.documentId
+                        pdfImport = if (stillOwned) imported.copy(created = true) else imported
                     }.onFailure { error ->
                         pdfError = when (error) {
                             is SecurityException -> resources.getString(R.string.entry_error_password_pdf_unsupported)
+                            is BackupLimitException -> resources.backupLimitMessage()
                             else -> resources.getString(R.string.entry_error_pdf_open)
                         }
                     }
@@ -234,6 +239,13 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
             photos = photoImports.filter { it.created && it.page.documentId !in keptIds },
         )
         photoImports = normalized
+    }
+
+    // Pending photos that a pick of [sides] will replace in mergePhotoImports.
+    fun replacedPhotoIds(sides: Int): Set<String> = if (photoImports.size == 1 && sides == 1) {
+        emptySet()
+    } else {
+        photoImports.filter { it.created }.map { it.page.documentId }.toSet()
     }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -277,6 +289,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
 
     if (capturing) {
         PhotoCaptureScreen(
+            replacing = replacedPhotoIds(1),
             onCaptured = { imported ->
                 mergePhotoImports(listOf(imported))
                 capturing = false
@@ -306,7 +319,7 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                 initialBytes = currentBytes,
                 cancelLabel = stringResource(R.string.entry_action_cancel),
                 contentDescription = stringResource(R.string.entry_cd_selected_document_photo),
-                onUse = { bytes -> PhotoStore.importBytes(context, bytes) },
+                onUse = { bytes -> PhotoStore.importBytes(context, bytes, replacedPhotoIds(reviewBatch.bytes.size)) },
                 onUsed = { imported ->
                     val reviewed = reviewBatch.reviewed + imported
                     if (reviewed.size >= reviewBatch.bytes.size) {
@@ -330,8 +343,11 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
             onTake = startCapture,
             onChoose = {
                 photoSourceMenu = false
-                context.setPakaExternalFlowActive(true)
-                photoPicker.launch(arrayOf("image/*"))
+                context.launchPakaExternal(
+                    photoPicker,
+                    arrayOf("image/*"),
+                    resources.getString(R.string.detail_file_picker_failed),
+                )
             },
             onBack = { photoSourceMenu = false },
         )
@@ -414,8 +430,11 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                                 if (photoMode) {
                                     photoSourceMenu = true
                                 } else {
-                                    context.setPakaExternalFlowActive(true)
-                                    pdfPicker.launch(arrayOf("application/pdf"))
+                                    context.launchPakaExternal(
+                                        pdfPicker,
+                                        arrayOf("application/pdf"),
+                                        resources.getString(R.string.detail_file_picker_failed),
+                                    )
                                 }
                             },
                         )
@@ -474,8 +493,11 @@ internal fun ManualCardScreen(documentImportsEnabled: Boolean, onSave: (Card) ->
                                     pdfError = null
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                         if (!pdfChecking) {
-                                            context.setPakaExternalFlowActive(true)
-                                            pdfPicker.launch(arrayOf("application/pdf"))
+                                            context.launchPakaExternal(
+                                                pdfPicker,
+                                                arrayOf("application/pdf"),
+                                                resources.getString(R.string.detail_file_picker_failed),
+                                            )
                                         }
                                     } else {
                                         pdfError = resources.getString(R.string.entry_error_pdf_requires_android_11)
@@ -748,7 +770,6 @@ internal fun TextEntryScreen(
     } else {
         TextEntryKeyboardProfile.NORMAL
     },
-    fieldLabel: String = title,
 ) {
     var text by remember { mutableStateOf(initial) }
     val canSave = allowBlank || text.isNotBlank()
@@ -813,7 +834,7 @@ internal fun TextEntryScreen(
                                 .heightIn(max = 180.dp),
                         )
                         .focusRequester(focusRequester)
-                        .semantics { contentDescription = fieldLabel },
+                        .semantics { contentDescription = title },
                 )
                 Spacer(Modifier.height(10.dp))
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.foreground))
@@ -890,7 +911,6 @@ private fun EntryBottomAction(status: String?, enabled: Boolean, onSave: () -> U
                 text = stringResource(R.string.entry_action_save),
                 color = if (enabled) Palette.foreground else Palette.dim,
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Light,
             )
         }
     }

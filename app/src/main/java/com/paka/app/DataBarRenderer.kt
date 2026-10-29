@@ -6,9 +6,6 @@ import uk.org.okapibarcode.backend.OkapiException
 
 private const val DATABAR_PREFERRED_COLUMNS = 4
 private const val DATABAR_QUIET_MODULES = 4
-private const val QUIET_ZONE_SIDE_COUNT = 2
-private const val BLACK_PIXEL = 0xFF000000.toInt()
-private const val WHITE_PIXEL = 0xFFFFFFFF.toInt()
 
 private data class PixelRectangle(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
@@ -41,7 +38,8 @@ internal fun generateDataBar(data: String, targetWidthPx: Int): Bitmap? = try {
     verifiedBitmap(width, height, pixels, PakaFormat.DATABAR_EXPANDED, data)
 } catch (_: OkapiException) {
     null
-} catch (_: IllegalArgumentException) {
+} catch (_: RuntimeException) {
+    // As for ZXing: an encoder failure must not crash home prefetch on every launch.
     null
 }
 

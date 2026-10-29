@@ -1,17 +1,48 @@
 # Device Testing Checklist
 
-Use this checklist on a real Light Phone III before promoting a capture/photo
-preview to stable. Emulator results are useful, but visual spacing, camera
-behavior, torch state, and battery feel must be judged on hardware.
+Run this checklist before promoting a preview to stable. The owner no longer
+has a Light Phone III, so the checklist runs on the `Paka_LP3` emulator below,
+and visual spacing is compared with the hardware photos in
+[`docs/screenshots/`](screenshots/). Items marked **(hardware)** need a real
+Light Phone III: record them as `NOT RUN` unless an LP3 owner tests the
+preview build, and list them as unverified in the preview notes.
 
 For each candidate, copy [DEVICE_TEST_RESULT_TEMPLATE.md](DEVICE_TEST_RESULT_TEMPLATE.md),
 leave untested rows marked `NOT RUN`, and commit or attach the completed result
 to the release record. The checklist describes what to test; a completed result
 records what was actually tested.
 
+## Emulator
+
+`Paka_LP3` gives Paka the Light Phone III's app area: 1080 × 1240 px at
+480 dpi (density 3.0). LightOS shows no status or navigation bar inside apps,
+while Android draws a 72 px bar at the top and bottom, so the emulator screen
+is 1080 × 1384 px.
+
+```sh
+export ANDROID_HOME=<sdk>   # for example /opt/homebrew/share/android-commandlinetools
+export JAVA_HOME=<jdk-17>   # avdmanager, sdkmanager and Gradle need Java 17
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "system-images;android-36;google_apis;arm64-v8a"
+$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n Paka_LP3 -k "system-images;android-36;google_apis;arm64-v8a"
+# In ~/.android/avd/Paka_LP3.avd/config.ini set:
+#   hw.lcd.width=1080  hw.lcd.height=1384  hw.lcd.density=480
+#   hw.ramSize=6144    hw.keyboard=no      hw.camera.back=webcam0
+$ANDROID_HOME/emulator/emulator -avd Paka_LP3 -no-boot-anim
+$ANDROID_HOME/platform-tools/adb shell cmd uimode night yes
+$ANDROID_HOME/platform-tools/adb shell cmd overlay enable com.android.internal.systemui.navbar.gestural
+./gradlew installDebug
+```
+
+The rear camera is the computer's webcam, so codes can be scanned for real,
+but optics, focus, torch, and true low light still differ from the phone. The
+emulator has no Akkurat font: text uses the fallback face, so compare glyph
+shapes and fine spacing with the photos rather than the emulator alone.
+
+Vibration cannot be felt on the emulator, so haptics rows would pass without being tested. After each gesture, run `adb shell dumpsys vibrator_manager` and read its "Recent vibrations" list instead.
+
 ## Before testing
 
-- Install the release-signed APK for the candidate build.
+- Install the release-signed APK for the candidate build on `Paka_LP3`.
 - Confirm it upgrades over the previous stable or preview.
 - Confirm the APK signing certificate SHA-256 matches `AGENTS.md`.
 - Confirm requested permissions are expected. For 0.15, the APK should request
@@ -34,6 +65,9 @@ records what was actually tested.
 
 ## Battery and background work
 
+Battery feel and real background power use are **(hardware)**; the emulator
+can only confirm that the work stops.
+
 - Verify the TOTP tick stops while Paka is backgrounded.
 - Verify capture focus retry stops while Paka is backgrounded.
 - Verify open PDF sessions release on background and reopen cleanly on return.
@@ -43,14 +77,29 @@ records what was actually tested.
 
 ## Camera, scanner, and torch
 
+`ScannerDecodeCorpusTest` covers the decoding side of the first item:
+run `./gradlew connectedDebugAndroidTest` on `Paka_LP3`. It renders synthetic
+dense binary Aztec, QR, PDF417, GS1 DataBar Expanded, EAN-13, UPC-A, Data
+Matrix, Code 128, Code 39, and ITF with Paka's own renderer, damages them in
+memory (small modules, tilt, blur, glare, simulated low light, faded print,
+specks, a line in the quiet zone), and decodes them through the scanner's
+zxing-cpp readers, payload rules, and aim selection. It fails on any wrong
+payload and on any clean or moderate level that does not decode exactly,
+apart from the zxing-cpp limits listed in the test; harsher levels are
+reported per format in `adb logcat -s PakaScanCorpus`. A pass fills the result
+template's "Exact payload confirmed" column and the decoder side of "Normal
+light" and "Glare/damage". Still scan printed samples through the webcam for
+the live camera path. Simulated low light does not replace the **(hardware)**
+items, which stay `NOT RUN`.
+
 - Scan dense Aztec, QR, PDF417, GS1 DataBar Expanded, EAN/UPC, and damaged or
   glared print samples.
 - Test genuinely low light; a sharp preview is not enough, decoding must
-  succeed.
-- Toggle the camera light manually and background/return.
+  succeed. **(hardware)**
+- Toggle the camera light manually and background/return. **(hardware)**
 - Confirm the light label never says "on" when the torch has been switched off
-  by lifecycle.
-- Test auto-light on and off from Developer options.
+  by lifecycle. **(hardware)**
+- Test auto-light on and off from Developer options. **(hardware)**
 
 ## Document capture and import
 
@@ -73,7 +122,8 @@ records what was actually tested.
 - Confirm Hebrew, Arabic, and other unsupported languages are never listed and
   every supported language remains left-to-right.
 - With both the official and fallback fonts, inspect Baltic, Nordic, German,
-  and Slovak diacritics for missing or substituted glyphs.
+  and Slovak diacritics for missing or substituted glyphs. The official Akkurat
+  font exists only on LightOS. **(hardware)**
 - Inspect every menu, form, confirmation, empty/error state, viewer caption,
   scanner control, and accessibility action for untranslated or clipped text.
 - Confirm lists retain five fixed row slots per page in every language, a sixth
@@ -94,7 +144,7 @@ records what was actually tested.
 ## Brightness, clipboard, and screenshots
 
 - Open a barcode/code with forced brightness enabled; leave and confirm display
-  brightness restores.
+  brightness restores. **(hardware)**
 - Disable forced brightness in Developer options and confirm it stays off.
 - Copy a TOTP value, wait for the clear timeout, then verify Paka only clears a
   clipboard value it still owns.

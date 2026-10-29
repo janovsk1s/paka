@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF-kort kräver Android 11 eller senare</string>
     <string name="entry_error_password_pdf_unsupported">Lösenordsskyddade PDF-filer stöds inte</string>
     <string name="entry_error_pdf_open">PDF-filen gick inte att öppna</string>
+    <string name="entry_error_backup_limit">För stort för en säkerhetskopia: PDF-filer får vara högst %1$d MB och foton %2$d MB totalt</string>
     <string name="entry_error_photos_open">Bilderna gick inte att öppna</string>
     <string name="entry_error_camera_permission">Kamerabehörighet krävs för att fotografera</string>
     <string name="entry_title_front_side">framsida</string>
@@ -38,6 +39,7 @@
     <string name="entry_placeholder_base32_key">Base32-nyckel</string>
     <string name="entry_toast_pdf_demo_disabled">PDF-kort är inte tillgängliga i demoläge</string>
     <string name="entry_toast_photo_demo_disabled">Fotokort är inte tillgängliga i demoläge</string>
+    <string name="entry_toast_code_demo_disabled">2FA-koder är inte tillgängliga i demoläge</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$d s.</string>
     <string name="entry_photo_source_privacy">Tagna foton går direkt till Pakas krypterade lagring. De sparas aldrig i galleriet eller som filer.</string>
@@ -77,7 +79,7 @@
     <string name="capture_error_prepare_photo">Fotot gick inte att förbereda</string>
     <string name="capture_error_save_photo">Fotot gick inte att spara</string>
     <string name="capture_error_preview_photo">Förhandsvisningen gick inte att öppna</string>
-    <string name="capture_status_preparing_preview">förbereder…</string>
+    <string name="capture_status_preparing_preview">Förbereder…</string>
     <string name="capture_action_rotate">rotera</string>
     <string name="capture_action_reset_crop">återställ beskärning</string>
     <string name="capture_action_crop_smaller">gör beskärningen mindre</string>

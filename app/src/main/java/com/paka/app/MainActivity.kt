@@ -6,7 +6,9 @@ import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.os.Bundle
 import android.os.Build
 import android.os.PersistableBundle
@@ -16,6 +18,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -33,12 +36,14 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -48,7 +53,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
@@ -57,9 +62,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.cos
@@ -67,14 +76,13 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private enum class Mode { CARDS, CODES }
-private enum class ScanMode { CARD, CODE }
 
 private sealed interface PendingDuplicate {
     data class Pass(val candidate: Card, val existingName: String) : PendingDuplicate
     data class Code(val candidate: OtpAccount, val existingName: String) : PendingDuplicate
 }
 
-private data class InitialAppLoad(
+internal data class InitialAppLoad(
     val cards: LoadOutcome<List<Card>>,
     val codes: LoadOutcome<List<OtpAccount>>,
 )
@@ -100,6 +108,17 @@ private fun releaseUnreferencedPassContent(context: Context, card: Card) {
     )
 }
 
+/** Clears the clipboard only while it still holds Paka's code, never another app's later copy. */
+private fun clearOwnedClip(context: Context, value: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    // Paka copies plain text; coerceToText could read another app's URI clip on the UI thread.
+    val current = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+    if (current == value) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+        else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+    }
+}
+
 private fun <T> List<T>.moved(index: Int, up: Boolean): List<T> {
     val target = if (up) index - 1 else index + 1
     if (index < 0 || target < 0 || target >= size) return this
@@ -111,6 +130,7 @@ private fun <T> List<T>.moved(index: Int, up: Boolean): List<T> {
 class MainActivity : ComponentActivity() {
     private var homeResetSignal by mutableIntStateOf(0)
     private var resumeSignal by mutableIntStateOf(0)
+    private val startupLoad = mutableStateOf<InitialAppLoad?>(null)
     private var externalFlowActive = false
     private var criticalFlowActive = false
 
@@ -144,6 +164,8 @@ class MainActivity : ComponentActivity() {
             selected = Prefs.language(this),
             hasExplicitSelection = Prefs.hasExplicitLanguage(this),
         )
+        // Decrypt the stores while Compose builds its first frame, not after it.
+        lifecycleScope.launch(Dispatchers.IO) { startupLoad.value = loadStartup(this@MainActivity) }
         val openDeveloperRoute = intent.getStringExtra(EXTRA_OPEN_DEVELOPER_ROUTE)
             ?.let { saved -> runCatching { DeveloperRoute.valueOf(saved) }.getOrNull() }
         intent.removeExtra(EXTRA_OPEN_DEVELOPER_ROUTE)
@@ -162,7 +184,7 @@ class MainActivity : ComponentActivity() {
                 ActivityManager.TaskDescription(getString(R.string.app_name), null, android.graphics.Color.BLACK)
             },
         )
-        setContent { PakaApp(homeResetSignal, resumeSignal, openDeveloperRoute) }
+        setContent { PakaApp(homeResetSignal, resumeSignal, openDeveloperRoute, startupLoad) }
     }
 
     override fun onResume() {
@@ -175,17 +197,6 @@ class MainActivity : ComponentActivity() {
         if (externalFlowActive || criticalFlowActive) return
         if (StoreWriteCoordinator.isRestoreActive()) return
         if (Prefs.returnHome(this)) homeResetSignal++
-    }
-
-    override fun onStop() {
-        super.onStop()
-        // Decoded photo bitmaps live only while Paka is in the foreground.
-        PhotoStore.trimMemory()
-    }
-
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        PhotoStore.trimMemory()
     }
 
     private companion object {
@@ -201,11 +212,21 @@ internal fun Context.setPakaCriticalFlowActive(active: Boolean) {
     (this as? MainActivity)?.setCriticalFlowActive(active)
 }
 
+/** Opens a system picker or viewer; a phone without one shows [failureMessage] instead of crashing. */
+internal fun <I> Context.launchPakaExternal(launcher: ActivityResultLauncher<I>, input: I, failureMessage: String) {
+    setPakaExternalFlowActive(true)
+    runCatching { launcher.launch(input) }.onFailure {
+        setPakaExternalFlowActive(false)
+        Toast.makeText(this, failureMessage, Toast.LENGTH_LONG).show()
+    }
+}
+
 @Composable
 internal fun PakaApp(
-    homeResetSignal: Int = 0,
-    resumeSignal: Int = 0,
-    openDeveloperRoute: DeveloperRoute? = null,
+    homeResetSignal: Int,
+    resumeSignal: Int,
+    openDeveloperRoute: DeveloperRoute?,
+    startupLoad: State<InitialAppLoad?>,
 ) {
     val context = LocalContext.current
     var officialFontEnabled by remember { mutableStateOf(Prefs.officialFont(context)) }
@@ -214,6 +235,7 @@ internal fun PakaApp(
             homeResetSignal = homeResetSignal,
             resumeSignal = resumeSignal,
             openDeveloperRoute = openDeveloperRoute,
+            startupLoad = startupLoad,
             officialFontEnabled = officialFontEnabled,
             onOfficialFont = { enabled ->
                 officialFontEnabled = enabled
@@ -228,40 +250,11 @@ private fun PakaAppContent(
     homeResetSignal: Int,
     resumeSignal: Int,
     openDeveloperRoute: DeveloperRoute?,
+    startupLoad: State<InitialAppLoad?>,
     officialFontEnabled: Boolean,
     onOfficialFont: (Boolean) -> Unit,
 ) {
-    val context = LocalContext.current
-    val resources = LocalResources.current
-    var initialLoad by remember { mutableStateOf<InitialAppLoad?>(null) }
-    LaunchedEffect(Unit) {
-        StoreWriteCoordinator.awaitPendingWrites()
-        initialLoad = withContext(Dispatchers.IO) {
-            val recovery = StoreWriteCoordinator.recoverInterruptedRestore(context)
-            val loadedCards = CardStore.load(context)
-            val loadedCodes = SecureStore.loadAccounts(context)
-            val recoveryWarning = when (recovery) {
-                RestoreRecoveryOutcome.NONE -> null
-                RestoreRecoveryOutcome.ROLLED_BACK -> resources.getString(R.string.restore_rolled_back_notice)
-                RestoreRecoveryOutcome.COMMITTED -> resources.getString(R.string.restore_completed_notice)
-                RestoreRecoveryOutcome.FAILED -> resources.getString(R.string.restore_failed_notice)
-            }
-            val cards = loadedCards.copy(
-                warning = listOfNotNull(recoveryWarning, loadedCards.warning)
-                    .joinToString(" ")
-                    .takeIf { it.isNotBlank() },
-                writable = loadedCards.writable && recovery != RestoreRecoveryOutcome.FAILED,
-            )
-            val codes = loadedCodes.copy(writable = loadedCodes.writable && recovery != RestoreRecoveryOutcome.FAILED)
-            if (cards.writable) {
-                PdfStore.deleteOrphans(context, cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
-                PhotoStore.deleteOrphans(context, cards.value.photoDocumentIds())
-            }
-            InitialAppLoad(cards = cards, codes = codes)
-        }
-    }
-
-    val loaded = initialLoad
+    val loaded = startupLoad.value
     if (loaded == null) {
         Box(
             modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding(),
@@ -292,6 +285,57 @@ private fun PakaAppContent(
     )
 }
 
+/** Drops read access to linked files that no saved pass references any more. */
+private fun releaseReferenceGrants(context: Context, before: List<Card>, after: List<Card>) {
+    val kept = after.flatMap { it.references }.map { it.uri }.toSet()
+    before.flatMap { it.references }.map { it.uri }.distinct().filter { it !in kept }.forEach { uri ->
+        runCatching {
+            context.contentResolver.releasePersistableUriPermission(
+                uri.toUri(),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+    }
+}
+
+/** A fresh start's store read; orphan cleanup runs only after the card store loaded cleanly. */
+private suspend fun loadStartup(context: Context): InitialAppLoad {
+    val load = loadStores(context, context.resources)
+    if (load.cards.writable) {
+        withContext(Dispatchers.IO) {
+            PdfStore.deleteOrphans(context, load.cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
+            PhotoStore.deleteOrphans(context, load.cards.value.photoDocumentIds())
+        }
+    }
+    return load
+}
+
+/** Reads both stores the way a fresh start does, finishing any interrupted restore first. */
+private suspend fun loadStores(context: Context, resources: Resources): InitialAppLoad {
+    StoreWriteCoordinator.awaitPendingWrites()
+    return withContext(Dispatchers.IO) {
+        val recovery = StoreWriteCoordinator.recoverInterruptedRestore(context)
+        // Separate files and keys, so the two stores decrypt side by side.
+        val pendingCards = async { CardStore.load(context) }
+        val loadedCodes = SecureStore.loadAccounts(context)
+        val loadedCards = pendingCards.await()
+        val recoveryWarning = when (recovery) {
+            RestoreRecoveryOutcome.NONE -> null
+            RestoreRecoveryOutcome.ROLLED_BACK -> resources.getString(R.string.restore_rolled_back_notice)
+            RestoreRecoveryOutcome.COMMITTED -> resources.getString(R.string.restore_completed_notice)
+            RestoreRecoveryOutcome.FAILED -> resources.getString(R.string.restore_failed_notice)
+        }
+        val cards = loadedCards.copy(
+            warning = listOfNotNull(recoveryWarning, loadedCards.warning)
+                .joinToString(" ")
+                .takeIf { it.isNotBlank() },
+            writable = loadedCards.writable && recovery != RestoreRecoveryOutcome.FAILED,
+        )
+        val codes = loadedCodes.copy(writable = loadedCodes.writable && recovery != RestoreRecoveryOutcome.FAILED)
+        InitialAppLoad(cards = cards, codes = codes)
+    }
+}
+
 @Composable
 private fun LoadedPakaApp(
     homeResetSignal: Int,
@@ -305,7 +349,6 @@ private fun LoadedPakaApp(
     val context = LocalContext.current
     val resources = LocalResources.current
     val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
     var cards by remember { mutableStateOf(cardLoad.value) }
     var codes by remember { mutableStateOf(codeLoad.value) }
     var committedCards by remember { mutableStateOf(cardLoad.value) }
@@ -320,9 +363,12 @@ private fun LoadedPakaApp(
     var pendingDuplicate by remember { mutableStateOf<PendingDuplicate?>(null) }
     var selectedCard by remember { mutableStateOf<Card?>(null) }
     var selectedStack by remember { mutableStateOf<String?>(null) }
+    // Pages live here so Back from a pass, stack card, or details keeps the user's place.
+    val cardsPage = remember { mutableIntStateOf(0) }
+    val codesPage = remember { mutableIntStateOf(0) }
+    val stackPage = remember(selectedStack) { mutableIntStateOf(0) }
     var detailCard by remember { mutableStateOf<Card?>(null) }
     var scanning by remember { mutableStateOf(false) }
-    var scanMode by remember { mutableStateOf(ScanMode.CARD) }
     var pendingScan by remember { mutableStateOf<ScanResult?>(null) }
     var manualCard by remember { mutableStateOf(false) }
     var manualCode by remember { mutableStateOf(false) }
@@ -349,11 +395,12 @@ private fun LoadedPakaApp(
             insets.isAppearanceLightNavigationBars = Palette.lightMode
         }
     }
-    var demoContent by remember { mutableStateOf(DemoData.create(context)) }
+    // Enabling demo mode always generates fresh content, so a launch with it off skips the work.
+    var demoContent by remember {
+        mutableStateOf(if (demoModeEnabled) DemoData.create(context) else DemoContent(emptyList(), emptyList()))
+    }
     var onboardingComplete by remember { mutableStateOf(Prefs.onboardingComplete(context)) }
-    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var pendingClipboard by remember { mutableStateOf<PendingClipboard?>(null) }
-    val foreground by rememberIsForeground()
     val scope = rememberCoroutineScope()
     val activeCards = if (demoModeEnabled) demoContent.cards else cards
     val activeCodes = if (demoModeEnabled) demoContent.accounts else codes
@@ -361,12 +408,14 @@ private fun LoadedPakaApp(
         onboardingComplete && !showSettings && !showBackup && !showAbout && manageMode == null && pendingDuplicate == null && !showDev &&
         !manualCard && !manualCode && pendingScan == null && !scanning &&
         detailCard == null && selectedStack == null && selectedCard == null
-    val codesVisible = mode == Mode.CODES && homeVisible
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
-    val passWidthPx = with(density) { (configuration.screenWidthDp.dp - 32.dp).roundToPx() }
+    // Derived like the pass screen's container width, so prefetched codes hit its render cache.
+    val screenWidthPx = LocalWindowInfo.current.containerSize.width
+    val passWidthPx = screenWidthPx - with(density) { 32.dp.roundToPx() }
     LaunchedEffect(homeResetSignal) {
         if (homeResetSignal > 0) {
             mode = Mode.CARDS
+            cardsPage.intValue = 0
+            codesPage.intValue = 0
             showSettings = false
             showBackup = false
             showAbout = false
@@ -386,28 +435,26 @@ private fun LoadedPakaApp(
             showDev = false
         }
     }
-    // Gated on foreground so the per-second wake-up stops when Paka is
-    // backgrounded; Compose would otherwise keep this loop alive while stopped.
-    LaunchedEffect(codesVisible, foreground) {
-        if (codesVisible && foreground) {
-            while (true) {
-                nowMs = System.currentTimeMillis()
-                delay(1000)
-            }
-        }
-    }
     LaunchedEffect(homeVisible, mode, activeCards, screenWidthPx, passWidthPx) {
         if (homeVisible && mode == Mode.CARDS) {
-            delay(250)
-            activeCards.take(6).forEach { card ->
-                card.barcodeContent?.let { barcode ->
-                    withContext(Dispatchers.Default) {
-                        val targetWidthPx = BarcodeDisplay.targetWidthPx(
-                            barcode.format,
-                            screenWidthPx,
-                            passWidthPx,
-                        )
-                        Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
+            val entries = buildEntries(activeCards)
+            // Warm the page being looked at (and the next row), not always page one.
+            snapshotFlow { cardsPage.intValue }.collectLatest { page ->
+                delay(250)
+                entries.drop(page * ITEMS_PER_PAGE).take(ITEMS_PER_PAGE + 1).forEach { entry ->
+                    val card = when (entry) {
+                        is SingleEntry -> entry.card
+                        is StackEntry -> entry.cards.first()
+                    }
+                    card.barcodeContent?.let { barcode ->
+                        withContext(Dispatchers.Default) {
+                            val targetWidthPx = BarcodeDisplay.targetWidthPx(
+                                barcode.format,
+                                screenWidthPx,
+                                passWidthPx,
+                            )
+                            Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
+                        }
                     }
                 }
             }
@@ -418,6 +465,26 @@ private fun LoadedPakaApp(
         codeLoad.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
 
+    // A failed save leaves a store read-only. Each return to Paka re-reads the
+    // disk, so the "Reopen Paka" advice works without clearing storage. No
+    // orphan cleanup here: an unsaved entry may hold a fresh import.
+    LaunchedEffect(resumeSignal) {
+        if (cardsWritable && codesWritable) return@LaunchedEffect
+        val disk = loadStores(context, resources)
+        if (!cardsWritable && disk.cards.writable) {
+            cards = disk.cards.value
+            committedCards = disk.cards.value
+            cardsWritable = true
+            disk.cards.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        }
+        if (!codesWritable && disk.codes.writable) {
+            codes = disk.codes.value
+            committedCodes = disk.codes.value
+            codesWritable = true
+            disk.codes.warning?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+        }
+    }
+
     LaunchedEffect(pendingClipboard, resumeSignal) {
         val pending = pendingClipboard ?: return@LaunchedEffect
         delay((pending.expiresAtMs - System.currentTimeMillis()).coerceAtLeast(0L))
@@ -426,12 +493,7 @@ private fun LoadedPakaApp(
         delay(150)
         val activity = context as? Activity
         if (activity?.hasWindowFocus() != true) return@LaunchedEffect
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-        if (current == pending.value) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-        }
+        clearOwnedClip(context, pending.value)
         pendingClipboard = null
     }
 
@@ -456,7 +518,10 @@ private fun LoadedPakaApp(
         cards = list
         scope.launch {
             when (write.await()) {
-                StoreWriteStatus.SAVED -> committedCards = list
+                StoreWriteStatus.SAVED -> {
+                    releaseReferenceGrants(context, committedCards, list)
+                    committedCards = list
+                }
                 StoreWriteStatus.SUPERSEDED -> Unit
                 StoreWriteStatus.FAILED -> {
                     cards = committedCards
@@ -539,7 +604,7 @@ private fun LoadedPakaApp(
     }
 
     ProtectSensitiveContent(
-        showBackup || manualCode || (scanning && scanMode == ScanMode.CODE) || (mode == Mode.CODES && !demoModeEnabled),
+        showBackup || manualCode || (scanning && mode == Mode.CODES) || (mode == Mode.CODES && !demoModeEnabled),
     )
 
     // ---- routing (topmost overlay wins) ----
@@ -595,6 +660,12 @@ private fun LoadedPakaApp(
         ManageScreen(
             rows = rows,
             kind = if (managing == Mode.CARDS) ManageKind.PASSES else ManageKind.CODES,
+            // 2FA accounts have no details screen, so Reorder is where one is deleted.
+            onDelete = if (managing == Mode.CODES) {
+                { id -> saveCodes(activeCodes.filter { it.id != id }) }
+            } else {
+                null
+            },
             onUp = { id ->
                 if (managing == Mode.CARDS) saveCards(activeCards.moved(activeCards.indexOfFirst { it.id == id }, true))
                 else saveCodes(activeCodes.moved(activeCodes.indexOfFirst { it.id == id }, true))
@@ -656,14 +727,7 @@ private fun LoadedPakaApp(
             onDemoMode = { enabled ->
                 if (enabled) {
                     demoContent = DemoData.create(context)
-                    pendingClipboard?.let { pending ->
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val current = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-                        if (current == pending.value) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-                            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-                        }
-                    }
+                    pendingClipboard?.let { clearOwnedClip(context, it.value) }
                     pendingClipboard = null
                 }
                 demoModeEnabled = enabled
@@ -692,6 +756,7 @@ private fun LoadedPakaApp(
         BackupScreen(
             cards = cards,
             accounts = codes,
+            restoreBlocked = !cardsWritable || !codesWritable,
             onRestore = { restored ->
                 if (!cardsWritable || !codesWritable) {
                     restored.clearDocuments()
@@ -808,14 +873,35 @@ private fun LoadedPakaApp(
         BackHandler { scanning = false }
         ScanScreen(
             automaticLightEnabled = autoLightEnabled,
+            refusalMessage = if (mode == Mode.CODES) {
+                R.string.scan_not_2fa
+            } else {
+                R.string.entry_error_code_cannot_render_exactly
+            },
             onScanned = { result ->
                 scanning = false
-                if (scanMode == ScanMode.CODE) {
+                if (mode == Mode.CODES) {
                     val account = Totp.parseOtpauth(result.data, resources.getString(R.string.unknown_issuer))
                     if (account != null) addCode(account)
                     else Toast.makeText(context, R.string.scan_not_2fa, Toast.LENGTH_SHORT).show()
                 } else {
-                    pendingScan = result
+                    // Same render-and-verify gate as manual entry, at the width the pass will
+                    // display, so the verified bitmap is the one the cache then shows.
+                    scope.launch {
+                        val renders = withContext(Dispatchers.Default) {
+                            val targetWidthPx = BarcodeDisplay.targetWidthPx(result.format, screenWidthPx, passWidthPx)
+                            Barcodes.generateCached(result.format, result.data, targetWidthPx) != null
+                        }
+                        if (renders) {
+                            pendingScan = result
+                        } else {
+                            Toast.makeText(
+                                context,
+                                R.string.entry_error_code_cannot_render_exactly,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
                 }
             },
             onBack = { scanning = false },
@@ -829,11 +915,17 @@ private fun LoadedPakaApp(
         CardDetail(
             card = fresh,
             onUpdate = updateCard,
-            onDelete = { saveCards(activeCards.filter { it.id != fresh.id }) },
+            // Clear the opened pass too, or Back would fall through to the deleted pass.
+            onDelete = { saveCards(activeCards.filter { it.id != fresh.id }).also { if (it) selectedCard = null } },
             stackMembers = { stackName ->
                 activeCards.filter { it.stack == stackName }.map { ManageRow(it.id, it.name) }
             },
-            onStackMove = { id, up -> saveCards(activeCards.movedWithinStack(id, up)) },
+            onStackMove = { id, up ->
+                val moved = activeCards.movedWithinStack(id, up)
+                // Back returns to the stack page that shows this pass, not to its old position.
+                val page = moved.filter { it.stack == fresh.stack }.indexOfFirst { it.id == fresh.id }
+                if (saveCards(moved) && page >= 0) stackPage.intValue = page
+            },
             onBack = { detailCard = null },
         )
         return
@@ -846,6 +938,7 @@ private fun LoadedPakaApp(
         StackScreen(
             name = stackName,
             cards = stackCards,
+            pageState = stackPage,
             forceMaximumBrightness = maxCodeBrightnessEnabled,
             onLongCurrent = { detailCard = it },
             onBack = { selectedStack = null },
@@ -905,6 +998,7 @@ private fun LoadedPakaApp(
                     else CardsList(
                         entries = buildEntries(activeCards),
                         textSize = textSize,
+                        pageState = cardsPage,
                         onOpenCard = { selectedCard = it },
                         onOpenStack = { selectedStack = it },
                     )
@@ -912,8 +1006,8 @@ private fun LoadedPakaApp(
                     if (activeCodes.isEmpty()) EmptyHint(stringResource(R.string.home_add_code_hint))
                     else CodesList(
                         accounts = activeCodes,
-                        nowMs = nowMs,
                         textSize = textSize,
+                        pageState = codesPage,
                         onCopy = { code ->
                             if (code.any { it == '-' }) return@CodesList
                             val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -948,12 +1042,23 @@ private fun LoadedPakaApp(
             )
         }
 
+        // Real 2FA secrets must never join the screenshot-allowed, discarded-on-exit demo list.
+        val codeAddBlocked = mode == Mode.CODES && demoModeEnabled
+        val showCodeAddBlocked = {
+            Toast.makeText(context, R.string.entry_toast_code_demo_disabled, Toast.LENGTH_SHORT).show()
+        }
         BottomBar(
             mode = mode,
             lightGear = lightGearEnabled,
             onSettings = { showSettings = true },
-            onAdd = { scanMode = if (mode == Mode.CARDS) ScanMode.CARD else ScanMode.CODE; startScan() },
-            onAddLong = { if (mode == Mode.CARDS) manualCard = true else manualCode = true },
+            onAdd = { if (codeAddBlocked) showCodeAddBlocked() else startScan() },
+            onAddLong = {
+                when {
+                    mode == Mode.CARDS -> manualCard = true
+                    codeAddBlocked -> showCodeAddBlocked()
+                    else -> manualCode = true
+                }
+            },
             onToggleMode = { mode = if (mode == Mode.CARDS) Mode.CODES else Mode.CARDS },
         )
     }

@@ -38,22 +38,24 @@ internal data class CropRect(
         return CropRect(left + clampedDx, top + clampedDy, right + clampedDx, bottom + clampedDy)
     }
 
+    // Float rounding in movedBy can leave a minimum-size box a hair under minSize at
+    // an edge, so the clamp ranges are kept non-empty instead of throwing.
     fun resized(handle: CropHandle, dx: Float, dy: Float, minSize: Float): CropRect = when (handle) {
         CropHandle.TOP_LEFT -> copy(
-            left = (left + dx).coerceIn(0f, right - minSize),
-            top = (top + dy).coerceIn(0f, bottom - minSize),
+            left = (left + dx).coerceIn(0f, maxOf(0f, right - minSize)),
+            top = (top + dy).coerceIn(0f, maxOf(0f, bottom - minSize)),
         )
         CropHandle.TOP_RIGHT -> copy(
-            right = (right + dx).coerceIn(left + minSize, 1f),
-            top = (top + dy).coerceIn(0f, bottom - minSize),
+            right = (right + dx).coerceIn(minOf(1f, left + minSize), 1f),
+            top = (top + dy).coerceIn(0f, maxOf(0f, bottom - minSize)),
         )
         CropHandle.BOTTOM_LEFT -> copy(
-            left = (left + dx).coerceIn(0f, right - minSize),
-            bottom = (bottom + dy).coerceIn(top + minSize, 1f),
+            left = (left + dx).coerceIn(0f, maxOf(0f, right - minSize)),
+            bottom = (bottom + dy).coerceIn(minOf(1f, top + minSize), 1f),
         )
         CropHandle.BOTTOM_RIGHT -> copy(
-            right = (right + dx).coerceIn(left + minSize, 1f),
-            bottom = (bottom + dy).coerceIn(top + minSize, 1f),
+            right = (right + dx).coerceIn(minOf(1f, left + minSize), 1f),
+            bottom = (bottom + dy).coerceIn(minOf(1f, top + minSize), 1f),
         )
     }
 

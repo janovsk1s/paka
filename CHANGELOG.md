@@ -2,6 +2,155 @@
 
 Notable changes to Paka are documented here.
 
+## Unreleased
+
+- Faster cold start: Paka decrypts passes and 2FA codes while its first
+  screen is still being built, decrypts both stores side by side, and draws
+  the list in the first frame once they are ready instead of showing
+  "Opening…" first. Startup no longer flushes the app directory to disk
+  when there is nothing to clean up, and encryption reuses each Keystore key
+  handle instead of looking it up on every read and write. Demo content is
+  generated only when demo mode is on. On the `Paka_LP3` emulator with six
+  passes and two 2FA codes, the list appears in 251 ms instead of 344 ms
+  (1.37×, medians of 48 cold starts). An empty Compose screen takes 174 ms
+  there, so Paka's own share of startup fell from about 170 ms to 77 ms.
+- A pass whose code was prefetched shows the code in the first frame instead
+  of a brief "Rendering…", and the home list prefetches the page being looked
+  at rather than always the first six passes. Opening a pass is about 2.3×
+  faster on the emulator.
+- The baseline profile is re-recorded over onboarding, the pass list, opening
+  a pass, and the 2FA list; the old one predated most current screens. The
+  generator now follows each screen change instead of racing it.
+- Pressing Home while a captured document photo is still processing no longer
+  crashes Paka.
+- A linked file whose provider reports a blank type or name is saved with a
+  fallback, and the pass store refuses any reference it could not read back.
+  Before, such a link saved fine but left a store that failed to load on the
+  next start.
+- An unexpected barcode-library error on an unusual payload shows "Couldn't
+  render this code" instead of crashing; on the first home page it would have
+  crashed every launch.
+- Clearing a copied 2FA code no longer reads another app's clipboard content
+  on the UI thread.
+- A store the Keystore cannot decrypt for the moment (device still locked,
+  Keystore busy) is no longer replaced by its older backup copy, which lost
+  the newest save at the next write. Paka shows "could not be decrypted",
+  keeps the file, and reads it again when you return.
+- The largest backup Paka allows now exports and restores while the app is
+  running. Paka uses Android's large heap, unlocking no longer copies the
+  encrypted backup in memory, and a backup file whose size the provider
+  reports is read into one exact buffer. Before, a near-limit backup could
+  run out of memory and fail as "Incorrect passphrase or invalid backup".
+  An emulator test exports and unlocks the largest backup with 48 MiB of the
+  heap already in use.
+
+- A store left read-only by a failed save is read again each time you return
+  to Paka, so "reopen Paka" recovers it without clearing storage.
+- The PDF and photo data keys now keep a backup copy like every other store;
+  an existing single key file gains one on its next load. One damaged key file
+  no longer locks every PDF or photo.
+- Swapping a pending PDF or photo pick no longer counts the one being replaced
+  against the backup size limit.
+- A phone without a file picker shows "File picker could not be opened" for
+  backup import/export, PDF, and photo picks instead of crashing.
+- The scanner skips a code it cannot reproduce exactly and keeps looking, so a
+  GS1 barcode next to the wanted code no longer ends the scan; in 2FA mode the
+  refusal reads "Not a 2FA QR code".
+- Scanned passes verify at the width the pass screen uses, and that render is
+  cached for display. Reordering a stack from Details keeps the stack on the
+  pass you were viewing.
+- Removing a linked file from a pass, or deleting the pass, now drops Paka's
+  read access to that file once no saved pass links it. Reading a picked
+  link's name and type no longer runs on the UI thread, so a slow document
+  provider cannot freeze Paka.
+- Picking the same PDF twice and then backing out deletes it instead of
+  leaving it stored until the next cold start.
+- Numeric barcode fields accept only ASCII digits; full-width digits now get
+  the "digits only" message instead of failing later at render.
+- 18 strings nothing used were removed from all eight languages.
+- UI consistency: the Backup and file-reference menus shrink long labels onto
+  one line like every other menu; Details and entry screens share one footer
+  lane, so "save" sits in the same place; explanatory and inline-error texts
+  use the same light weight and size everywhere; About's prose matches
+  onboarding's 18 sp; the read-only code field drops the rule that editable
+  fields carry; "Passphrases do not match" and "Preparing…" read as sentences
+  like their siblings in all eight languages.
+- Each 2FA account name now sits just above its own code at any font or font
+  size. The name is placed from the code's baseline instead of inherited line
+  boxes, which let it drift toward the previous row's code on fonts other than
+  Akkurat and at larger text sizes.
+- Read-only storage now explains its recovery path on the Backup screen and
+  disables restore there, instead of a toast that Android 12+ cuts to two
+  lines; the photo backup-limit message stays on the review screen.
+- Paka is portrait-only, so turning a phone no longer recreates the screen
+  and drops the open pass, stack, or form back to the list.
+- The camera light toggle sits on the back arrow's line, and only the 2FA list
+  redraws every second while codes are shown; home prefetch uses the pass
+  screen's exact width so its renders hit the cache.
+- Polish: wrapped 30 sp text (delete and duplicate questions, backup and
+  reference menus, the restore warning) no longer inherits a 24 sp line height
+  that made its lines overlap; About moves a long development or preview
+  version below the name instead of breaking it mid-word; the scanner and
+  photo-capture back arrows sit exactly where every other screen's does.
+- The same 2FA secret entered with and without `=` padding is now recognised
+  as a duplicate.
+- Release verification reuses the CI permission check instead of keeping its
+  own copy.
+- 2FA accounts can be deleted again: tap an account's name in Reorder 2FA
+  codes, then confirm. Accounts had no delete path since Reorder became
+  movement-only in 0.12.9.
+- Adding 2FA accounts is unavailable in demo mode, so a real secret never
+  joins the screenshot-allowed demo list and is discarded when demo ends.
+- Back from a pass, stack card, or details returns to the same list page and
+  stack card instead of the first one; leaving Paka still resets to page one.
+- The 2FA ticker wakes on whole-second boundaries, so a code no longer lingers
+  up to a second past its rollover.
+- Transparent PNG, WebP, and GIF photos are composited onto white for review,
+  display, and edits instead of turning transparent areas black.
+- PDFs are encrypted with a random data key wrapped by the PDF Keystore key,
+  the envelope photos already use, instead of pushing every byte through the
+  Keystore. Existing PDFs migrate the first time they are opened.
+- Imports that would push stored PDFs past 20 MB or photos past 32 MB are
+  refused with a clear message, so an export can always include every pass.
+- A restore refused because storage is read-only now explains the recovery
+  path: reopen Paka, and if storage stays read-only, clear Paka's storage in
+  Android Settings, then restore.
+- The card store and portable backups share one pass and 2FA account JSON
+  writer, and a full export/restore round trip is now tested.
+- Scanning no longer saves a decoder's display text as a pass payload. GS1
+  symbols (other than DataBar Expanded) and codes containing control or binary
+  bytes, other than Aztec and PDF417, are refused with "cannot be rendered
+  exactly" instead of being saved as bracketed or `<GS>`-escaped text.
+- Scanned passes must render and verify before they are named and saved, the
+  same gate manual entry uses.
+- Data Matrix now validates as Latin-1, matching its encoder, and Aztec codes no
+  longer gain an ECI-1 header the original symbol did not carry. Aztec payload
+  bytes are unchanged.
+- 2FA secrets whose final Base32 character carries leftover bits are accepted
+  again, as before 0.12.6. Such accounts no longer show dashes, and backups
+  containing them restore.
+- Picking front and back photos together no longer wipes the back photo before
+  it can be reviewed.
+- Resizing a minimum-size crop selection at the photo edge no longer crashes.
+- Deleting a pass from its details returns to the list instead of the deleted
+  pass. Leaving unchanged details no longer rewrites the pass store, so Back
+  works while storage is read-only.
+- Zoomed landscape PDF pages stay centred instead of overflowing the bottom.
+- The scanner library is updated to zxing-cpp 3.1.1. Stacked GS1 DataBar
+  Expanded codes now scan, and Code 39 variants (Code 32, PZN, full-ASCII), or
+  stacked DataBar elsewhere in view, no longer silently block every scan in
+  that frame. Those Code 39 variants are still not imported, because Paka
+  could not redisplay them exactly.
+- An emulator test now decodes Paka's own renders, clean and degraded, through
+  the scanner's real zxing-cpp path and requires the exact original payload,
+  covering the decoder side of the scanner checklist without a phone.
+- A tilted ITF barcode can no longer scan as a shorter, wrong number. Scan
+  lines leaving the code through its top or bottom edge could stop early on a
+  pattern that is itself valid ITF; the scanner now ignores ITF reads that
+  span only a thin band of the bars. The same shorter read used to sit beside
+  the real one and block the scan, so an ITF-14 tilted up to about 16° now
+  scans where it stopped at about 5°.
+
 ## 0.15.3 — 2026-07-24
 
 - Version-bump re-release of 0.15.2 (`versionCode` 55). No functional, security,

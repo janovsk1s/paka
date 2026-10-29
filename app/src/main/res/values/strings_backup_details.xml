@@ -13,7 +13,7 @@
     <string name="backup_photo_compatibility">This backup contains photo passes and can only be restored by Paka 0.14 or newer.</string>
     <string name="backup_minimum_characters">%1$d+ characters</string>
     <string name="backup_repeat_passphrase">repeat passphrase</string>
-    <string name="backup_passphrases_do_not_match">passphrases do not match</string>
+    <string name="backup_passphrases_do_not_match">Passphrases do not match</string>
     <string name="backup_encrypting">encrypting…</string>
     <string name="backup_save_encrypted">save encrypted backup</string>
     <string name="backup_import_instructions">Enter the passphrase used when this backup was created.</string>

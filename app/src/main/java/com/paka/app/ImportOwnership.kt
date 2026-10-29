@@ -10,11 +10,15 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicReference
 
 /** PdfRenderer/import work is non-cancellable; clean up a completed import until state accepts it. */
-internal suspend fun importPdfOwned(context: Context, uri: Uri): Result<PdfImport> {
+internal suspend fun importPdfOwned(
+    context: Context,
+    uri: Uri,
+    replacing: Set<String> = emptySet(),
+): Result<PdfImport> {
     val outcome = AtomicReference<Result<PdfImport>?>(null)
     return try {
         withContext(NonCancellable + Dispatchers.IO) {
-            outcome.set(PdfStore.import(context, uri))
+            outcome.set(PdfStore.import(context, uri, replacing))
         }
         currentCoroutineContext().ensureActive()
         outcome.getAndSet(null) ?: Result.failure(IllegalStateException("PDF import did not finish"))

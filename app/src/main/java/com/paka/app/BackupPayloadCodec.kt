@@ -90,7 +90,7 @@ internal object BackupPayloadCodec {
     private fun writeEntries(output: ByteBuffer, entries: Map<String, ByteArray>) {
         output.putInt(entries.size)
         entries.forEach { (id, bytes) ->
-            require(id.matches(Regex("[0-9a-f]{64}"))) { "Invalid backup blob identifier" }
+            require(id.matches(DOCUMENT_ID_PATTERN)) { "Invalid backup blob identifier" }
             output.put(id.toByteArray(Charsets.US_ASCII))
             output.putInt(bytes.size)
             output.put(bytes)
@@ -109,7 +109,7 @@ internal object BackupPayloadCodec {
         repeat(count) {
             require(input.available() >= ID_BYTES + 4) { "Backup blob entry is truncated" }
             val id = ByteArray(ID_BYTES).also(input::readFully).toString(Charsets.US_ASCII)
-            require(id.matches(Regex("[0-9a-f]{64}")) && id !in destination) { "Invalid backup blob identifier" }
+            require(id.matches(DOCUMENT_ID_PATTERN) && id !in destination) { "Invalid backup blob identifier" }
             val length = input.readInt()
             require(length in 0..maxEntryBytes && length <= input.available()) { "Backup blob is too large or truncated" }
             total += length

@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -171,6 +172,7 @@ private fun BarcodePanel(
 internal fun StackScreen(
     name: String,
     cards: List<Card>,
+    pageState: MutableIntState,
     forceMaximumBrightness: Boolean,
     onLongCurrent: (Card) -> Unit,
     onBack: () -> Unit,
@@ -195,45 +197,36 @@ internal fun StackScreen(
             val documentTargetWidthPx = with(density) { (maxWidth - 32.dp).roundToPx() }
             // Matches PdfDocumentPreview's 420.dp box minus its 8.dp inner padding.
             val pdfHeightPx = with(density) { 404.dp.roundToPx() }
-            var currentIndex by remember(name, cards) { mutableIntStateOf(0) }
+            val currentIndex by pageState
             val rendered = remember(name, cards, availableWidthPx, documentTargetWidthPx) {
-                mutableStateMapOf<String, BarcodeRender>()
+                mutableStateMapOf<String, BarcodeRender>().apply {
+                    // A prefetched code shows in the first frame instead of after "Rendering…".
+                    val card = cards.getOrNull(currentIndex) ?: return@apply
+                    val barcode = card.barcodeContent ?: return@apply
+                    val widthPx = BarcodeDisplay.targetWidthPx(barcode.format, availableWidthPx, documentTargetWidthPx)
+                    Barcodes.cached(barcode.format, barcode.data, widthPx)?.let { put(card.id, BarcodeRender(it)) }
+                }
             }
             val photoRenders = remember(name, cards, documentTargetWidthPx) {
                 mutableStateMapOf<String, BarcodeRender>()
             }
-            DisposableEffect(photoRenders) {
-                onDispose {
-                    val owned = photoRenders.values.mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                    photoRenders.clear()
-                    owned.forEach { if (!it.isRecycled) it.recycle() }
-                }
+            // Clears a map, then recycles only bitmaps this screen owns (decoded photos
+            // and PDF pages); shared-cache barcode bitmaps must never be recycled here.
+            fun MutableMap<String, BarcodeRender>.releaseOwned() {
+                val owned = values.filter(BarcodeRender::recycleOnDiscard)
+                    .mapNotNull(BarcodeRender::bitmap)
+                    .distinctBy(System::identityHashCode)
+                clear()
+                owned.forEach { if (!it.isRecycled) it.recycle() }
             }
-            // The rendered map mixes shared-cache barcode bitmaps (which must not
-            // be recycled) with owned PDF page bitmaps; recycle only the latter.
-            DisposableEffect(rendered) {
-                onDispose {
-                    rendered.values.filter(BarcodeRender::recycleOnDiscard)
-                        .mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                        .forEach { if (!it.isRecycled) it.recycle() }
-                    rendered.clear()
-                }
-            }
+            DisposableEffect(photoRenders) { onDispose { photoRenders.releaseOwned() } }
+            DisposableEffect(rendered) { onDispose { rendered.releaseOwned() } }
 
             LaunchedEffect(cards, availableWidthPx, documentTargetWidthPx, foreground, currentIndex) {
                 val uniqueCards = cards.distinctBy { it.id }
                 if (!foreground) {
-                    val photos = photoRenders.values.mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                    photoRenders.clear()
-                    photos.forEach { if (!it.isRecycled) it.recycle() }
-                    val documents = rendered.values.filter(BarcodeRender::recycleOnDiscard)
-                        .mapNotNull(BarcodeRender::bitmap)
-                        .distinctBy(System::identityHashCode)
-                    rendered.clear()
-                    documents.forEach { if (!it.isRecycled) it.recycle() }
+                    photoRenders.releaseOwned()
+                    rendered.releaseOwned()
                     return@LaunchedEffect
                 }
                 val index = currentIndex.coerceIn(0, uniqueCards.lastIndex)
@@ -268,7 +261,7 @@ internal fun StackScreen(
                             } catch (_: Exception) {
                                 null
                             }
-                            val previous = photoRenders.put(key, BarcodeRender(bitmap))?.bitmap
+                            val previous = photoRenders.put(key, BarcodeRender(bitmap, recycleOnDiscard = true))?.bitmap
                             if (previous != null && previous !== bitmap && !previous.isRecycled) previous.recycle()
                         }
                         return
@@ -313,7 +306,7 @@ internal fun StackScreen(
                 pageCount = cards.size,
                 showIndicator = false,
                 contentKind = PagerContentKind.PASS,
-                onPageChange = { currentIndex = it },
+                pageState = pageState,
             ) { index, advance ->
                 val card = cards[index]
                 val photoContent = card.photoContent
@@ -502,8 +495,9 @@ internal fun PhotoScreen(
 @Composable
 private fun rememberBarcodeRender(card: Card, targetWidthPx: Int): BarcodeRender? {
     val barcode = card.barcodeContent ?: return BarcodeRender(null)
+    // A prefetched code shows in the first frame instead of after a "Rendering…" frame.
     var render by remember(card.id, barcode.data, barcode.format, targetWidthPx) {
-        mutableStateOf<BarcodeRender?>(null)
+        mutableStateOf(Barcodes.cached(barcode.format, barcode.data, targetWidthPx)?.let { BarcodeRender(it) })
     }
     LaunchedEffect(card.id, barcode.data, barcode.format, targetWidthPx) {
         val bitmap = withContext(Dispatchers.Default) {

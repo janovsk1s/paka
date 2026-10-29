@@ -12,6 +12,8 @@ class BarcodeValidationTest {
         assertNotNull(Barcodes.validationError(PakaFormat.EAN13, "59012341234X"))
         assertNull(Barcodes.validationError(PakaFormat.UPCA, "04210000526"))
         assertNotNull(Barcodes.validationError(PakaFormat.UPCA, "0421000052"))
+        // Full-width digits pass Char.isDigit but no barcode writer accepts them.
+        assertNotNull(Barcodes.validationError(PakaFormat.EAN13, "５９０１２３４１２３４５"))
     }
 
     @Test
@@ -19,9 +21,17 @@ class BarcodeValidationTest {
         assertNull(Barcodes.validationError(PakaFormat.ITF, "12345678"))
         assertNotNull(Barcodes.validationError(PakaFormat.ITF, "1234567"))
         assertNotNull(Barcodes.validationError(PakaFormat.ITF, "1234AB"))
+        assertNotNull(Barcodes.validationError(PakaFormat.ITF, "１２３４"))
         assertNull(Barcodes.validationError(PakaFormat.CODE39, "PAKA-123"))
         assertNotNull(Barcodes.validationError(PakaFormat.CODE39, "paka-123"))
         assertNull(Barcodes.validationError(PakaFormat.CODABAR, "A12345B"))
         assertNotNull(Barcodes.validationError(PakaFormat.CODABAR, "12345"))
+    }
+
+    @Test
+    fun `data matrix is limited to latin-1 like its zxing writer`() {
+        assertNull(Barcodes.validationError(PakaFormat.DATA_MATRIX, "Café 123"))
+        assertNotNull(Barcodes.validationError(PakaFormat.DATA_MATRIX, "Rīga"))
+        assertNotNull(Barcodes.validationError(PakaFormat.DATA_MATRIX, "€5"))
     }
 }

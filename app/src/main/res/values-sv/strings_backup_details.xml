@@ -13,7 +13,7 @@
     <string name="backup_photo_compatibility">Säkerhetskopian innehåller fotokort och kan bara återställas med Paka 0.14 eller senare.</string>
     <string name="backup_minimum_characters">minst %1$d tecken</string>
     <string name="backup_repeat_passphrase">upprepa lösenfrasen</string>
-    <string name="backup_passphrases_do_not_match">lösenfraserna stämmer inte</string>
+    <string name="backup_passphrases_do_not_match">Lösenfraserna stämmer inte</string>
     <string name="backup_encrypting">krypterar…</string>
     <string name="backup_save_encrypted">spara krypterad säkerhetskopia</string>
     <string name="backup_import_instructions">Ange säkerhetskopians lösenfras.</string>

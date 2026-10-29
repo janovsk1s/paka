@@ -2,6 +2,8 @@ package com.paka.app
 
 import android.os.SystemClock
 import android.util.Size
+import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
@@ -17,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
@@ -43,6 +46,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import zxingcpp.BarcodeReader
 import kotlin.math.abs
+import kotlin.math.hypot
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -52,7 +56,12 @@ import java.util.concurrent.atomic.AtomicReference
 data class ScanResult(val data: String, val format: PakaFormat)
 
 @Composable
-fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, onBack: () -> Unit) {
+fun ScanScreen(
+    automaticLightEnabled: Boolean,
+    @StringRes refusalMessage: Int,
+    onScanned: (ScanResult) -> Unit,
+    onBack: () -> Unit,
+) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val haptics = LocalHapticFeedback.current
@@ -62,35 +71,9 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
     var torchEnabled by remember { mutableStateOf(false) }
     var autoLight by remember { mutableStateOf(false) }
     var lowLight by remember { mutableStateOf(false) }
-    val readers = remember {
-        // Reading several symbols per frame lets selectAimedSymbol require the
-        // guide square to disambiguate documents that carry more than one code.
-        listOf(
-            BarcodeReader(
-                BarcodeReader.Options(
-                    formats = emptySet(),
-                    tryHarder = true,
-                    tryRotate = true,
-                    tryInvert = true,
-                    tryDownscale = false,
-                    binarizer = BarcodeReader.Binarizer.LOCAL_AVERAGE,
-                    maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
-                ),
-            ),
-            BarcodeReader(
-                BarcodeReader.Options(
-                    formats = emptySet(),
-                    tryHarder = true,
-                    tryRotate = true,
-                    tryInvert = true,
-                    tryDownscale = false,
-                    binarizer = BarcodeReader.Binarizer.GLOBAL_HISTOGRAM,
-                    maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
-                ),
-            ),
-        )
-    }
+    val readers = remember { scanReaderOptions.map(::BarcodeReader) }
     val handled = remember { AtomicBoolean(false) }
+    val refusalShown = remember { AtomicBoolean(false) }
     val disposed = remember { AtomicBoolean(false) }
     val executor = remember {
         Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "paka-barcode-scan") }
@@ -219,35 +202,34 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                                                     }
                                                 }
 
-                                                val symbols = readers.firstNotNullOfOrNull { reader ->
-                                                    reader.read(image).filter {
-                                                        (it.text != null || it.bytes != null) &&
-                                                            mapFormat(it.format) != null
-                                                    }.takeIf { it.isNotEmpty() }
-                                                }.orEmpty()
+                                                val symbols = readScanSymbols(readers) { read(image) }
+                                                // A refused symbol does not end the scan: the wanted
+                                                // code may sit beside it.
+                                                val accepted = acceptedScans(symbols)
+                                                val onlyRefused = symbols.isNotEmpty() && accepted.isEmpty()
+                                                if (onlyRefused && refusalShown.compareAndSet(false, true)) {
+                                                    previewView.post {
+                                                        Toast.makeText(context, refusalMessage, Toast.LENGTH_LONG)
+                                                            .show()
+                                                    }
+                                                }
                                                 // zxing-cpp reports positions in the rotated
                                                 // (display-oriented) frame.
                                                 val rotated = image.imageInfo.rotationDegrees % 180 != 0
                                                 val viewSize = viewSizeRef.get()
                                                 val result = selectAimedSymbol(
-                                                    centers = symbols.map { it.position.center() },
+                                                    centers = accepted.map { it.second },
                                                     geometry = ScanGeometry(
                                                         frameWidth = if (rotated) image.height else image.width,
                                                         frameHeight = if (rotated) image.width else image.height,
                                                         viewWidth = viewSize[0],
                                                         viewHeight = viewSize[1],
                                                     ),
-                                                )?.let(symbols::get)
-                                                val format = result?.let { mapFormat(it.format) }
-                                                if (
-                                                    result != null &&
-                                                    format != null &&
-                                                    handled.compareAndSet(false, true)
-                                                ) {
-                                                    val data = selectScanPayload(format, result.text, result.bytes)
+                                                )?.let { accepted[it].first }
+                                                if (result != null && handled.compareAndSet(false, true)) {
                                                     previewView.post {
                                                         performPakaHaptic(context, haptics)
-                                                        onScanned(ScanResult(data, format))
+                                                        onScanned(result)
                                                     }
                                                 }
                                             }
@@ -303,7 +285,8 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
         }
 
         BackArrow(
-            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(8.dp),
+            // Same spot as SimpleTopBar's arrow: 12 dp below the status bar, 2 dp past the edge.
+            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(top = 12.dp).offset(x = (-2).dp),
             // The viewfinder backdrop is physically dark in both palette modes.
             color = White,
             onBack = onBack,
@@ -320,6 +303,8 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
+                    // The back arrow's 48 dp lane: 12 dp below the status bar.
+                    .padding(top = 12.dp)
                     .then(
                         tapModifier({
                             manualLightOverride.set(true)
@@ -334,7 +319,7 @@ fun ScanScreen(automaticLightEnabled: Boolean, onScanned: (ScanResult) -> Unit, 
                             stringResource(R.string.scanner_cd_turn_light_on)
                         }),
                     )
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
 
@@ -357,7 +342,58 @@ private const val LOW_LIGHT_FRAMES = 6
 private const val BRIGHT_LIGHT_FRAMES = 4
 internal const val FOCUS_RETRY_MS = 2_200L
 private const val MAX_SCAN_SYMBOLS = 5
+private const val ITF_MODULES_PER_DIGIT = 9
+private const val ITF_GUARD_MODULES = 9
+private const val MIN_ITF_READ_HEIGHT_MODULES = 5
 internal const val SCAN_GUIDE_FRACTION = 0.70f
+
+/**
+ * The camera's decoder settings, shared with the emulator decode corpus test.
+ * Reading several symbols per frame lets selectAimedSymbol require the guide
+ * square to disambiguate documents that carry more than one code.
+ */
+internal val scanReaderOptions: List<BarcodeReader.Options>
+    get() = listOf(BarcodeReader.Binarizer.LOCAL_AVERAGE, BarcodeReader.Binarizer.GLOBAL_HISTOGRAM).map {
+        BarcodeReader.Options(
+            formats = emptySet(),
+            tryHarder = true,
+            tryRotate = true,
+            tryInvert = true,
+            tryDownscale = false,
+            binarizer = it,
+            maxNumberOfSymbols = MAX_SCAN_SYMBOLS,
+        )
+    }
+
+/**
+ * Symbols Paka can map, from the first reader that finds any. ITF has no mandatory check
+ * digit and its stop pattern also occurs inside the data, so scan lines leaving a tilted
+ * code through its top or bottom edge can decode a shorter, valid ITF. Those lines all
+ * exit within one wide space, so they span at most three modules of bar height; a whole
+ * read spans far more. Modules assume 3:1 wide bars.
+ */
+internal fun readScanSymbols(
+    readers: List<BarcodeReader>,
+    read: BarcodeReader.() -> List<BarcodeReader.Result>,
+): List<BarcodeReader.Result> = readers.firstNotNullOfOrNull { reader ->
+    reader.read().filter {
+        val p = it.position
+        val length = hypot((p.topRight.x - p.topLeft.x).toFloat(), (p.topRight.y - p.topLeft.y).toFloat())
+        val height = hypot((p.bottomLeft.x - p.topLeft.x).toFloat(), (p.bottomLeft.y - p.topLeft.y).toFloat())
+        val modules = ITF_MODULES_PER_DIGIT * (it.text?.length ?: 0) + ITF_GUARD_MODULES
+        val partialItf = it.format == BarcodeReader.Format.ITF &&
+            height * modules < length * MIN_ITF_READ_HEIGHT_MODULES
+        (it.text != null || it.bytes != null) && mapFormat(it.format) != null && !partialItf
+    }.takeIf { it.isNotEmpty() }
+}.orEmpty()
+
+/** The symbols whose exact payload Paka can import, with their centres. */
+internal fun acceptedScans(symbols: List<BarcodeReader.Result>): List<Pair<ScanResult, SymbolCenter>> =
+    symbols.mapNotNull { symbol ->
+        val format = mapFormat(symbol.format) ?: return@mapNotNull null
+        selectScanPayload(format, symbol.contentType, symbol.text, symbol.bytes)
+            ?.let { ScanResult(it, format) to symbol.position.center() }
+    }
 
 /** Symbol centre in the display-oriented analysis frame zxing-cpp reports. */
 internal data class SymbolCenter(val x: Float, val y: Float)
@@ -478,13 +514,25 @@ internal fun focusAt(camera: Camera, preview: PreviewView, x: Float, y: Float) {
     camera.cameraControl.startFocusAndMetering(action)
 }
 
-/** Preserve arbitrary binary payloads for the two byte-oriented pass formats. */
-internal fun selectScanPayload(format: PakaFormat, text: String?, bytes: ByteArray?): String = when {
-    format == PakaFormat.AZTEC && bytes != null -> String(bytes, Charsets.ISO_8859_1)
-    format == PakaFormat.PDF417 && bytes != null -> String(bytes, Charsets.ISO_8859_1)
-    text != null -> text
-    bytes != null -> String(bytes, Charsets.ISO_8859_1)
-    else -> ""
+/**
+ * The exact payload Paka can re-render, or null. zxing-cpp's default HRI text
+ * adds "(01)" brackets to GS1 data and escapes control bytes as "<GS>", so only
+ * plain text is taken as text; Aztec/PDF417 keep their raw bytes via Latin-1.
+ */
+internal fun selectScanPayload(
+    format: PakaFormat,
+    contentType: BarcodeReader.ContentType,
+    text: String?,
+    bytes: ByteArray?,
+): String? = when {
+    // DataBar Expanded is GS1 by definition; the verifier compares canonical AIs.
+    format == PakaFormat.DATABAR_EXPANDED -> text
+    // FNC1/GS1 mode is not part of the stored payload, so it cannot be reproduced.
+    contentType == BarcodeReader.ContentType.GS1 -> null
+    (format == PakaFormat.AZTEC || format == PakaFormat.PDF417) && bytes != null ->
+        String(bytes, Charsets.ISO_8859_1)
+    contentType == BarcodeReader.ContentType.TEXT -> text
+    else -> null
 }
 
 private fun mapFormat(f: BarcodeReader.Format): PakaFormat? = when (f) {
@@ -497,10 +545,11 @@ private fun mapFormat(f: BarcodeReader.Format): PakaFormat? = when (f) {
     BarcodeReader.Format.UPC_A -> PakaFormat.UPCA
     BarcodeReader.Format.UPC_E -> PakaFormat.UPCE
     BarcodeReader.Format.CODE_128 -> PakaFormat.CODE128
-    BarcodeReader.Format.CODE_39 -> PakaFormat.CODE39
+    BarcodeReader.Format.CODE_39, BarcodeReader.Format.CODE_39_STD -> PakaFormat.CODE39
     BarcodeReader.Format.CODE_93 -> PakaFormat.CODE93
     BarcodeReader.Format.CODABAR -> PakaFormat.CODABAR
     BarcodeReader.Format.ITF -> PakaFormat.ITF
-    BarcodeReader.Format.DATA_BAR_EXPANDED -> PakaFormat.DATABAR_EXPANDED
+    BarcodeReader.Format.DATA_BAR_EXP, BarcodeReader.Format.DATA_BAR_EXP_STK -> PakaFormat.DATABAR_EXPANDED
+    // CODE_39_EXT, CODE_32 and PZN report converted text, so Paka could not re-render the printed symbol.
     else -> null
 }

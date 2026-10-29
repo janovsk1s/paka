@@ -2,21 +2,14 @@
 <resources>
     <string name="core_on">įjungta</string>
     <string name="core_off">išjungta</string>
-    <string name="core_back">Atgal</string>
-    <string name="core_open_details">Atidaryti informaciją</string>
     <string name="core_settings">Nustatymai</string>
     <string name="core_add">Pridėti</string>
     <string name="core_manual_entry">Rankinė įvestis</string>
-    <string name="core_cards">Leidimai</string>
-    <string name="core_2fa_codes">2FA kodai</string>
     <string name="core_show_passes">Rodyti leidimus</string>
     <string name="core_show_2fa_codes">Rodyti 2FA kodus</string>
-    <string name="core_pass">leidimas</string>
-    <string name="core_code">kodas</string>
     <string name="core_name">pavadinimas</string>
 
     <string name="settings_title">nustatymai</string>
-    <string name="settings_reorder">rikiuoti</string>
     <string name="settings_reorder_passes">rikiuoti leidimus</string>
     <string name="settings_reorder_codes">rikiuoti 2FA kodus</string>
     <string name="settings_backup">atsarginė kopija</string>
@@ -42,7 +35,6 @@
     <string name="developer_demo_mode">demo režimas</string>
     <string name="language_title">kalba</string>
     <string name="language_selected">pasirinkta</string>
-    <string name="reorder_title">rikiuoti</string>
     <string name="reorder_passes_title">rikiuoti leidimus</string>
     <string name="reorder_codes_title">rikiuoti 2FA kodus</string>
     <string name="reorder_stack_title">rikiuoti grupę</string>
@@ -50,15 +42,6 @@
     <string name="reorder_move_up">Perkelti %1$s aukštyn</string>
     <string name="reorder_move_down">Perkelti %1$s žemyn</string>
 
-    <string name="camera_start_failed">Nepavyko paleisti kameros</string>
-    <string name="camera_unavailable">Kamera nepasiekiama</string>
-    <string name="camera_light_auto">šviesa auto</string>
-    <string name="camera_light_on">šviesa įjungta</string>
-    <string name="camera_light">šviesa</string>
-    <string name="camera_turn_light_off">Išjungti kameros šviesą</string>
-    <string name="camera_turn_light_on">Įjungti kameros šviesą</string>
-    <string name="camera_low_light">tamsu · įjunkite šviesą</string>
-    <string name="camera_tap_to_focus">palieskite, kad sufokusuotumėte</string>
 
     <string name="restore_rolled_back_notice">Nutrauktas atkūrimas saugiai atšauktas.</string>
     <string name="restore_completed_notice">Nutrauktas atkūrimas saugiai užbaigtas.</string>
@@ -72,10 +55,9 @@
     <string name="scan_camera_permission">Nuskaitymui reikia prieigos prie kameros</string>
     <string name="demo_enabled">Įjungti laikini demo duomenys</string>
     <string name="demo_disabled">Tikrieji duomenys atkurti</string>
-    <string name="restore_storage_unhealthy">Prieš atkuriant saugykla turi veikti tinkamai</string>
+    <string name="restore_storage_unhealthy">Saugyklą galima tik skaityti. Vėl atidarykite Paka; jei taip ir lieka, „Android“ nustatymuose išvalykite Paka saugyklą ir tada atkurkite</string>
     <string name="restore_failed">Nepavyko atkurti atsarginės kopijos</string>
     <string name="restore_interrupted">Atkūrimas nutrūko; vėl atidarykite Paka ir patikrinkite duomenis</string>
-    <string name="storage_read_only_notice">Saugyklą galima tik skaityti, kol ji bus atkurta.</string>
     <string name="backup_demo_unavailable">Demo režimu atsarginė kopija nepasiekiama</string>
     <string name="scan_not_2fa">Tai ne 2FA QR kodas</string>
     <string name="home_demo_title">Paka · demonstracija</string>

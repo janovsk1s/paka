@@ -1,7 +1,9 @@
 # Paka Device Test Result — `<candidate>`
 
 Copy this file for each release candidate. Do not replace `NOT RUN` with `PASS`
-without exercising the item on the recorded hardware. Use only synthetic
+without exercising the item on the recorded device. On the `Paka_LP3` emulator,
+items marked **(hardware)** in [DEVICE_TESTING.md](DEVICE_TESTING.md) stay
+`NOT RUN`. Use only synthetic
 passes, TOTP secrets, and documents; never record live payloads or credentials.
 
 Overall status: **NOT RUN**
@@ -20,11 +22,11 @@ Overall status: **NOT RUN**
 - Local release checks: `NOT RUN`
 - `tools/verify_release_apk.sh`: `NOT RUN`
 
-## Hardware
+## Device
 
 - Tester: `<name>`
 - Date and timezone: `<YYYY-MM-DD TZ>`
-- Device: `Light Phone III`
+- Device: `<Paka_LP3 emulator or Light Phone III>`
 - LightOS / Android build: `<build>`
 - Previous installed Paka version: `<version>`
 - Install path: `<upgrade or clean install>`

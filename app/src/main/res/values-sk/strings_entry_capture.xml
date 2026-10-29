@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF preukazy vyžadujú Android 11 alebo novší</string>
     <string name="entry_error_password_pdf_unsupported">PDF chránené heslom nie sú podporované</string>
     <string name="entry_error_pdf_open">PDF sa nepodarilo otvoriť</string>
+    <string name="entry_error_backup_limit">Príliš veľké pre zálohu: PDF môžu mať spolu najviac %1$d MB a fotografie %2$d MB</string>
     <string name="entry_error_photos_open">Fotografie sa nepodarilo otvoriť</string>
     <string name="entry_error_camera_permission">Na fotografovanie je potrebné povolenie kamery</string>
     <string name="entry_title_front_side">predná strana</string>
@@ -38,6 +39,7 @@
     <string name="entry_placeholder_base32_key">Base32 kľúč</string>
     <string name="entry_toast_pdf_demo_disabled">PDF preukazy nie sú dostupné v demo režime</string>
     <string name="entry_toast_photo_demo_disabled">Foto preukazy nie sú dostupné v demo režime</string>
+    <string name="entry_toast_code_demo_disabled">Kódy 2FA nie sú dostupné v demo režime</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$d s.</string>
     <string name="entry_photo_source_privacy">Nasnímané fotografie idú priamo do šifrovaného úložiska Paka. Nikdy sa neuložia do galérie ani ako súbor.</string>
@@ -77,7 +79,7 @@
     <string name="capture_error_prepare_photo">Fotografiu sa nepodarilo pripraviť</string>
     <string name="capture_error_save_photo">Fotografiu sa nepodarilo uložiť</string>
     <string name="capture_error_preview_photo">Náhľad fotografie sa nepodarilo otvoriť</string>
-    <string name="capture_status_preparing_preview">príprava…</string>
+    <string name="capture_status_preparing_preview">Príprava…</string>
     <string name="capture_action_rotate">otočiť</string>
     <string name="capture_action_reset_crop">obnoviť orezanie</string>
     <string name="capture_action_crop_smaller">zmenšiť oblasť orezania</string>

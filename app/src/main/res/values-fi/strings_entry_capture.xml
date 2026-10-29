@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF-kortit vaativat Android 11:n tai uudemman</string>
     <string name="entry_error_password_pdf_unsupported">Salasanasuojattuja PDF-tiedostoja ei tueta</string>
     <string name="entry_error_pdf_open">PDF-tiedostoa ei voitu avata</string>
+    <string name="entry_error_backup_limit">Liian suuri varmuuskopioon: PDF-tiedostot voivat olla yhteensä %1$d Mt ja kuvat %2$d Mt</string>
     <string name="entry_error_photos_open">Kuvia ei voitu avata</string>
     <string name="entry_error_camera_permission">Kameran käyttöoikeus tarvitaan kuvaamiseen</string>
     <string name="entry_title_front_side">etupuoli</string>
@@ -38,6 +39,7 @@
     <string name="entry_placeholder_base32_key">Base32-avain</string>
     <string name="entry_toast_pdf_demo_disabled">PDF-kortit eivät ole käytettävissä demotilassa</string>
     <string name="entry_toast_photo_demo_disabled">Kuvakortit eivät ole käytettävissä demotilassa</string>
+    <string name="entry_toast_code_demo_disabled">2FA-koodit eivät ole käytettävissä demotilassa</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$d s.</string>
     <string name="entry_photo_source_privacy">Otetut kuvat siirtyvät suoraan Pakan salattuun tallennustilaan. Niitä ei koskaan tallenneta galleriaan tai tiedostoksi.</string>
@@ -77,7 +79,7 @@
     <string name="capture_error_prepare_photo">Kuvaa ei voitu valmistella</string>
     <string name="capture_error_save_photo">Kuvaa ei voitu tallentaa</string>
     <string name="capture_error_preview_photo">Kuvan esikatselua ei voitu avata</string>
-    <string name="capture_status_preparing_preview">valmistellaan…</string>
+    <string name="capture_status_preparing_preview">Valmistellaan…</string>
     <string name="capture_action_rotate">kierrä</string>
     <string name="capture_action_reset_crop">palauta rajaus</string>
     <string name="capture_action_crop_smaller">pienennä rajausta</string>

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
@@ -84,6 +85,7 @@ import kotlin.math.min
  */
 @Composable
 internal fun PhotoCaptureScreen(
+    replacing: Set<String>,
     onCaptured: (PhotoImport) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -134,8 +136,12 @@ internal fun PhotoCaptureScreen(
         onDispose {
             disposed.set(true)
             latestCapturedBytes.value?.fill(0)
-            mainExecutor.execute { stopCamera(resetUi = false) }
-            captureExecutor.shutdownNow()
+            // Unbinding aborts an in-flight capture by posting its callback to
+            // captureExecutor; shutting that down first would crash the app.
+            mainExecutor.execute {
+                stopCamera(resetUi = false)
+                captureExecutor.shutdown()
+            }
         }
     }
 
@@ -178,7 +184,7 @@ internal fun PhotoCaptureScreen(
             initialBytes = captured,
             cancelLabel = stringResource(R.string.capture_action_retake),
             contentDescription = stringResource(R.string.capture_cd_captured_document_photo),
-            onUse = { bytes -> PhotoStore.importBytes(context, bytes) },
+            onUse = { bytes -> PhotoStore.importBytes(context, bytes, replacing) },
             onUsed = { imported ->
                 capturedBytes = null
                 onCaptured(imported)
@@ -276,7 +282,8 @@ internal fun PhotoCaptureScreen(
         }
 
         BackArrow(
-            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(8.dp),
+            // Same spot as SimpleTopBar's arrow: 12 dp below the status bar, 2 dp past the edge.
+            modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(top = 12.dp).offset(x = (-2).dp),
             enabled = !busy,
             // The viewfinder backdrop is physically dark in both palette modes.
             color = White,
@@ -294,6 +301,8 @@ internal fun PhotoCaptureScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
+                    // The back arrow's 48 dp lane: 12 dp below the status bar.
+                    .padding(top = 12.dp)
                     .then(
                         if (busy) Modifier else tapModifier({
                             val enabled = !torchRef.get()
@@ -306,7 +315,7 @@ internal fun PhotoCaptureScreen(
                             stringResource(R.string.capture_cd_turn_light_on)
                         }),
                     )
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
 
@@ -408,6 +417,8 @@ internal fun PhotoReviewScreen(
     var cropRect by remember(initialBytes) { mutableStateOf(CropRect.FULL) }
     var busy by remember(initialBytes) { mutableStateOf(false) }
     var reviewFailed by remember(initialBytes) { mutableStateOf(false) }
+    // Persistent, unlike a toast, which Android 12+ cuts to two lines.
+    var limitMessage by remember(initialBytes) { mutableStateOf<String?>(null) }
     var reviewRender by remember(initialBytes) { mutableStateOf<ReviewRender?>(null) }
     val displayBitmap = reviewRender?.takeIf {
         it.source === currentBytes && it.counterClockwiseTurns == pendingRotations
@@ -427,9 +438,10 @@ internal fun PhotoReviewScreen(
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
 
-    val latestBytes = rememberUpdatedState(currentBytes)
     DisposableEffect(initialBytes) {
-        onDispose { latestBytes.value.fill(0) }
+        // Reads this photo's own keyed state (including a crop replacement), never
+        // the next photo's bytes that the same call site may already be showing.
+        onDispose { currentBytes.fill(0) }
     }
 
     // Review decoding is both bounded and off the UI thread. A private copy is
@@ -492,7 +504,7 @@ internal fun PhotoReviewScreen(
                         onSelection = { if (!busy) cropRect = it },
                         onRotate = {
                             if (!busy) {
-                                pendingRotations = (pendingRotations + 1).floorMod(4)
+                                pendingRotations = (pendingRotations + 1).mod(4)
                                 cropRect = CropRect.FULL
                             }
                         },
@@ -516,6 +528,14 @@ internal fun PhotoReviewScreen(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
+        limitMessage?.let { message ->
+            Text(
+                message,
+                color = Grey,
+                fontSize = 16.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp).padding(top = 12.dp),
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 18.dp),
         ) {
@@ -536,7 +556,7 @@ internal fun PhotoReviewScreen(
                     alignment = Alignment.Center,
                     enabled = !busy && displayBitmap != null,
                     onClick = {
-                        pendingRotations = (pendingRotations + 1).floorMod(4)
+                        pendingRotations = (pendingRotations + 1).mod(4)
                         cropRect = CropRect.FULL
                     },
                 )
@@ -627,7 +647,7 @@ internal fun PhotoReviewScreen(
                                     // Untouched picker imports retain their exact
                                     // encrypted bytes. Any queued edit is baked
                                     // into one bounded JPEG.
-                                    transform = turns.floorMod(FULL_TURN_QUARTERS) != 0,
+                                    transform = turns.mod(FULL_TURN_QUARTERS) != 0,
                                 )
                                 val bytes = preparedResult.getOrElse {
                                     showError(resources.getString(R.string.capture_error_prepare_photo))
@@ -641,8 +661,12 @@ internal fun PhotoReviewScreen(
                                 val result = imported.getAndSet(null)
                                     ?: Result.failure(IllegalStateException("Photo import did not finish"))
                                 busy = false
-                                result.onSuccess(onUsed).onFailure {
-                                    showError(resources.getString(R.string.capture_error_save_photo))
+                                result.onSuccess(onUsed).onFailure { error ->
+                                    if (error is BackupLimitException) {
+                                        limitMessage = resources.backupLimitMessage()
+                                    } else {
+                                        showError(resources.getString(R.string.capture_error_save_photo))
+                                    }
                                 }
                             } finally {
                                 prepared?.fill(0)
@@ -732,8 +756,6 @@ private suspend fun prepareReviewBytes(
         outcome.getAndSet(null)?.getOrNull()?.fill(0)
     }
 }
-
-private fun Int.floorMod(modulus: Int): Int = ((this % modulus) + modulus) % modulus
 
 private const val CROP_MIN_SIZE = 0.15f
 private const val ACCESSIBLE_CROP_STEP = 0.05f

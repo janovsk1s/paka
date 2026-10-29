@@ -4,6 +4,7 @@
     <string name="entry_error_pdf_requires_android_11">PDF passes require Android 11 or newer</string>
     <string name="entry_error_password_pdf_unsupported">Password-protected PDFs are not supported</string>
     <string name="entry_error_pdf_open">PDF could not be opened</string>
+    <string name="entry_error_backup_limit">Too large for a backup: PDFs can total %1$d MB and photos %2$d MB</string>
     <string name="entry_error_photos_open">Photos could not be opened</string>
     <string name="entry_error_camera_permission">Camera permission is needed to take photos</string>
     <string name="entry_title_front_side">front side</string>
@@ -38,6 +39,7 @@
     <string name="entry_placeholder_base32_key">base32 key</string>
     <string name="entry_toast_pdf_demo_disabled">PDF passes are unavailable in demo mode</string>
     <string name="entry_toast_photo_demo_disabled">Photo passes are unavailable in demo mode</string>
+    <string name="entry_toast_code_demo_disabled">2FA codes are unavailable in demo mode</string>
     <string name="entry_photo_side_count_short">%1$d/2</string>
     <string name="entry_pdf_page_count_short">%1$dp</string>
     <string name="entry_photo_source_privacy">
@@ -79,7 +81,7 @@
     <string name="capture_error_prepare_photo">Photo could not be prepared</string>
     <string name="capture_error_save_photo">Photo could not be saved</string>
     <string name="capture_error_preview_photo">Photo preview could not be opened</string>
-    <string name="capture_status_preparing_preview">preparing…</string>
+    <string name="capture_status_preparing_preview">Preparing…</string>
     <string name="capture_action_rotate">rotate</string>
     <string name="capture_action_reset_crop">reset crop</string>
     <string name="capture_action_crop_smaller">make crop smaller</string>

@@ -2,21 +2,14 @@
 <resources>
     <string name="core_on">på</string>
     <string name="core_off">av</string>
-    <string name="core_back">Tillbaka</string>
-    <string name="core_open_details">Öppna detaljer</string>
     <string name="core_settings">Inställningar</string>
     <string name="core_add">Lägg till</string>
     <string name="core_manual_entry">Manuell inmatning</string>
-    <string name="core_cards">Kort</string>
-    <string name="core_2fa_codes">2FA-koder</string>
     <string name="core_show_passes">Visa kort</string>
     <string name="core_show_2fa_codes">Visa 2FA-koder</string>
-    <string name="core_pass">kort</string>
-    <string name="core_code">kod</string>
     <string name="core_name">namn</string>
 
     <string name="settings_title">inställningar</string>
-    <string name="settings_reorder">ordna</string>
     <string name="settings_reorder_passes">ordna kort</string>
     <string name="settings_reorder_codes">ordna 2FA-koder</string>
     <string name="settings_backup">säkerhetskopia</string>
@@ -42,7 +35,6 @@
     <string name="developer_demo_mode">demoläge</string>
     <string name="language_title">språk</string>
     <string name="language_selected">valt</string>
-    <string name="reorder_title">ordna</string>
     <string name="reorder_passes_title">ordna kort</string>
     <string name="reorder_codes_title">ordna 2FA-koder</string>
     <string name="reorder_stack_title">ordna stapel</string>
@@ -50,15 +42,6 @@
     <string name="reorder_move_up">Flytta %1$s uppåt</string>
     <string name="reorder_move_down">Flytta %1$s nedåt</string>
 
-    <string name="camera_start_failed">Kameran gick inte att starta</string>
-    <string name="camera_unavailable">Kameran är inte tillgänglig</string>
-    <string name="camera_light_auto">ljus auto</string>
-    <string name="camera_light_on">ljus på</string>
-    <string name="camera_light">ljus</string>
-    <string name="camera_turn_light_off">Släck kameraljuset</string>
-    <string name="camera_turn_light_on">Tänd kameraljuset</string>
-    <string name="camera_low_light">mörkt · tänd ljuset</string>
-    <string name="camera_tap_to_focus">tryck för att fokusera</string>
 
     <string name="restore_rolled_back_notice">Den avbrutna återställningen ångrades säkert.</string>
     <string name="restore_completed_notice">Den avbrutna återställningen slutfördes säkert.</string>
@@ -72,10 +55,9 @@
     <string name="scan_camera_permission">Kameraåtkomst krävs för att skanna</string>
     <string name="demo_enabled">Tillfälliga demodata aktiverade</string>
     <string name="demo_disabled">Riktiga data återställda</string>
-    <string name="restore_storage_unhealthy">Lagringen måste vara felfri före återställning</string>
+    <string name="restore_storage_unhealthy">Lagringen är skrivskyddad. Öppna Paka igen; om den förblir skrivskyddad, rensa Pakas lagring i Android-inställningarna och återställ sedan</string>
     <string name="restore_failed">Säkerhetskopian gick inte att återställa</string>
     <string name="restore_interrupted">Återställningen avbröts; öppna Paka igen och kontrollera data</string>
-    <string name="storage_read_only_notice">Lagringen är skrivskyddad tills den har återställts.</string>
     <string name="backup_demo_unavailable">Säkerhetskopiering är inte tillgänglig i demoläge</string>
     <string name="scan_not_2fa">Inte en 2FA-QR-kod</string>
     <string name="home_demo_title">Paka · demo</string>

@@ -110,6 +110,18 @@ class BarcodeGenerationTest {
     }
 
     @Test
+    fun cacheLookupReturnsOnlyAnAlreadyVerifiedRender() {
+        val payload = "https://paka.invalid/cache/lookup"
+        assertNull(Barcodes.cached(PakaFormat.QR, payload, MAX_RENDER_WIDTH))
+
+        val rendered = Barcodes.generateCached(PakaFormat.QR, payload, MAX_RENDER_WIDTH)
+
+        assertNotNull(rendered)
+        assertSame(rendered, Barcodes.cached(PakaFormat.QR, payload, MAX_RENDER_WIDTH * 2))
+        assertNull(Barcodes.cached(PakaFormat.AZTEC, payload, MAX_RENDER_WIDTH))
+    }
+
+    @Test
     fun symbolWiderThanThePanelIsRejectedInsteadOfDownscaled() {
         val tooDenseForMinimumPanel = "A".repeat(80)
         assertNull(Barcodes.generate(PakaFormat.CODE39, tooDenseForMinimumPanel, MIN_RENDER_WIDTH))
@@ -277,13 +289,12 @@ class BarcodeGenerationTest {
             EncodeHintType.MARGIN,
             when (format) {
                 BarcodeFormat.QR_CODE, BarcodeFormat.PDF_417 -> 4
-                BarcodeFormat.AZTEC, BarcodeFormat.DATA_MATRIX -> 2
                 else -> 0
             },
         )
         when (format) {
-            BarcodeFormat.AZTEC, BarcodeFormat.PDF_417 -> put(EncodeHintType.CHARACTER_SET, "ISO-8859-1")
-            BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX -> put(EncodeHintType.CHARACTER_SET, "UTF-8")
+            BarcodeFormat.PDF_417 -> put(EncodeHintType.CHARACTER_SET, "ISO-8859-1")
+            BarcodeFormat.QR_CODE -> put(EncodeHintType.CHARACTER_SET, "UTF-8")
             else -> Unit
         }
         if (format == BarcodeFormat.QR_CODE) put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M)

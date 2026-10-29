@@ -2,7 +2,6 @@
 set -euo pipefail
 
 EXPECTED_CERT_SHA256="${EXPECTED_CERT_SHA256:-098fbb0a5455ec00dbafae93f16bff74b048e5bde7a824fac9ecf42effad0019}"
-EXPECTED_PERMISSIONS="${EXPECTED_PERMISSIONS:-android.permission.CAMERA}"
 APK="${1:-app/build/outputs/apk/release/app-release.apk}"
 
 die() {
@@ -35,7 +34,6 @@ if [ -z "${JAVA_HOME:-}" ] && [ -d /opt/homebrew/opt/openjdk@17/libexec/openjdk.
 fi
 
 APKSIGNER="$(find_android_tool apksigner)" || die "apksigner not found; set ANDROID_HOME or ANDROID_SDK_ROOT"
-AAPT="$(find_android_tool aapt aapt2)" || die "aapt/aapt2 not found; set ANDROID_HOME or ANDROID_SDK_ROOT"
 
 cert_output="$("$APKSIGNER" verify --print-certs "$APK")"
 
@@ -48,25 +46,8 @@ if [ "$actual_cert" != "$EXPECTED_CERT_SHA256" ]; then
   die "release certificate mismatch"
 fi
 
-package_name="$("$AAPT" dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -n 1)"
-[ -n "$package_name" ] || die "could not read APK package name"
-
-actual_permissions="$("$AAPT" dump permissions "$APK" |
-  sed -n "s/.*uses-permission: name='\([^']*\)'.*/\1/p" |
-  grep -v "^${package_name}\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION$" |
-  sort -u)"
-expected_permissions="$(printf '%s\n' "$EXPECTED_PERMISSIONS" | tr ',' '\n' | sed '/^$/d' | sort -u)"
-
-if [ "$actual_permissions" != "$expected_permissions" ]; then
-  printf 'expected permissions:\n%s\n' "$expected_permissions" >&2
-  printf 'actual permissions:\n%s\n' "$actual_permissions" >&2
-  die "permission set mismatch"
-fi
-
-if printf '%s\n' "$actual_permissions" | grep -Eq '^android\.permission\.(INTERNET|ACCESS_NETWORK_STATE)$'; then
-  die "network permission present"
-fi
+# The permission rules live in one place, shared with CI.
+"$(dirname "$0")/check_apk_permissions.sh" "$APK"
 
 printf 'APK verified: %s\n' "$APK"
 printf 'certificate: %s\n' "$actual_cert"
-printf 'permissions:\n%s\n' "$actual_permissions"
