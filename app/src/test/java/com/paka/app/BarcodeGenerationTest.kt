@@ -110,6 +110,18 @@ class BarcodeGenerationTest {
     }
 
     @Test
+    fun cacheLookupReturnsOnlyAnAlreadyVerifiedRender() {
+        val payload = "https://paka.invalid/cache/lookup"
+        assertNull(Barcodes.cached(PakaFormat.QR, payload, MAX_RENDER_WIDTH))
+
+        val rendered = Barcodes.generateCached(PakaFormat.QR, payload, MAX_RENDER_WIDTH)
+
+        assertNotNull(rendered)
+        assertSame(rendered, Barcodes.cached(PakaFormat.QR, payload, MAX_RENDER_WIDTH * 2))
+        assertNull(Barcodes.cached(PakaFormat.AZTEC, payload, MAX_RENDER_WIDTH))
+    }
+
+    @Test
     fun symbolWiderThanThePanelIsRejectedInsteadOfDownscaled() {
         val tooDenseForMinimumPanel = "A".repeat(80)
         assertNull(Barcodes.generate(PakaFormat.CODE39, tooDenseForMinimumPanel, MIN_RENDER_WIDTH))

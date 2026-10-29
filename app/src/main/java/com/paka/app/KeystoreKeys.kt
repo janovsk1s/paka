@@ -24,22 +24,32 @@ internal object KeystoreKeys {
     @Volatile
     internal var keyFactoryForTests: ((String) -> SecretKey)? = null
 
+    // Handles only; key material stays in Keystore. Saves a Keystore lookup per
+    // encrypt/decrypt. Paka never deletes a key, so a handle cannot go stale.
+    private val handles = HashMap<String, SecretKey>()
+
     @Synchronized
     fun getOrCreateAes256(alias: String): SecretKey {
         keyFactoryForTests?.let { return it(alias) }
+        return handles.getOrPut(alias) { loadOrCreate(alias) }
+    }
+
+    private fun loadOrCreate(alias: String): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val strongBoxKey = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
-                return generate(alias, strongBox = true)
+                generate(alias, strongBox = true)
             } catch (_: StrongBoxUnavailableException) {
-                // StrongBox is absent or cannot create this AES key.
+                null // StrongBox is absent or cannot create this AES key.
             } catch (_: ProviderException) {
-                // Some vendor providers report unavailable StrongBox generically.
+                null // Some vendor providers report unavailable StrongBox generically.
             }
+        } else {
+            null
         }
-        return generate(alias, strongBox = false)
+        return strongBoxKey ?: generate(alias, strongBox = false)
     }
 
     private fun generate(alias: String, strongBox: Boolean): SecretKey {

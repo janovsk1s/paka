@@ -36,12 +36,14 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -62,8 +64,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.cos
@@ -77,7 +82,7 @@ private sealed interface PendingDuplicate {
     data class Code(val candidate: OtpAccount, val existingName: String) : PendingDuplicate
 }
 
-private data class InitialAppLoad(
+internal data class InitialAppLoad(
     val cards: LoadOutcome<List<Card>>,
     val codes: LoadOutcome<List<OtpAccount>>,
 )
@@ -124,6 +129,7 @@ private fun <T> List<T>.moved(index: Int, up: Boolean): List<T> {
 class MainActivity : ComponentActivity() {
     private var homeResetSignal by mutableIntStateOf(0)
     private var resumeSignal by mutableIntStateOf(0)
+    private val startupLoad = mutableStateOf<InitialAppLoad?>(null)
     private var externalFlowActive = false
     private var criticalFlowActive = false
 
@@ -157,6 +163,8 @@ class MainActivity : ComponentActivity() {
             selected = Prefs.language(this),
             hasExplicitSelection = Prefs.hasExplicitLanguage(this),
         )
+        // Decrypt the stores while Compose builds its first frame, not after it.
+        lifecycleScope.launch(Dispatchers.IO) { startupLoad.value = loadStartup(this@MainActivity) }
         val openDeveloperRoute = intent.getStringExtra(EXTRA_OPEN_DEVELOPER_ROUTE)
             ?.let { saved -> runCatching { DeveloperRoute.valueOf(saved) }.getOrNull() }
         intent.removeExtra(EXTRA_OPEN_DEVELOPER_ROUTE)
@@ -175,7 +183,7 @@ class MainActivity : ComponentActivity() {
                 ActivityManager.TaskDescription(getString(R.string.app_name), null, android.graphics.Color.BLACK)
             },
         )
-        setContent { PakaApp(homeResetSignal, resumeSignal, openDeveloperRoute) }
+        setContent { PakaApp(homeResetSignal, resumeSignal, openDeveloperRoute, startupLoad) }
     }
 
     override fun onResume() {
@@ -214,9 +222,10 @@ internal fun <I> Context.launchPakaExternal(launcher: ActivityResultLauncher<I>,
 
 @Composable
 internal fun PakaApp(
-    homeResetSignal: Int = 0,
-    resumeSignal: Int = 0,
-    openDeveloperRoute: DeveloperRoute? = null,
+    homeResetSignal: Int,
+    resumeSignal: Int,
+    openDeveloperRoute: DeveloperRoute?,
+    startupLoad: State<InitialAppLoad?>,
 ) {
     val context = LocalContext.current
     var officialFontEnabled by remember { mutableStateOf(Prefs.officialFont(context)) }
@@ -225,6 +234,7 @@ internal fun PakaApp(
             homeResetSignal = homeResetSignal,
             resumeSignal = resumeSignal,
             openDeveloperRoute = openDeveloperRoute,
+            startupLoad = startupLoad,
             officialFontEnabled = officialFontEnabled,
             onOfficialFont = { enabled ->
                 officialFontEnabled = enabled
@@ -239,24 +249,11 @@ private fun PakaAppContent(
     homeResetSignal: Int,
     resumeSignal: Int,
     openDeveloperRoute: DeveloperRoute?,
+    startupLoad: State<InitialAppLoad?>,
     officialFontEnabled: Boolean,
     onOfficialFont: (Boolean) -> Unit,
 ) {
-    val context = LocalContext.current
-    val resources = LocalResources.current
-    var initialLoad by remember { mutableStateOf<InitialAppLoad?>(null) }
-    LaunchedEffect(Unit) {
-        val load = loadStores(context, resources)
-        if (load.cards.writable) {
-            withContext(Dispatchers.IO) {
-                PdfStore.deleteOrphans(context, load.cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
-                PhotoStore.deleteOrphans(context, load.cards.value.photoDocumentIds())
-            }
-        }
-        initialLoad = load
-    }
-
-    val loaded = initialLoad
+    val loaded = startupLoad.value
     if (loaded == null) {
         Box(
             modifier = Modifier.fillMaxSize().background(Palette.background).systemBarsPadding(),
@@ -300,13 +297,27 @@ private fun releaseReferenceGrants(context: Context, before: List<Card>, after: 
     }
 }
 
+/** A fresh start's store read; orphan cleanup runs only after the card store loaded cleanly. */
+private suspend fun loadStartup(context: Context): InitialAppLoad {
+    val load = loadStores(context, context.resources)
+    if (load.cards.writable) {
+        withContext(Dispatchers.IO) {
+            PdfStore.deleteOrphans(context, load.cards.value.mapNotNull { it.pdfContent?.documentId }.toSet())
+            PhotoStore.deleteOrphans(context, load.cards.value.photoDocumentIds())
+        }
+    }
+    return load
+}
+
 /** Reads both stores the way a fresh start does, finishing any interrupted restore first. */
 private suspend fun loadStores(context: Context, resources: Resources): InitialAppLoad {
     StoreWriteCoordinator.awaitPendingWrites()
     return withContext(Dispatchers.IO) {
         val recovery = StoreWriteCoordinator.recoverInterruptedRestore(context)
-        val loadedCards = CardStore.load(context)
+        // Separate files and keys, so the two stores decrypt side by side.
+        val pendingCards = async { CardStore.load(context) }
         val loadedCodes = SecureStore.loadAccounts(context)
+        val loadedCards = pendingCards.await()
         val recoveryWarning = when (recovery) {
             RestoreRecoveryOutcome.NONE -> null
             RestoreRecoveryOutcome.ROLLED_BACK -> resources.getString(R.string.restore_rolled_back_notice)
@@ -422,16 +433,24 @@ private fun LoadedPakaApp(
     }
     LaunchedEffect(homeVisible, mode, activeCards, screenWidthPx, passWidthPx) {
         if (homeVisible && mode == Mode.CARDS) {
-            delay(250)
-            activeCards.take(6).forEach { card ->
-                card.barcodeContent?.let { barcode ->
-                    withContext(Dispatchers.Default) {
-                        val targetWidthPx = BarcodeDisplay.targetWidthPx(
-                            barcode.format,
-                            screenWidthPx,
-                            passWidthPx,
-                        )
-                        Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
+            val entries = buildEntries(activeCards)
+            // Warm the page being looked at (and the next row), not always page one.
+            snapshotFlow { cardsPage.intValue }.collectLatest { page ->
+                delay(250)
+                entries.drop(page * ITEMS_PER_PAGE).take(ITEMS_PER_PAGE + 1).forEach { entry ->
+                    val card = when (entry) {
+                        is SingleEntry -> entry.card
+                        is StackEntry -> entry.cards.first()
+                    }
+                    card.barcodeContent?.let { barcode ->
+                        withContext(Dispatchers.Default) {
+                            val targetWidthPx = BarcodeDisplay.targetWidthPx(
+                                barcode.format,
+                                screenWidthPx,
+                                passWidthPx,
+                            )
+                            Barcodes.generateCached(barcode.format, barcode.data, targetWidthPx)
+                        }
                     }
                 }
             }

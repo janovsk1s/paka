@@ -156,6 +156,12 @@ internal object Barcodes {
         }
     }
 
+    /** A render [generateCached] already verified, or null; cheap enough for the UI thread. */
+    fun cached(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
+        val key = cacheKey(format, data, targetWidthPx.coerceIn(240, MAX_RENDER_PX))
+        return synchronized(bitmapCache) { bitmapCache.get(key) }
+    }
+
     /** Bounded cache for passes already verified by [generate]. */
     fun generateCached(format: PakaFormat, data: String, targetWidthPx: Int = 960): Bitmap? {
         val width = targetWidthPx.coerceIn(240, MAX_RENDER_PX)

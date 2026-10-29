@@ -224,7 +224,7 @@ internal fun AutoFitText(
     }
 }
 
-private const val ITEMS_PER_PAGE = 5
+internal const val ITEMS_PER_PAGE = 5
 
 /** Five fixed row slots per page. Swipes replace the page instantly on release. */
 @Composable

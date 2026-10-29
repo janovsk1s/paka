@@ -23,6 +23,19 @@ class AtomicStoreTest {
     }
 
     @Test
+    fun deleteRemovesEveryGenerationAndToleratesMissingFiles() = withTempDirectory { directory ->
+        val file = directory.resolve("doc.enc")
+        assertTrue(AtomicStore.delete(file))
+
+        AtomicStore.write(file, "first".toByteArray()).getOrThrow()
+        AtomicStore.write(file, "second".toByteArray()).getOrThrow()
+        directory.resolve("doc.enc.tmp").writeText("interrupted")
+
+        assertTrue(AtomicStore.delete(file))
+        assertTrue(directory.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
     fun corruptPrimaryRecoversFromPreviousGeneration() = withTempDirectory { directory ->
         val file = directory.resolve("otp.enc")
         file.writeText("truncated")

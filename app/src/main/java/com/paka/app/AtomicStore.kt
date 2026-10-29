@@ -141,10 +141,11 @@ internal object AtomicStore {
      */
     fun delete(file: File): Boolean {
         val generations = ATOMIC_GENERATION_SUFFIXES.map { File(file.parentFile, "${file.name}$it") }
-        val deleted = (listOf(file) + generations)
-            .map { !it.exists() || it.delete() }
-            .all { it }
-        syncDirectory(file.parentFile)
+        val existing = (listOf(file) + generations).filter(File::exists)
+        val deleted = existing.map(File::delete).all { it }
+        // Nothing removed means no directory entry to persist; startup's
+        // stale-snapshot sweep would otherwise fsync filesDir on every launch.
+        if (existing.isNotEmpty()) syncDirectory(file.parentFile)
         return deleted
     }
 

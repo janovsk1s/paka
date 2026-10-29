@@ -199,7 +199,13 @@ internal fun StackScreen(
             val pdfHeightPx = with(density) { 404.dp.roundToPx() }
             val currentIndex by pageState
             val rendered = remember(name, cards, availableWidthPx, documentTargetWidthPx) {
-                mutableStateMapOf<String, BarcodeRender>()
+                mutableStateMapOf<String, BarcodeRender>().apply {
+                    // A prefetched code shows in the first frame instead of after "Rendering…".
+                    val card = cards.getOrNull(currentIndex) ?: return@apply
+                    val barcode = card.barcodeContent ?: return@apply
+                    val widthPx = BarcodeDisplay.targetWidthPx(barcode.format, availableWidthPx, documentTargetWidthPx)
+                    Barcodes.cached(barcode.format, barcode.data, widthPx)?.let { put(card.id, BarcodeRender(it)) }
+                }
             }
             val photoRenders = remember(name, cards, documentTargetWidthPx) {
                 mutableStateMapOf<String, BarcodeRender>()
@@ -489,8 +495,9 @@ internal fun PhotoScreen(
 @Composable
 private fun rememberBarcodeRender(card: Card, targetWidthPx: Int): BarcodeRender? {
     val barcode = card.barcodeContent ?: return BarcodeRender(null)
+    // A prefetched code shows in the first frame instead of after a "Rendering…" frame.
     var render by remember(card.id, barcode.data, barcode.format, targetWidthPx) {
-        mutableStateOf<BarcodeRender?>(null)
+        mutableStateOf(Barcodes.cached(barcode.format, barcode.data, targetWidthPx)?.let { BarcodeRender(it) })
     }
     LaunchedEffect(card.id, barcode.data, barcode.format, targetWidthPx) {
         val bitmap = withContext(Dispatchers.Default) {
