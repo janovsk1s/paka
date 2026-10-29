@@ -29,6 +29,17 @@ Notable changes to Paka are documented here.
   crashed every launch.
 - Clearing a copied 2FA code no longer reads another app's clipboard content
   on the UI thread.
+- A store the Keystore cannot decrypt for the moment (device still locked,
+  Keystore busy) is no longer replaced by its older backup copy, which lost
+  the newest save at the next write. Paka shows "could not be decrypted",
+  keeps the file, and reads it again when you return.
+- The largest backup Paka allows now exports and restores while the app is
+  running. Paka uses Android's large heap, unlocking no longer copies the
+  encrypted backup in memory, and a backup file whose size the provider
+  reports is read into one exact buffer. Before, a near-limit backup could
+  run out of memory and fail as "Incorrect passphrase or invalid backup".
+  An emulator test exports and unlocks the largest backup with 48 MiB of the
+  heap already in use.
 
 - A store left read-only by a failed save is read again each time you return
   to Paka, so "reopen Paka" recovers it without clearing storage.

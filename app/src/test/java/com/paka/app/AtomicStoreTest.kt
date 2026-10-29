@@ -6,6 +6,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import java.security.InvalidKeyException
+import java.security.ProviderException
+import javax.crypto.AEADBadTagException
 
 class AtomicStoreTest {
     @Test
@@ -33,6 +36,24 @@ class AtomicStoreTest {
 
         assertTrue(AtomicStore.delete(file))
         assertTrue(directory.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun keyFailureLeavesTheNewestGenerationInPlace() = withTempDirectory { directory ->
+        val file = directory.resolve("cards.enc")
+        file.writeText("VALID:newest")
+        AtomicStore.backupFile(file).writeText("VALID:older")
+
+        val result = AtomicStore.readWithBackup(file) { bytes ->
+            if (String(bytes) == "VALID:newest") throw InvalidKeyException("device locked")
+            decodeTestValue(bytes)
+        }
+
+        assertTrue(result.isFailure)
+        assertEquals("VALID:newest", file.readText())
+        assertFalse(AtomicStore.corruptFile(file).exists())
+        assertTrue(isKeyUnavailable(ProviderException("Keystore busy")))
+        assertFalse(isKeyUnavailable(AEADBadTagException("tampered")))
     }
 
     @Test

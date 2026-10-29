@@ -7,6 +7,9 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
+import java.security.GeneralSecurityException
+import java.security.ProviderException
+import javax.crypto.BadPaddingException
 
 internal data class LoadOutcome<T>(
     val value: T,
@@ -78,6 +81,10 @@ internal object AtomicStore {
     fun <T> readWithBackup(file: File, decode: (ByteArray) -> T): Result<RecoveredValue<T>> {
         val primary = if (file.exists()) runCatching { decode(readBytes(file)) } else null
         primary?.getOrNull()?.let { return Result.success(RecoveredValue(it, fromBackup = false)) }
+        // A key that cannot decrypt right now (device locked, Keystore busy) says
+        // nothing about the bytes. Promoting the older backup would move the
+        // newest save aside, and the next write would delete it.
+        primary?.exceptionOrNull()?.takeIf(::isKeyUnavailable)?.let { return Result.failure(it) }
 
         val backup = backupFile(file)
         val recovered = if (backup.exists()) {
@@ -163,6 +170,10 @@ internal object AtomicStore {
 // retained corrupt evidence, and the in-flight temporaries a crash can
 // leave behind.
 private val ATOMIC_GENERATION_SUFFIXES = listOf(".bak", ".corrupt", ".tmp", ".recover")
+
+/** Crypto failures other than a failed authentication tag blame the key, not the file. */
+internal fun isKeyUnavailable(error: Throwable): Boolean =
+    (error is GeneralSecurityException && error !is BadPaddingException) || error is ProviderException
 
 /**
  * Base file name behind any generation of an [AtomicStore] primary file, so

@@ -1,6 +1,7 @@
 package com.paka.app
 
 import android.content.Context
+import android.content.res.AssetFileDescriptor
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -515,6 +516,13 @@ internal fun BackupScreen(
 }
 
 private fun readBackupBlob(context: Context, uri: Uri): ByteArray {
+    // A provider that reports the size lets the read fill one exact array; the
+    // growing stream below can briefly need 2.5x the file size.
+    val declared = runCatching {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+    }.getOrNull() ?: AssetFileDescriptor.UNKNOWN_LENGTH
+    require(declared <= BackupStore.MAX_BACKUP_BYTES) { "Backup is too large" }
+    if (declared > 0) readDeclaredSize(context, uri, declared.toInt())?.let { return it }
     val input = context.contentResolver.openInputStream(uri) ?: error("Document could not be opened")
     return input.use {
         val output = ByteArrayOutputStream()
@@ -529,6 +537,23 @@ private fun readBackupBlob(context: Context, uri: Uri): ByteArray {
         }
         output.toByteArray()
     }
+}
+
+/** Reads exactly [size] bytes, or null when the provider's size was wrong so the caller can stream instead. */
+private fun readDeclaredSize(context: Context, uri: Uri, size: Int): ByteArray? {
+    val input = context.contentResolver.openInputStream(uri) ?: error("Document could not be opened")
+    val bytes = ByteArray(size)
+    val exact = input.use { stream ->
+        var offset = 0
+        while (offset < size) {
+            val read = stream.read(bytes, offset, size - offset)
+            if (read < 0) break
+            offset += read
+        }
+        offset == size && stream.read() < 0
+    }
+    if (!exact) bytes.fill(0)
+    return bytes.takeIf { exact }
 }
 
 /** Keeps ownership of a completed read until the calling coroutine accepts it. */
@@ -546,22 +571,21 @@ private suspend fun readBackupBlobOwned(context: Context, uri: Uri): Result<Byte
 }
 
 /** Decryption is not cancellable; clear any plaintext result that cannot be transferred to UI state. */
-private suspend fun decryptBackupOwned(blob: ByteArray, password: CharArray): Result<BackupData> {
-    val input = blob.copyOf()
+internal suspend fun decryptBackupOwned(blob: ByteArray, password: CharArray): Result<BackupData> {
+    // Reads the caller's ciphertext in place: a private copy of a full-size
+    // backup cost 52 MB of heap on unlock and protected nothing secret.
     val outcome = AtomicReference<Result<BackupData>?>(null)
     return try {
         withContext(NonCancellable + Dispatchers.Default) {
             try {
-                outcome.set(runCatching { BackupStore.decrypt(input, password) })
+                outcome.set(runCatching { BackupStore.decrypt(blob, password) })
             } finally {
-                input.fill(0)
                 password.fill('\u0000')
             }
         }
         currentCoroutineContext().ensureActive()
         outcome.getAndSet(null) ?: Result.failure(IllegalStateException("Backup unlock did not finish"))
     } finally {
-        input.fill(0)
         password.fill('\u0000')
         outcome.getAndSet(null)?.getOrNull()?.clearDocuments()
     }
